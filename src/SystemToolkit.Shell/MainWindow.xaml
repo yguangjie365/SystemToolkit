@@ -1,0 +1,125 @@
+<Window x:Class="SystemToolkit.Shell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SystemToolkit.Shell"
+        Title="SystemToolkit"
+        Width="1280" Height="800"
+        MinWidth="1240" MinHeight="640"
+        MaxWidth="1920" MaxHeight="1200"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Normal"
+        FontFamily="{StaticResource Font_Body}">
+    <Grid Background="{StaticResource Brush_Bg}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ============ 左侧导航（用户 2026-09-04：按仪表盘风格重做） ============ -->
+        <Border Grid.Column="0" Background="{StaticResource Brush_SurfaceAlt}">
+            <DockPanel>
+                <!-- 品牌区 -->
+                <StackPanel DockPanel.Dock="Top" Margin="14,14,14,10">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius_CardSm}"
+                                Background="{StaticResource Brush_DarkSurface}">
+                            <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="Bold"
+                                       Foreground="{StaticResource Brush_OnDark}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="SystemToolkit" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush_TextPrimary}"
+                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="DESKTOP TOOLKIT · v0.2-dev" FontSize="{DynamicResource Font_SizeMicro}"
+                               Style="{StaticResource MonoText}" Margin="0,6,0,0"/>
+                </StackPanel>
+
+                <Line DockPanel.Dock="Top" X1="0" X2="1" Y1="0" Y2="0"
+                      Stroke="{StaticResource Brush_Border}" Margin="14,0"/>
+
+                <!-- 版本脚注 -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="14,0,14,12">
+                    <Line X1="0" X2="1" Y1="0" Y2="0"
+                          Stroke="{StaticResource Brush_Border}" Margin="0,0,0,10"/>
+                    <TextBlock Text="非商业开源 · MIT" FontSize="{DynamicResource Font_SizeMicro}" Style="{StaticResource MonoText}"/>
+                </StackPanel>
+
+                <!-- 导航项（UI 审计采纳：分组层级 + 图标文字收紧） -->
+                <ListBox x:Name="NavList"
+                         BorderThickness="0" Background="Transparent"
+                         Padding="8,6" Margin="0,6,0,0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="NavList_SelectionChanged">
+                    <ListBox.Resources>
+                        <!-- 模块项：图标 + 文字（间距 7px，审计建议收紧） -->
+                        <DataTemplate DataType="{x:Type local:NavItem}">
+                            <StackPanel Orientation="Horizontal" Height="34"
+                                        HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                           FontSize="{DynamicResource Font_SizeTitleLg}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource Font_SizeTitle}"
+                                           VerticalAlignment="Center" Margin="7,0,0,0"/>
+                            </StackPanel>
+                        </DataTemplate>
+                        <!-- 组头：小号 mono 大写标签，不可选中 -->
+                        <DataTemplate DataType="{x:Type local:NavGroupHeader}">
+                            <TextBlock Text="{Binding Title}" FontSize="{DynamicResource Font_SizeNano}"
+                                       Style="{StaticResource MonoText}"
+                                       Margin="14,8,0,2"/>
+                        </DataTemplate>
+                    </ListBox.Resources>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Foreground" Value="{StaticResource Brush_TextSecondary}"/>
+                            <Setter Property="Padding" Value="10,5"/>
+                            <Setter Property="Margin" Value="0,2"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_Badge}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle x:Name="Indicator" Width="3" RadiusX="1.5" RadiusY="1.5"
+                                                           Fill="{StaticResource Brush_Accent}"
+                                                           Margin="-15,0,6,0" Visibility="Collapsed"/>
+                                                <ContentPresenter Grid.Column="1" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Track}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <!-- 属性元素必须位于内容（Setters）之后（MC3088） -->
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                    <Setter Property="Focusable" Value="False"/>
+                                    <Setter Property="IsHitTestVisible" Value="False"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 页面宿主 -->
+        <ContentControl x:Name="PageHost" Grid.Column="1"/>
+    </Grid>
+</Window>

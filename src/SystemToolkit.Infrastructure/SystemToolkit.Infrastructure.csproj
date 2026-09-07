@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+</PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- FileWebServer（Kestrel 文件 Web 服务）需要 ASP.NET Core 共享框架 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- 手机浏览器前端静态资源（随 FileWebServer 以嵌入资源提供） -->
+  <ItemGroup>
+    <EmbeddedResource Include="FileTransfer\wwwroot\**" />
+  </ItemGroup>
+
+  <!-- NAudioMusicPlaybackEngine（音乐播放内核：WASAPI / WaveOut）需要 NAudio -->
+  <ItemGroup>
+    <PackageReference Include="NAudio" />
+  </ItemGroup>
+
+</Project>

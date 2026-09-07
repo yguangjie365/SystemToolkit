@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- 弹窗/VM internal 构造对测试程序集开放（冒烟守卫直测），对齐 Core 先例 -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,30 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 版本一律由 dotnet add package 解析写入，禁止手写猜测版本（E-001 教训） -->
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 搬移代码基于旧工程 101.1.1 实证编写；110.x API 有变，钉回已验证版本 -->
+    <PackageVersion Include="AlphaVSS" Version="2.0.3" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Hardware.Info" Version="101.1.1" />
+    <PackageVersion Include="Hardware.Info.Core" Version="101.1.1" />
+    <PackageVersion Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="NAudio" Version="2.2.1" />
+    <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.1.0" />
+    <PackageVersion Include="TagLibSharp" Version="2.3.0" />
+    <PackageVersion Include="VirtualizingWrapPanel" Version="2.0.11" />
+    <PackageVersion Include="WatsonTcp" Version="6.4.0" />
+    <PackageVersion Include="System.Management" Version="10.0.11" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageVersion>
+  </ItemGroup>
+</Project>

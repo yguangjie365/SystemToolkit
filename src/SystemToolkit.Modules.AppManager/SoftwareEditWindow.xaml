@@ -1,0 +1,62 @@
+<Window x:Class="SystemToolkit.Modules.AppManager.SoftwareEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="编辑软件"
+        Width="440" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource Brush_Bg}"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
+    <Grid Margin="18,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="88"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Text="名称" VerticalAlignment="Center" Margin="0,0,10,10" FontWeight="SemiBold"/>
+        <TextBox Grid.Column="1" x:Name="NameBox" Text="" Height="32"
+                 VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="1" x:Name="IdLabel" Text="包 ID (winget)" VerticalAlignment="Center" Margin="0,0,10,10"/>
+        <TextBox Grid.Row="1" Grid.Column="1" x:Name="IdBox" Text=""
+                 Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="2" Text="分类" VerticalAlignment="Center" Margin="0,0,10,10"/>
+        <TextBox Grid.Row="2" Grid.Column="1" x:Name="CategoryBox" Text=""
+                 Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="3" Text="描述" VerticalAlignment="Top" Margin="0,6,10,10"/>
+        <TextBox Grid.Row="3" Grid.Column="1" x:Name="DescriptionBox" Text=""
+                 Height="52" TextWrapping="Wrap" AcceptsReturn="False" Padding="6,4" Margin="0,0,0,10"
+                 VerticalScrollBarVisibility="Auto"/>
+
+        <TextBlock Grid.Row="4" x:Name="UrlLabel" Text="下载链接" VerticalAlignment="Center" Margin="0,0,10,10"/>
+        <TextBox Grid.Row="4" Grid.Column="1" x:Name="UrlBox" Text=""
+                 Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="5" x:Name="PathLabel" Text="本地安装包" VerticalAlignment="Center" Margin="0,0,10,10"/>
+        <TextBox Grid.Row="5" Grid.Column="1" x:Name="PathBox" Text=""
+                 Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
+
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="删除" Width="76" Height="32" Margin="0,0,8,0" Click="OnDeleteClick"
+                    Background="{StaticResource Brush_DangerSoft}" Foreground="{StaticResource Brush_Danger}"
+                    BorderBrush="{StaticResource Brush_Danger}" BorderThickness="1" Cursor="Hand"/>
+            <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick"
+                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+                    BorderThickness="1" Cursor="Hand"/>
+            <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"
+                    Background="{StaticResource Brush_Accent}" Foreground="{StaticResource Brush_OnDark}"
+                    BorderThickness="0" Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

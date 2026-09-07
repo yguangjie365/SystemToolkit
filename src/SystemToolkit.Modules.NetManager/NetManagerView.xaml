@@ -1,0 +1,667 @@
+<UserControl
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SystemToolkit.Modules.NetManager"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d" x:Class="SystemToolkit.Modules.NetManager.NetManagerView"
+             >
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
+
+        <!-- 仅保留 NetManagerView 独有样式 -->
+        <Style x:Key="Badge" TargetType="{x:Type Border}">
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_Badge}"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ListLog" TargetType="{x:Type ListBox}">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        </Style>
+    </UserControl.Resources>
+
+    <UserControl.Background>
+        <StaticResource ResourceKey="Brush_Bg"/>
+    </UserControl.Background>
+
+    <Grid Margin="24,20,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============ 页头 ============ -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="网络管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+            <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0"><Run Text="NET · 网卡 "/><Run Text="{Binding Settings.Adapters.Count, Mode=OneWay}"/><Run Text=" 个 · 快照 "/><Run Text="{Binding Settings.Snapshots.Count, Mode=OneWay}"/><Run Text=" 份"/></TextBlock>
+        </StackPanel>
+
+        <!-- ============ Tab 行 ============ -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,14">
+            <RadioButton Style="{StaticResource SectionTab}" GroupName="NetTabs" IsChecked="True"
+                         Content="网络设置" Tag="0" Checked="OnTabChecked"/>
+            <RadioButton Style="{StaticResource SectionTab}" GroupName="NetTabs"
+                         Content="网络诊断" Tag="1" Checked="OnTabChecked"/>
+            <RadioButton Style="{StaticResource SectionTab}" GroupName="NetTabs"
+                         Content="网络修复" Tag="2" Checked="OnTabChecked"/>
+            <RadioButton Style="{StaticResource SectionTab}" GroupName="NetTabs"
+                         Content="网络优化" Tag="3" Checked="OnTabChecked"/>
+        </StackPanel>
+
+        <!-- ============ Tab 内容 ============ -->
+        <Grid Grid.Row="2" x:Name="TabContent">
+            <!-- ============ ① 网络设置 ============ -->
+            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 网卡列表 -->
+                    <Border Grid.Column="0" Style="{StaticResource ToolCard}" VerticalAlignment="Top" Height="256" d:LayoutOverrides="VerticalAlignment">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <TextBlock Text="网卡列表" Style="{StaticResource CardTitle}"/>
+                                <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}"
+                                        Content="刷新" Command="{Binding Settings.LoadCommand}"/>
+                            </Grid>
+                            <ListBox Grid.Row="1" Style="{StaticResource ListLog}" MinHeight="220"
+                                     ItemsSource="{Binding Settings.Adapters}"
+                                     SelectedItem="{Binding Settings.SelectedAdapter}"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,2">
+                                            <TextBlock Text="{Binding DisplayText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextPrimary}"/>
+                                            <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"><Run Text="{Binding IpText, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding SpeedText, Mode=OneWay}"/></TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- 空态提示 -->
+                            <TextBlock Grid.Row="1" Text="未检测到网卡" 
+                                       Visibility="{Binding Settings.Adapters.Count, Converter={StaticResource ZeroToVis}}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- 右列：详情 + 表单 -->
+                    <StackPanel Grid.Column="2">
+
+                        <!-- IPv4 配置 -->
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="IPv4 配置" Style="{StaticResource CardTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <RadioButton Style="{StaticResource ThemedRadioButton}" GroupName="IpMode" Content="自动获取（DHCP）" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,20,0"
+                                                 IsChecked="{Binding Settings.IpModeStatic, Converter={x:Static local:NotBoolConverter.Instance}}"/>
+                                    <RadioButton Style="{StaticResource ThemedRadioButton}" GroupName="IpMode" Content="手动（静态）" FontSize="{DynamicResource Font_SizeBodySm}"
+                                                 IsChecked="{Binding Settings.IpModeStatic}"/>
+                                </StackPanel>
+                                <Grid IsEnabled="{Binding Settings.IpModeStatic}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- IPv4 地址 -->
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="IPv4 地址" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Settings.IpInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <!-- 子网掩码 -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="子网掩码" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Settings.MaskInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <!-- 网关 -->
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="网关" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Settings.GatewayInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="6" Style="{StaticResource RowPrimaryButton}" Content="应用 IP 配置"
+                                            Command="{Binding Settings.ApplyIpCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Settings.IpFormError}" Style="{StaticResource FieldError}" Margin="0,6,0,0"/>
+                                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" Margin="0,6,0,0"
+                                           Text="修改前自动保存配置快照；DHCP / 静态互转均在应用时确认后执行。"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- DNS + 代理 双列 -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource ToolCard}">
+                                <StackPanel>
+                                    <TextBlock Text="DNS 设置" Style="{StaticResource CardTitle}"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,0,8"
+                                              ItemsSource="{Binding Settings.PresetList}"
+                                              SelectedItem="{Binding Settings.SelectedPreset}"
+                                              DisplayMemberPath="Name"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 主 DNS -->
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="主 DNS" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                            <TextBox Style="{StaticResource FieldInput}"
+                                                     Text="{Binding Settings.DnsPrimaryInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+
+                                        <!-- 备用 DNS -->
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="备用 DNS" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                            <TextBox Style="{StaticResource FieldInput}"
+                                                     Text="{Binding Settings.DnsSecondaryInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="4" Style="{StaticResource RowPrimaryButton}" Content="应用 DNS"
+                                                Command="{Binding Settings.ApplyDnsCommand}"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Settings.DnsFormError}" Style="{StaticResource FieldError}" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Style="{StaticResource ToolCard}">
+                                <StackPanel>
+                                    <TextBlock Text="系统代理" Style="{StaticResource CardTitle}"/>
+                                    <CheckBox Style="{StaticResource ThemedCheckBox}" Content="启用系统代理" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,0,8"
+                                              IsChecked="{Binding Settings.ProxyEnabled}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 代理地址 -->
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="代理地址" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                            <TextBox Style="{StaticResource FieldInput}"
+                                                     Text="{Binding Settings.ProxyServerInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="2" Style="{StaticResource RowPrimaryButton}" Content="应用代理"
+                                                Command="{Binding Settings.ApplyProxyCommand}"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Settings.ProxyFormError}" Style="{StaticResource FieldError}" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- 配置快照 -->
+                        <Border Style="{StaticResource ToolCard}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="140"/>
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Margin="0,0,0,10">
+                                    <TextBlock Text="配置快照（修改前自动保存，可一键回滚）" Style="{StaticResource CardTitle}"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Style="{StaticResource CardButton}" Content="恢复所选" Command="{Binding Settings.RestoreSnapshotCommand}"/>
+                                        <Button Style="{StaticResource CardButton}" Content="删除" Margin="6,0,0,0" Command="{Binding Settings.DeleteSnapshotCommand}"/>
+                                        <Button Style="{StaticResource CardButton}" Content="刷新" Margin="6,0,0,0" Command="{Binding Settings.ReloadSnapshotsCommand}"/>
+                                    </StackPanel>
+                                </Grid>
+                                <ListBox Grid.Row="1" Style="{StaticResource ListLog}"
+                                         ItemsSource="{Binding Settings.Snapshots}"
+                                         SelectedItem="{Binding Settings.SelectedSnapshot}"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,2">
+                                                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextPrimary}"
+                                                           Text="{Binding CreatedAt, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm:ss}"/>
+                                                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- 空态提示 -->
+                                <TextBlock Grid.Row="1" Text="暂无配置快照" 
+                                           Visibility="{Binding Settings.Snapshots.Count, Converter={StaticResource ZeroToVis}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                    <Border Style="{StaticResource ToolCard}" Margin="0,270,0,0" VerticalAlignment="Top" Height="324">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <TextBlock Text="网卡详情" Style="{StaticResource CardTitle}"/>
+                                <Button HorizontalAlignment="Right" Command="{Binding Settings.ToggleAdapterCommand}">
+                                    <Button.Style>
+                                        <Style TargetType="{x:Type Button}" BasedOn="{StaticResource RowDangerButton}">
+                                            <Setter Property="Content" Value="禁用网卡"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Settings.SelectedAdapter.IsUp}" Value="False">
+                                                    <Setter Property="Content" Value="启用网卡"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="连接状态" Style="{StaticResource KvLabel}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.StatusText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="类型 / 速率" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextPrimary}"><Run Text="{Binding Settings.SelectedAdapter.TypeText, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Settings.SelectedAdapter.SpeedText, Mode=OneWay}"/></TextBlock>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="MAC" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.MacText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="IP 分配" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.DhcpText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="IPv4" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.IpText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="网关" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.GatewayText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="DNS" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Settings.SelectedAdapter.DnsText, Mode=OneWay}" Style="{StaticResource KvValue}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </ScrollViewer>
+
+            <!-- ============ ② 网络诊断 ============ -->
+            <ScrollViewer x:Name="DiagPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <TextBlock Text="一键诊断（网卡 → 网关 → 公网 → DNS → 丢包量化）" Style="{StaticResource CardTitle}"/>
+                                <Button HorizontalAlignment="Right" Style="{StaticResource RowPrimaryButton}"
+                                        Content="开始诊断" Command="{Binding Diagnostics.RunDiagnosticsCommand}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Diagnostics.Steps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Step}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextSecondary}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="{DynamicResource Font_SizeBodySm}" TextWrapping="Wrap" Foreground="{StaticResource Brush_TextSecondary}"/>
+                                            <TextBlock Grid.Column="3" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Top"><Run Text="{Binding ElapsedMs, Mode=OneWay}"/><Run Text=" ms"/></TextBlock>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="{DynamicResource Radius_CardSm}"
+                                    Background="{StaticResource Brush_SurfaceAlt}">
+                                <TextBlock Text="{Binding Diagnostics.Conclusion}" TextWrapping="Wrap" FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextPrimary}"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 定向排查工具 2×3 -->
+                    <UniformGrid Columns="2" Rows="3">
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,14,14">
+                            <StackPanel>
+                                <TextBlock Text="MTU 路径探测" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Text="{Binding Diagnostics.MtuText}" Style="{StaticResource KvValue}" Margin="0,0,0,8"/>
+                                <Button Style="{StaticResource CardButton}" HorizontalAlignment="Left" Content="开始探测" Command="{Binding Diagnostics.ProbeMtuCommand}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="TCP 端口测试" Style="{StaticResource CardTitle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 主机 -->
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="主机" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Diagnostics.PortHost, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <!-- 端口 -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="端口" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Diagnostics.PortNumber, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="4" Style="{StaticResource CardButton}" Content="测试" Command="{Binding Diagnostics.TestPortCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Diagnostics.PortResultText}" Style="{StaticResource KvValue}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,14,14">
+                            <StackPanel>
+                                <TextBlock Text="hosts 文件检查（只读）" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Text="{Binding Diagnostics.HostsResultText}" Style="{StaticResource KvValue}" Margin="0,0,0,8"/>
+                                <Button Style="{StaticResource CardButton}" HorizontalAlignment="Left" Content="开始检查" Command="{Binding Diagnostics.CheckHostsCommand}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="DNS 查询检查（向指定服务器查询）" Style="{StaticResource CardTitle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- DNS 服务器 -->
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="DNS 服务器" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Diagnostics.DnsServerInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <!-- 域名 -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="域名" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Diagnostics.DnsDomainInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="4" Style="{StaticResource CardButton}" Content="查询" Command="{Binding Diagnostics.DnsLookupCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Diagnostics.DnsLookupResultText}" Style="{StaticResource KvValue}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,14,14">
+                            <StackPanel>
+                                <TextBlock Text="DNS 优选基准（内置预设逐个测 10 次）" Style="{StaticResource CardTitle}"/>
+                                <Button Style="{StaticResource CardButton}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                        Content="开始基准测试" Command="{Binding Diagnostics.RunBenchmarkCommand}"/>
+                                <TextBlock Text="{Binding Diagnostics.BenchmarkStatusText}" Style="{StaticResource KvValue}" Margin="0,0,0,6"/>
+                                <ItemsControl ItemsSource="{Binding Diagnostics.BenchmarkResults}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{StaticResource Font_Mono}"
+                                                       Foreground="{StaticResource Brush_TextSecondary}" Margin="0,1"><Run Text="{Binding Server, Mode=OneWay}"/><Run Text="  成功 "/><Run Text="{Binding Successes, Mode=OneWay}"/><Run Text="/10  丢包 "/><Run Text="{Binding LossPercent, Mode=OneWay}"/><Run Text="%  平均 "/><Run Text="{Binding AvgMs, Mode=OneWay}"/><Run Text=" ms"/></TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="持续 ping（定位时通时断 / 抖动）" Style="{StaticResource CardTitle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="6"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 目标 -->
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="目标" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource FieldInput}"
+                                                 Text="{Binding Diagnostics.PingTarget, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="2" Style="{StaticResource CardButton}" Content="开始"
+                                            Command="{Binding Diagnostics.StartPingCommand}"/>
+                                    <Button Grid.Column="4" Style="{StaticResource CardButton}" Content="停止"
+                                            Command="{Binding Diagnostics.StopPingCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Diagnostics.PingStatsText}" Style="{StaticResource KvValue}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ============ ③ 网络修复 ============ -->
+            <ScrollViewer x:Name="RepairPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="以下均为写操作——每项均已标注权限与重启要求" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
+                                           Foreground="{StaticResource Brush_Danger}"/>
+                                <TextBlock Text="安全修复（无需管理员）失败即停；重置类操作完成后需要重启计算机。" FontSize="{DynamicResource Font_SizeMicro}"
+                                           Foreground="{StaticResource Brush_TextMuted}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource RowPrimaryButton}"
+                                    Content="一键安全修复（刷新 DNS → 重新获取 IP）"
+                                    Command="{Binding Repair.RunSafeSequenceCommand}"/>
+                        </Grid>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Repair.Steps}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource ToolCard}" Margin="0,0,14,14">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding Title}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
+                                                       Foreground="{StaticResource Brush_TextPrimary}" VerticalAlignment="Center"/>
+                                            <Border Style="{StaticResource Badge}" Visibility="{Binding RequiresAdmin, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="需管理员" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextSecondary}"/>
+                                            </Border>
+                                            <Border Style="{StaticResource Badge}" Visibility="{Binding RequiresReboot, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="需重启" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Danger}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Description}" FontSize="{DynamicResource Font_SizeBodySm}" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource Brush_TextSecondary}"/>
+                                        <TextBlock Text="{Binding CommandPreview}" FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{StaticResource Font_Mono}"
+                                                   Background="{StaticResource Brush_DarkSurface}" Foreground="{StaticResource Brush_OnDark}"
+                                                   Padding="8,5" Margin="0,8,0,8" TextWrapping="Wrap"/>
+                                        <Button Style="{StaticResource CardButton}" HorizontalAlignment="Left" Content="执行"
+                                                Command="{Binding DataContext.Repair.RunStepCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ============ ④ 网络优化 ============ -->
+            <ScrollViewer x:Name="OptimizePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock Text="当前 TCP 全局参数" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Text="{Binding Optimize.CurrentSummary}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                           TextWrapping="Wrap" Foreground="{StaticResource Brush_TextSecondary}"/>
+                            </StackPanel>
+                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource CardButton}"
+                                    Content="刷新" Command="{Binding Optimize.LoadCommand}"/>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="调整项（仅保守可解释项；改前自动快照，只对变化项发命令）" Style="{StaticResource CardTitle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="接收窗口自动调谐" Style="{StaticResource KvLabel}" Margin="0,0,0,8" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" FontSize="{DynamicResource Font_SizeBodySm}"
+                                              ItemsSource="{x:Static local:NetOptimizeTabViewModel.AutoTuningOptions}"
+                                              SelectedItem="{Binding Optimize.SelectedAutoTuning}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="接收方缩放 RSS" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}" Grid.Row="1" Grid.Column="1" FontSize="{DynamicResource Font_SizeBodySm}"
+                                              ItemsSource="{x:Static local:NetOptimizeTabViewModel.TriStateOptions}"
+                                              SelectedItem="{Binding Optimize.SelectedRss}"/>
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="ECN 能力" Style="{StaticResource KvLabel}" Margin="0,0,0,8" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" FontSize="{DynamicResource Font_SizeBodySm}"
+                                              ItemsSource="{x:Static local:NetOptimizeTabViewModel.TriStateOptions}"
+                                              SelectedItem="{Binding Optimize.SelectedEcn}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="网络限流" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}" Grid.Row="1" Grid.Column="1" FontSize="{DynamicResource Font_SizeBodySm}"
+                                              ItemsSource="{x:Static local:NetOptimizeTabViewModel.ThrottlingOptions}"
+                                              SelectedItem="{Binding Optimize.SelectedThrottling}"/>
+                                </Grid>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Style="{StaticResource RowPrimaryButton}" Content="应用所选更改" Command="{Binding Optimize.ApplyCommand}"/>
+                                <Button Style="{StaticResource SecondaryButton}" Content="还原上次备份" Margin="10,0,0,0" Command="{Binding Optimize.RestoreCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource ToolCard}">
+                        <StackPanel>
+                            <TextBlock Text="接口跃点数（多网卡路由优先级）" Style="{StaticResource CardTitle}"/>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 接口 -->
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="接口" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                    <ComboBox Style="{StaticResource ThemedComboBox}"
+                                              ItemsSource="{Binding Optimize.Interfaces}"
+                                              SelectedItem="{Binding Optimize.SelectedInterface}"
+                                              DisplayMemberPath="Name"/>
+                                </StackPanel>
+
+                                <!-- 新跃点数 -->
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="新跃点数" Style="{StaticResource KvLabel}" Margin="0,0,0,4"/>
+                                    <TextBox Style="{StaticResource FieldInput}"
+                                             Text="{Binding Optimize.MetricInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+
+                                <Button Grid.Column="4" Style="{StaticResource RowPrimaryButton}" Content="应用跃点"
+                                        Command="{Binding Optimize.ApplyMetricCommand}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding Optimize.MetricError}" Style="{StaticResource FieldError}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ============ 底部操作日志（等宽深色容器，可折叠） ============ -->
+        <Border Grid.Row="3" Margin="0,14,0,0" BorderBrush="{StaticResource Brush_Border}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,8,0,6">
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="LogToggle" IsChecked="True" Content="▾ 操作日志" FontSize="{DynamicResource Font_SizeBodySm}"
+                                      Foreground="{StaticResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"><Run Text="{Binding LogLines.Count, Mode=OneWay}"/><Run Text=" 行"/></TextBlock>
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
+                </Grid>
+                <Border Grid.Row="1" x:Name="LogHost" Background="{StaticResource Brush_DarkSurface}"
+                        CornerRadius="{DynamicResource Radius_CardSm}" Padding="10,6" MaxHeight="160">
+                    <ListBox Style="{StaticResource ListLog}" ItemsSource="{Binding LogLines}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource Font_Mono}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text}" Foreground="{Binding Color}" TextWrapping="NoWrap" FontSize="{DynamicResource Font_SizeMicro}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

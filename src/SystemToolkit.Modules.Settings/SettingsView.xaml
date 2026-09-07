@@ -1,0 +1,176 @@
+<UserControl x:Class="SystemToolkit.Modules.Settings.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource Brush_Bg}">
+    <!-- 2026-09-07 建立（主人裁定：备份设置并入 Settings 模块统一管理）。
+         左分组 + 右内容；当前只有「备份」分区，「通用」为占位（后续模块设置接进来）。 -->
+    <UserControl.Resources>
+        <!-- 分组项样式（页面级；主题包无同名资源，不提升到全局） -->
+        <Style x:Key="SettingsNavItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource Brush_TextSecondary}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_Badge}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Track}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="24,20,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="设置" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+            <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0"
+                       Text="SETTINGS · 全局配置集中管理"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左：分组 -->
+            <Border Grid.Column="0" Style="{StaticResource ToolCard}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="分类" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                    <ListBox x:Name="SectionList" BorderThickness="0" Background="Transparent"
+                             ItemContainerStyle="{StaticResource SettingsNavItem}"
+                             SelectedIndex="0" SelectionChanged="OnSectionChanged">
+                        <ListBoxItem Content="备份" Tag="backup"/>
+                        <ListBoxItem Content="通用" Tag="general" IsEnabled="False"/>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- 右：备份分区 -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="BackupSection">
+                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="备份" Style="{StaticResource CardTitle}"/>
+                            <TextBlock Text="这些是全局默认值；单条规则可在规则编辑中覆盖。"
+                                       FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                       Margin="0,2,0,12"/>
+
+                            <!-- 全局备份根 -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="6"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="6"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="全局备份根" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Style="{StaticResource FieldInput}" Height="30"
+                                         VerticalContentAlignment="Center"
+                                         Text="{Binding BackupRootInput, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="留空则首次备份时自动选择剩余空间最大的固定盘"/>
+                                <Button Grid.Column="3" Style="{StaticResource CardButton}" Content="浏览…"
+                                        Command="{Binding PickBackupRootCommand}"/>
+                                <Button Grid.Column="5" Style="{StaticResource CardButton}" Content="自动选择"
+                                        Command="{Binding AutoPickBackupRootCommand}"/>
+                            </Grid>
+
+                            <!-- 默认快照保留数 -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="默认保留快照" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Style="{StaticResource FieldInput}" Height="30"
+                                         VerticalContentAlignment="Center"
+                                         Text="{Binding MaxSnapshotsInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Column="2" Text="份（1-100，超出后自动清理最旧快照）"
+                                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </Grid>
+
+                            <!-- 并发线程数 -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="并发线程数" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Style="{StaticResource FieldInput}" Height="30"
+                                         VerticalContentAlignment="Center"
+                                         Text="{Binding MaxWorkersInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Column="2" Text="个（1-8，下次备份/恢复生效）"
+                                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </Grid>
+
+                            <!-- 默认恢复冲突策略 -->
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="恢复冲突策略" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" Style="{StaticResource ThemedComboBox}" Height="30"
+                                          SelectedValue="{Binding DefaultConflictPolicy, Mode=TwoWay}"
+                                          SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="重命名保留两者（推荐）" Tag="rename"/>
+                                    <ComboBoxItem Content="直接覆盖现有文件" Tag="overwrite"/>
+                                    <ComboBoxItem Content="跳过冲突文件" Tag="skip"/>
+                                    <ComboBoxItem Content="逐条询问" Tag="ask"/>
+                                </ComboBox>
+                                <TextBlock Grid.Column="2" Text="恢复时若目标已存在同名文件的默认处理方式"
+                                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 操作条 -->
+                    <Border Style="{StaticResource ToolCard}">
+                        <Grid>
+                            <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextSecondary}"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,180,0"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource RowActionButton}" Height="32" Content="重新载入"
+                                        Margin="0,0,8,0" Command="{Binding LoadCommand}"/>
+                                <Button Style="{StaticResource RowPrimaryButton}" Height="32" Content="保存设置" MinWidth="96"
+                                        Command="{Binding SaveCommand}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

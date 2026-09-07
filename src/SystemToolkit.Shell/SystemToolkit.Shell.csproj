@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Application\SystemToolkit.Application.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Infrastructure\SystemToolkit.Infrastructure.csproj" />
+    <ProjectReference Include="..\SystemToolkit.ElevatedHelper\SystemToolkit.ElevatedHelper.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.Overview\SystemToolkit.Modules.Overview.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.AppManager\SystemToolkit.Modules.AppManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.DriverManager\SystemToolkit.Modules.DriverManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.FileBackup\SystemToolkit.Modules.FileBackup.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.FileTransfer\SystemToolkit.Modules.FileTransfer.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.GameManager\SystemToolkit.Modules.GameManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.MusicManager\SystemToolkit.Modules.MusicManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.NetManager\SystemToolkit.Modules.NetManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.RecoveryManager\SystemToolkit.Modules.RecoveryManager.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Modules.Settings\SystemToolkit.Modules.Settings.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+</Project>

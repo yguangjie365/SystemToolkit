@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    IDE0005（删除不必要的 using）要参与编译判定，前提是 GenerateDocumentationFile=true
+    —— roslyn 已知限制（编译器错误 EnableGenerateDocumentationFile 内链 issue #41640）。
+    本仓库仅 Core / Abstractions 生成 XML doc 并对 IDE0005 做构建期强制（各自 csproj）；
+    其余项目 doc=false，IDE0005 无法给出文件/行号却被 Release「警告即错误」放大成
+    无定位的阻断错误。此处对未启用 doc 的项目统一抑制 IDE0005：
+    未使用的 using 仍由 dotnet format（M14 收敛流程）与 IDE 内分析覆盖，不失控。
+  -->
+  <PropertyGroup Condition="'$(GenerateDocumentationFile)' != 'true'">
+    <NoWarn>$(NoWarn);IDE0005</NoWarn>
+  </PropertyGroup>
+
+</Project>

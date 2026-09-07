@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- REVIEW-3 S-3：游戏卡网格虚拟化（WPF 原生 VirtualizingStackPanel 不支持 WrapPanel 布局） -->
+    <PackageReference Include="VirtualizingWrapPanel" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
+    <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

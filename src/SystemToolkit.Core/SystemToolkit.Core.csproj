@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+      <!-- 01 §一：公开 API 必须有 XML doc（实测 CS1591=0，全量已达标） -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- 内部实现（winget 参数构造等）需要对测试可见 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Hardware.Info" />
+    <PackageReference Include="Hardware.Info.Core" />
+    <PackageReference Include="LibreHardwareMonitorLib" />
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
+    <PackageReference Include="TagLibSharp" />
+    <PackageReference Include="WatsonTcp" />
+    <PackageReference Include="System.Management" />
+  </ItemGroup>
+
+</Project>

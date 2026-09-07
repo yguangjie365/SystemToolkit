@@ -1,0 +1,187 @@
+# SystemToolkit — 代码风格
+# 当前语言服务：C# / XAML
+# 参考：微软 dotnet 默认规则 + 本项目约定（见 Docs/09-开发规范/01-编码与命名规范.md）
+
+root = true
+
+########################################
+# 全局
+########################################
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Markdown 例外：行尾双空格是换行语义
+[*.md]
+trim_trailing_whitespace = false
+
+# 项目文件用 2 空格缩进（XML 惯例）
+[*.{csproj,props,targets,xaml,axaml,json,yml,yaml}]
+indent_size = 2
+
+# 批处理必须 CRLF
+[*.{bat,cmd}]
+end_of_line = crlf
+
+########################################
+# C# 文件
+########################################
+[*.cs]
+
+# --- 语言约定 ---
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+csharp_prefer_braces = when_multiline:silent
+csharp_style_var_for_built_in_types = false:warning
+csharp_style_var_when_type_is_apparent = true:warning
+csharp_style_var_elsewhere = false:warning
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_lambdas = true:silent
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning
+csharp_style_pattern_matching_over_as_with_null_check = true:warning
+csharp_style_prefer_not_pattern = true:warning
+csharp_style_prefer_pattern_matching = true:silent
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_throw_expression = true:suggestion
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_prefer_index_operator = true:suggestion
+csharp_style_prefer_range_operator = true:suggestion
+csharp_style_prefer_utf8_string_literals = true:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_prefer_collection_expression = true:suggestion
+
+# --- 修饰符顺序 ---
+dotnet_sort_system_directives_first = true
+csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:silent
+dotnet_style_readonly_field = true:warning
+
+# --- 表达式级偏好 ---
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:silent
+dotnet_style_prefer_conditional_expression_over_return = true:silent
+dotnet_style_prefer_compound_assignment = true:suggestion
+dotnet_style_prefer_simplified_boolean_expressions = true:suggestion
+dotnet_style_prefer_simplified_interpolation = true:suggestion
+dotnet_style_namespace_match_folder = true:suggestion
+
+# --- 空格与换行 ---
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = one_less_than_current
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = false
+
+########################################
+# 命名规则
+########################################
+[*.cs]
+
+# 私有字段：_camelCase
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+# 接口：IPascalCase
+dotnet_naming_rule.interfaces_i_prefix.severity = warning
+dotnet_naming_rule.interfaces_i_prefix.symbols = interfaces
+dotnet_naming_rule.interfaces_i_prefix.style = i_pascal_case
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.interfaces.applicable_accessibilities = *
+
+dotnet_naming_style.i_pascal_case.capitalization = pascal_case
+dotnet_naming_style.i_pascal_case.required_prefix = I
+
+# 类型与公共成员：PascalCase
+dotnet_naming_rule.types_pascal.severity = warning
+dotnet_naming_rule.types_pascal.symbols = types
+dotnet_naming_rule.types_pascal.style = pascal_case
+
+dotnet_naming_symbols.types.applicable_kinds = class,struct,enum,delegate,record,record_struct
+dotnet_naming_symbols.types.applicable_accessibilities = *
+
+dotnet_naming_rule.public_members_pascal.severity = warning
+dotnet_naming_rule.public_members_pascal.symbols = public_members
+dotnet_naming_rule.public_members_pascal.style = pascal_case
+
+dotnet_naming_symbols.public_members.applicable_kinds = property,method,event,field
+dotnet_naming_symbols.public_members.applicable_accessibilities = public,internal,protected,protected_internal,private_protected
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+# 常量：PascalCase（不用 SCREAMING_CASE）
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal_case
+
+dotnet_naming_symbols.constants.applicable_kinds = field,local
+dotnet_naming_symbols.constants.required_modifiers = const
+
+# 局部变量与参数：camelCase
+dotnet_naming_rule.locals_camel.severity = warning
+dotnet_naming_rule.locals_camel.symbols = locals_and_parameters
+dotnet_naming_rule.locals_camel.style = camel_case
+
+dotnet_naming_symbols.locals_and_parameters.applicable_kinds = local,parameter
+
+dotnet_naming_style.camel_case.capitalization = camel_case
+
+########################################
+# 分析器：本项目重点关注
+########################################
+[*.cs]
+
+# CA1416 平台兼容：Core 内调 Windows API 用运行时守卫，不要用特性
+# （误用会触发 CA1416 且 Release 因 TreatWarningsAsErrors 直接失败）
+dotnet_diagnostic.CA1416.severity = warning
+
+# CA1848 使用 LoggerMessage 委托（性能）
+dotnet_diagnostic.CA1848.severity = suggestion
+
+# CA2007 不要丢了 ConfigureAwait（库代码）
+dotnet_diagnostic.CA2007.severity = none
+
+# CA1062 公开方法参数 null 校验
+# 与旧工程口径一致：suggestion 级（3300 行复用代码不做硬门禁）；
+# 新写代码鼓励 ArgumentNullException.ThrowIfNull，但不作为构建失败条件
+dotnet_diagnostic.CA1062.severity = suggestion
+
+# CA1031 不要捕获一般异常类型
+# suggestion 级：硬件/WMI 采集边界有意 catch-all 折叠为 null（传感器失败不抛出是设计决定，
+# 见 Core.Overview 注释）；业务代码空吞仍由代码审查与 03 分册拦截
+dotnet_diagnostic.CA1031.severity = suggestion
+
+# IDE0055 格式
+dotnet_diagnostic.IDE0055.severity = warning
+
+# IDE0005 未使用的 using
+dotnet_diagnostic.IDE0005.severity = warning
+csharp_using_directive_placement = outside_namespace:warning

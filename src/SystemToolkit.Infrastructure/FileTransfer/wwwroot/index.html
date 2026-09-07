@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <!-- 移动端 viewport：适配手机屏幕，禁用缩放避免双指误操作 -->
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2C4258" /> <!-- PrimaryDeepBrush，与顶栏一致 -->
+    <meta name="description" content="SystemToolkit 文件互传 - 通过浏览器访问电脑共享文件" />
+    <meta name="referrer" content="no-referrer" />
+    <title>SystemToolkit · 文件互传</title>
+    <!-- 静态资源已免令牌（见 FileWebServer.IsPublicAsset）：
+         页面本身不含数据，扫码进入（URL 只有配对码）与刷新页面都要能加载外壳，
+         配对由 app.js 调 /api/pair 完成，数据边界由 /api 与 /ws 的令牌守住。 -->
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="app">
+        <!-- ============ 顶部状态栏 ============ -->
+        <header class="status-bar" role="banner">
+            <span class="status-bar__title">SystemToolkit</span>
+            <span class="status-bar__conn" id="connStatus" aria-live="polite">
+                <span class="status-bar__dot" id="connDot"></span>
+                <span id="connText">连接中…</span>
+            </span>
+            <span class="status-bar__host" id="hostInfo"></span>
+        </header>
+
+        <!-- ============ 主内容区（三栏面板） ============ -->
+        <main class="main" role="main">
+
+            <!-- ===== 文件浏览 ===== -->
+            <section class="tab-panel is-active" data-tab="browse" id="panelBrowse"
+                     aria-label="文件浏览">
+                <!-- 面包屑导航 + 多选入口 -->
+                <div class="browse-toolbar">
+                    <nav class="breadcrumb" id="breadcrumb" aria-label="路径导航"></nav>
+                    <button type="button" class="toolbar-btn" id="multiToggleBtn">多选</button>
+                </div>
+
+                <!-- 文件列表容器（由 app.js 动态渲染） -->
+                <div class="file-list" id="fileList" role="list"></div>
+
+                <!-- 多选操作条（进入多选模式后显示） -->
+                <div class="multi-bar" id="multiBar" hidden>
+                    <span>已选 <strong id="multiCount">0</strong> 项</span>
+                    <button type="button" class="toolbar-btn" id="multiZipBtn" disabled>打包下载</button>
+                    <button type="button" class="toolbar-btn" id="multiExitBtn">取消</button>
+                </div>
+            </section>
+
+            <!-- ===== 上传 ===== -->
+            <section class="tab-panel" data-tab="upload" id="panelUpload"
+                     aria-label="文件上传">
+                <!-- 拖放区域 + 选择按钮 -->
+                <div class="upload-zone" id="uploadZone" role="button"
+                     tabindex="0" aria-label="点击或拖入文件上传">
+                    <div class="upload-zone__icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.5"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 16V4M12 4l-5 5M12 4l5 5" />
+                            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                        </svg>
+                    </div>
+                    <div>点击选择文件或拖入此区域</div>
+                    <div class="upload-zone__hint">支持多文件，中断后重新选择同一文件即可续传</div>
+                    <div class="upload-zone__hint">大文件传输时请保持手机屏幕常亮</div>
+                    <div class="upload-zone__actions">
+                        <button type="button" class="upload-zone__btn" id="pickBtn">
+                            选择文件
+                        </button>
+                        <button type="button" class="upload-zone__btn" id="pickDirBtn">
+                            选择文件夹
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" multiple
+                           style="display:none" aria-hidden="true" />
+                    <input type="file" id="dirInput" multiple webkitdirectory directory
+                           style="display:none" aria-hidden="true" />
+                </div>
+
+                <!-- 上传任务列表 -->
+                <div class="upload-list" id="uploadList" aria-live="polite"></div>
+            </section>
+
+            <!-- ===== 设备列表 ===== -->
+            <section class="tab-panel" data-tab="devices" id="panelDevices"
+                     aria-label="已发现设备">
+                <h2 class="section-title">
+                    局域网设备
+                    <span class="section-title__count" id="deviceCount">0</span>
+                </h2>
+                <div class="device-list" id="deviceList" role="list"></div>
+            </section>
+
+        </main>
+
+        <!-- ============ 底部 Tab Bar（iOS 风格） ============ -->
+        <nav class="tab-bar" role="tablist" aria-label="主导航">
+            <button class="tab-bar__item is-active" role="tab"
+                    aria-selected="true" aria-controls="panelBrowse"
+                    data-tab="browse" id="tabBrowse">
+                <span class="tab-bar__icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                    </svg>
+                </span>
+                <span class="tab-bar__label">文件</span>
+            </button>
+            <button class="tab-bar__item" role="tab"
+                    aria-selected="false" aria-controls="panelUpload"
+                    data-tab="upload" id="tabUpload">
+                <span class="tab-bar__icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20V8M12 8l-5 5M12 8l5 5" />
+                        <path d="M4 4h16" />
+                    </svg>
+                </span>
+                <span class="tab-bar__label">上传</span>
+            </button>
+            <button class="tab-bar__item" role="tab"
+                    aria-selected="false" aria-controls="panelDevices"
+                    data-tab="devices" id="tabDevices">
+                <span class="tab-bar__icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="6" width="14" height="10" rx="1.5" />
+                        <rect x="16" y="9" width="6" height="11" rx="1.5" />
+                        <path d="M5 20h8" />
+                    </svg>
+                </span>
+                <span class="tab-bar__label">设备</span>
+            </button>
+        </nav>
+
+        <!-- Toast 提示容器 -->
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+
+    <!-- app.js 同样免令牌加载，配对逻辑在其中完成 -->
+    <script src="app.js" defer></script>
+</body>
+</html>

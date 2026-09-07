@@ -1,0 +1,174 @@
+<Window x:Class="SystemToolkit.Modules.FileBackup.RuleEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SystemToolkit.Modules.FileBackup"
+        Title="编辑规则"
+        Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource Brush_Bg}"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
+    <Window.Resources>
+        <!-- Inverse 转换器在主页面是页面级资源，弹窗需自备（跨 Window 不共享 StaticResource） -->
+        <local:InverseBoolConverter x:Key="Inverse"/>
+    </Window.Resources>
+    <!-- 2026-09-07 单屏改造：规则编辑表单从主页面迁入弹窗（用户拍板，对齐软件管理页
+         SoftwareEditWindow 范式）。DataContext = FileBackupViewModel，字段绑定沿用主 VM
+         的表单属性；保存经 SaveRuleCommand（校验失败时 FormError 非空、弹窗不关闭）。 -->
+    <StackPanel Margin="18,16">
+
+        <!-- 规则名 -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="规则名" Style="{StaticResource KvLabel}" Margin="0,0,8,0"/>
+            <TextBox Grid.Column="1" Style="{StaticResource FieldInput}"
+                     Text="{Binding RuleNameInput, UpdateSourceTrigger=PropertyChanged}"/>
+        </Grid>
+
+        <!-- 源路径（可视化列表） -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="源路径" Style="{StaticResource KvLabel}" VerticalAlignment="Top" Margin="0,4,8,0"/>
+            <StackPanel Grid.Column="1">
+                <ListBox ItemsSource="{Binding SourcePathItems}" SelectedItem="{Binding SelectedSourcePath}"
+                         MinHeight="80" MaxHeight="110"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="添加文件" Style="{StaticResource CompactActionButton}" Margin="0,0,6,0"
+                            Command="{Binding AddSourceFileCommand}"/>
+                    <Button Content="添加文件夹" Style="{StaticResource CompactActionButton}" Margin="0,0,6,0"
+                            Command="{Binding AddSourcePathCommand}"/>
+                    <Button Content="手动输入" Style="{StaticResource CompactActionButton}" Margin="0,0,6,0"
+                            Command="{Binding AddSourceManualCommand}"/>
+                    <Button Content="移除选中" Style="{StaticResource CompactActionButton}"
+                            Command="{Binding RemoveSelectedSourceCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- 备份根 -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="70"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <CheckBox Content="使用全局备份根" Style="{StaticResource ThemedCheckBox}"
+                      IsChecked="{Binding UseGlobalBackupRoot}"/>
+            <TextBlock Grid.Column="2" Text="自定义根" Style="{StaticResource KvLabel}"/>
+            <TextBox Grid.Column="3" Style="{StaticResource FieldInput}"
+                     IsEnabled="{Binding UseGlobalBackupRoot, Converter={StaticResource Inverse}}"
+                     Text="{Binding BackupRootInput, UpdateSourceTrigger=PropertyChanged}"/>
+            <Button Grid.Column="5" Style="{StaticResource CardButton}" Content="选择…"
+                    Command="{Binding PickBackupRootFolderCommand}"/>
+        </Grid>
+
+        <!-- 保留快照 + 启用 -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="90"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="保留快照" Style="{StaticResource KvLabel}"/>
+            <TextBox Grid.Column="1" Style="{StaticResource FieldInput}"
+                     Text="{Binding MaxSnapshotsInput, UpdateSourceTrigger=PropertyChanged}"/>
+            <CheckBox Grid.Column="3" Content="启用此规则" Style="{StaticResource ThemedCheckBox}"
+                      IsChecked="{Binding EnabledInput}"/>
+        </Grid>
+
+        <!-- VSS -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <CheckBox Content="使用 VSS 卷影（可备份被占用文件）" Style="{StaticResource ThemedCheckBox}"
+                          IsChecked="{Binding UseVssInput}" VerticalAlignment="Center"/>
+                <Ellipse Width="8" Height="8" Fill="{Binding VssStatusColor}"
+                         ToolTip="{Binding VssStatus}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding VssStatus}" FontSize="{DynamicResource Font_SizeMicro}"
+                           Foreground="{Binding VssStatusColor}" Margin="4,0,0,0"
+                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 描述 -->
+        <TextBox Style="{StaticResource FieldInput}" MinHeight="40" AcceptsReturn="True" VerticalContentAlignment="Top"
+                 Margin="0,0,0,8"
+                 Text="{Binding DescriptionInput, UpdateSourceTrigger=PropertyChanged}"
+                 ToolTip="规则描述（可选）"/>
+
+        <!-- 排除规则（2026-09-07 新增，旧版无此能力） -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="排除" Style="{StaticResource KvLabel}" VerticalAlignment="Top" Margin="0,4,8,0"/>
+            <StackPanel Grid.Column="1">
+                <TextBox Style="{StaticResource FieldInput}" MinHeight="54" AcceptsReturn="True"
+                         VerticalContentAlignment="Top" Padding="6,4"
+                         Text="{Binding ExcludePatternsInput, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="一行一条，支持 * 与 ? 通配；匹配目录名、文件名或多段路径前缀"/>
+                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                           TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="例：node_modules / .git / *.tmp / bin/Debug —— 命中的文件与目录不参与备份"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 每日定时 -->
+        <Grid Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="70"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <CheckBox Content="每日定时" Style="{StaticResource ThemedCheckBox}"
+                      VerticalAlignment="Center" IsChecked="{Binding EnableScheduleInput}"/>
+            <TextBox Grid.Column="1" Style="{StaticResource FieldInput}" ToolTip="每日执行时间 HH:mm"
+                     Text="{Binding DailyTimeInput, UpdateSourceTrigger=PropertyChanged}"/>
+            <Button Grid.Column="3" Style="{StaticResource CardButton}" Content="注册定时任务"
+                    Command="{Binding RegisterScheduleCommand}"/>
+            <Button Grid.Column="4" Style="{StaticResource CardButton}" Content="注销" Margin="8,0,0,0"
+                    Command="{Binding UnregisterScheduleCommand}"/>
+            <TextBlock Grid.Column="5" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                       VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"
+                       Text="注册后由 Windows 任务计划触发，无需本程序常驻；错过自动补做一次。"/>
+        </Grid>
+
+        <TextBlock Text="{Binding FormError}" Style="{StaticResource FieldError}" Margin="0,2,0,0"/>
+
+        <!-- 底部按钮 -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
+                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+                    BorderThickness="1" Cursor="Hand"/>
+            <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"
+                    Style="{StaticResource RowPrimaryButton}"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

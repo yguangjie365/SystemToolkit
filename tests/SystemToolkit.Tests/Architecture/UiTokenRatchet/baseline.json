@@ -1,0 +1,34 @@
+{
+  "src/SystemToolkit.Modules.Overview/OverviewView.xaml": {
+    "margin": 29,
+    "padding": 7
+  },
+  "src/SystemToolkit.Modules.AppManager/AppManagerView.xaml": {
+    "margin": 39,
+    "padding": 22
+  },
+  "src/SystemToolkit.Modules.AppManager/SoftwareEditWindow.xaml": {
+    "margin": 16,
+    "padding": 6
+  },
+  "src/SystemToolkit.Modules.DriverManager/DriverManagerView.xaml": {
+    "margin": 18,
+    "padding": 6
+  },
+  "src/SystemToolkit.Shell/MainWindow.xaml": {
+    "margin": 9,
+    "padding": 1
+  },
+  "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml": {
+    "margin": 77,
+    "padding": 4
+  },
+  "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml": {
+    "margin": 44,
+    "padding": 3
+  },
+  "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml": {
+    "margin": 34,
+    "padding": 7
+  }
+}
