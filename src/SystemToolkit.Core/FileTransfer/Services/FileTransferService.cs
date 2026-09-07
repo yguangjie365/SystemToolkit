@@ -937,7 +937,14 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             {
                 // 时间属性还原（2026-09-06 协议扩展）：失败不影响交付（文件本身已校验通过）
                 try
-                { File.SetLastWriteTimeUtc(finalPath, DateTimeOffset.FromUnixTimeMilliseconds(ctx.FileModifiedAt).UtcDateTime); }
+                {
+                    DateTime modified = DateTimeOffset.FromUnixTimeMilliseconds(ctx.FileModifiedAt).UtcDateTime;
+                    DateTime minMTime = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    DateTime maxMTime = DateTime.UtcNow.AddDays(1); // 与 Web 路径同窗口：拒绝远端伪造的 9999 年时间戳
+                    if (modified < minMTime) modified = minMTime;
+                    if (modified > maxMTime) modified = maxMTime;
+                    File.SetLastWriteTimeUtc(finalPath, modified);
+                }
                 catch { }
             }
 
@@ -1168,8 +1175,33 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     {
         if (string.IsNullOrWhiteSpace(fileName))
             return "unnamed";
-        return string.Concat(fileName.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c));
+        string sanitized = string.Concat(fileName.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c));
+        // Windows 保留设备名（CON/NUL/COM1…）即使带扩展名也是设备节点，落到设备而非文件——前缀 _ 规避
+        return IsWindowsReservedDeviceName(sanitized) ? "_" + sanitized : sanitized;
     }
+
+    private static readonly string[] WindowsReservedDeviceNames =
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    /// <summary>判定文件名是否为 Windows 保留设备名（CON/NUL/COM1…，含带扩展名形式，如 CON.txt）。</summary>
+    private static bool IsWindowsReservedDeviceName(string fileName)
+    {
+        int dot = fileName.IndexOf('.');
+        string baseName = (dot >= 0 ? fileName[..dot] : fileName).TrimEnd(' ', '.');
+        foreach (string name in WindowsReservedDeviceNames)
+        {
+            if (string.Equals(baseName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     /// <summary>
     /// 接收侧单连接上下文：持有目标文件流、增量哈希与任务对象，按连接 Guid 索引。

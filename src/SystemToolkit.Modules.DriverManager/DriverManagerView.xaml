@@ -84,6 +84,7 @@
                     <ListView ItemsSource="{Binding PackagesView}"
                               BorderThickness="0" Background="Transparent"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                               SelectedItem="{Binding SelectedPackage, Mode=TwoWay}"
                               SizeChanged="OnListSizeChanged">
                         <ListView.Style>
