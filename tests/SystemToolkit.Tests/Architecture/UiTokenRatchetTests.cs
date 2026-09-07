@@ -6,8 +6,9 @@ namespace SystemToolkit.Tests.Architecture;
 /// <summary>
 /// UI 令牌棘轮守卫（P1 落地）：XAML 裸值只减不增。
 /// 规则：① FontSize / CornerRadius 数字字面量 = 零容忍（已有精确值令牌，直接引用）；
-/// ② Margin / Padding 数字字面量 = 按文件基线（UiTokenRatchet/baseline.json），只许减少。
+/// ② Margin / Padding / Width / Height / BorderThickness / StrokeThickness 数字字面量 = 按文件基线（UiTokenRatchet/baseline.json），只许减少。
 /// 基线在裸值收敛完成后生成；有意新增合法裸值 → 显式下调基线并在变更记录说明。
+/// 注意：Width/Height 检测不含 Max/Min 前缀（无词边界），故 MaxHeight 等不视为裸值（审查 S-4 用 MaxHeight 收窄视口）。
 /// </summary>
 public class UiTokenRatchetTests
 {
@@ -21,12 +22,21 @@ public class UiTokenRatchetTests
         "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml",
         "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml",
         "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml",
+        "src/SystemToolkit.Modules.FileBackup/FileBackupView.xaml",
+        "src/SystemToolkit.Modules.FileBackup/PathInputWindow.xaml",
+        "src/SystemToolkit.Modules.FileBackup/RestoreDialog.xaml",
+        "src/SystemToolkit.Modules.FileBackup/RuleEditWindow.xaml",
+        "src/SystemToolkit.Modules.Settings/SettingsView.xaml",
     };
 
     private static readonly Regex FontSizeLiteral = new(@"FontSize=""\d", RegexOptions.Compiled);
     private static readonly Regex CornerRadiusLiteral = new(@"CornerRadius=""\d", RegexOptions.Compiled);
     private static readonly Regex MarginLiteral = new(@"\bMargin=""\d", RegexOptions.Compiled);
     private static readonly Regex PaddingLiteral = new(@"\bPadding=""\d", RegexOptions.Compiled);
+    private static readonly Regex WidthLiteral = new(@"\bWidth=""\d", RegexOptions.Compiled);
+    private static readonly Regex HeightLiteral = new(@"\bHeight=""\d", RegexOptions.Compiled);
+    private static readonly Regex BorderThicknessLiteral = new(@"\bBorderThickness=""\d", RegexOptions.Compiled);
+    private static readonly Regex StrokeThicknessLiteral = new(@"\bStrokeThickness=""\d", RegexOptions.Compiled);
 
     private static readonly Dictionary<string, Dictionary<string, int>> Baseline =
         JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, int>>>(
@@ -83,6 +93,49 @@ public class UiTokenRatchetTests
             + string.Join("\n", failures));
     }
 
+    [Fact]
+    public void TokenRatchet_WidthHeightBorderStroke_NotExceedBaseline()
+    {
+        var failures = new List<string>();
+        foreach (string rel in ScannedViews)
+        {
+            string text = File.ReadAllText(RepoRoot() + "/" + rel);
+            int widths = WidthLiteral.Matches(text).Count;
+            int heights = HeightLiteral.Matches(text).Count;
+            int borders = BorderThicknessLiteral.Matches(text).Count;
+            int strokes = StrokeThicknessLiteral.Matches(text).Count;
+            Baseline.TryGetValue(rel, out Dictionary<string, int>? allowed);
+            int allowedWidth = allowed?.GetValueOrDefault("width", 0) ?? 0;
+            int allowedHeight = allowed?.GetValueOrDefault("height", 0) ?? 0;
+            int allowedBorder = allowed?.GetValueOrDefault("border", 0) ?? 0;
+            int allowedStroke = allowed?.GetValueOrDefault("stroke", 0) ?? 0;
+
+            if (widths > allowedWidth)
+            {
+                failures.Add($"{rel}: Width 裸值 {widths} > 基线 {allowedWidth}");
+            }
+
+            if (heights > allowedHeight)
+            {
+                failures.Add($"{rel}: Height 裸值 {heights} > 基线 {allowedHeight}");
+            }
+
+            if (borders > allowedBorder)
+            {
+                failures.Add($"{rel}: BorderThickness 裸值 {borders} > 基线 {allowedBorder}");
+            }
+
+            if (strokes > allowedStroke)
+            {
+                failures.Add($"{rel}: StrokeThickness 裸值 {strokes} > 基线 {allowedStroke}");
+            }
+        }
+
+        Assert.True(failures.Count == 0,
+            "XAML Width/Height/BorderThickness/StrokeThickness 裸值超出棘轮基线（只减不增；有意新增请下调 baseline.json 并在变更记录说明）：\n"
+            + string.Join("\n", failures));
+    }
+
     // ---------------- 反向验证自检（03 §4.1：未经反向验证的守门等于没守门） ----------------
 
     [Fact]
@@ -92,8 +145,16 @@ public class UiTokenRatchetTests
         Assert.Matches(CornerRadiusLiteral, "CornerRadius=\"10\"");
         Assert.Matches(MarginLiteral, "Margin=\"0,0,6,0\"");
         Assert.Matches(PaddingLiteral, "Padding=\"12\"");
+        Assert.Matches(WidthLiteral, "Width=\"300\"");
+        Assert.Matches(HeightLiteral, "Height=\"30\"");
+        Assert.Matches(BorderThicknessLiteral, "BorderThickness=\"0,0,0,1\"");
+        Assert.Matches(StrokeThicknessLiteral, "StrokeThickness=\"2\"");
         Assert.DoesNotMatch(FontSizeLiteral, "FontSize=\"{DynamicResource Font_SizeBody}\"");
         Assert.DoesNotMatch(CornerRadiusLiteral, "CornerRadius=\"{DynamicResource Radius_Chip}\"");
+        Assert.DoesNotMatch(WidthLiteral, "Width=\"*\"");
+        Assert.DoesNotMatch(WidthLiteral, "MinWidth=\"120\"");
+        Assert.DoesNotMatch(HeightLiteral, "MaxHeight=\"600\"");
+        Assert.DoesNotMatch(BorderThicknessLiteral, "BorderThickness=\"{DynamicResource Border_Card}\"");
     }
 
     private static string RepoRoot()

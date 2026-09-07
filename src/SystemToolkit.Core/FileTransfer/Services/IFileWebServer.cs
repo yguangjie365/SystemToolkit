@@ -14,6 +14,9 @@ public interface IFileWebServer : IAsyncDisposable
     /// <summary>当前监听端口。</summary>
     int Port { get; }
 
+    /// <summary>是否启用 HTTPS（自签证书）。<c>false</c> 表示仅 HTTP 明文，访问令牌可能被同网段嗅探。</summary>
+    bool IsHttps { get; }
+
     /// <summary>本机访问 URL（localhost，供「打开网页」按钮使用）。</summary>
     string Url { get; }
 

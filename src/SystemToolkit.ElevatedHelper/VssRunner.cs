@@ -44,6 +44,8 @@ public static class VssRunner
             return await WriteErrorAsync(outFile, $"卷根路径不存在：{volume}", cancellationToken).ConfigureAwait(false);
         }
 
+        Guid? snapshotId = null;
+        string sentinel = outFile + ".sid";
         try
         {
             // AlphaVSS 2.0.3 调用链（逐方法经包内 netcoreapp3.1 程序集反射核实）：
@@ -56,16 +58,25 @@ public static class VssRunner
             backup.SetContext(VssSnapshotContext.Backup);
             backup.SetBackupState(false, false, VssBackupType.Full, false);
             backup.StartSnapshotSet(); // 快照集 ID 不需要；单卷快照 ID 由 AddToSnapshotSet 返回
-            Guid snapshotId = backup.AddToSnapshotSet(volume);
+            snapshotId = backup.AddToSnapshotSet(volume);
+            // 快照 ID 一经产生立即持久化到 sidecar（不带取消令牌），供主进程在超时/被强杀后仍能读到并清理孤儿卷影
+            await File.WriteAllTextAsync(sentinel, snapshotId.Value.ToString("D").ToUpperInvariant(), Encoding.UTF8).ConfigureAwait(false);
             await backup.PrepareForBackupAsync(cancellationToken).ConfigureAwait(false);
             await backup.DoSnapshotSetAsync(cancellationToken).ConfigureAwait(false);
-            VssSnapshotProperties properties = backup.GetSnapshotProperties(snapshotId);
-            string line = $"{snapshotId.ToString("D").ToUpperInvariant()}|{properties.SnapshotDeviceObject}";
+            VssSnapshotProperties properties = backup.GetSnapshotProperties(snapshotId.Value);
+            string line = $"{snapshotId.Value.ToString("D").ToUpperInvariant()}|{properties.SnapshotDeviceObject}";
             await File.WriteAllTextAsync(outFile, line + Environment.NewLine, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+            TryDeleteFile(outFile + ".sid");
             return 0;
         }
         catch (Exception ex)
         {
+            if (snapshotId is { } sid)
+            {
+                TryDeleteSnapshot(sid);
+                TryDeleteFile(sentinel);
+            }
+
             return await WriteErrorAsync(outFile, $"VSS 快照创建失败：{volume}：{ex.Message}", cancellationToken).ConfigureAwait(false);
         }
     }
@@ -111,6 +122,34 @@ public static class VssRunner
         catch (Exception ex)
         {
             return await WriteErrorAsync(outFile, $"VSS 快照删除失败：{normalizedId}：{ex.Message}", cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>尽力删除已创建的卷影快照（创建失败/取消时清理孤儿卷影；失败不阻断错误回写）。</summary>
+    private static void TryDeleteSnapshot(Guid snapshotId)
+    {
+        try
+        {
+            using IVssBackupComponents backup = VssFactoryProvider.Default.GetVssFactory().CreateVssBackupComponents();
+            backup.InitializeForBackup(null!); // delete 路径仅需 Initialize（与 DeleteAsync 一致）
+            backup.DeleteSnapshot(snapshotId, forceDelete: true);
+        }
+        catch
+        {
+            // 尽力而为：清理失败不阻断错误回写
+        }
+    }
+
+    /// <summary>尽力删除临时 sidecar 文件（忽略异常）。</summary>
+    private static void TryDeleteFile(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch
+        {
+            // 忽略
         }
     }
 

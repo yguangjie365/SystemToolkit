@@ -68,7 +68,7 @@ public partial class FileTransferMobileViewModel : ObservableObject
             QrImage = RenderQr(_web.LanUrl);
             RefreshPairingDisplay();
             EnsureCodeTimer();
-            _log($"[手机] ✅ Web 服务已启动：{_web.Url}（HTTPS={false}），配对码 10 分钟轮换");
+            _log($"[手机] ✅ Web 服务已启动：{_web.LanUrl}（{(_web.IsHttps ? "HTTPS 加密" : "⚠️ HTTP 未加密")}），配对码 10 分钟轮换");
         }
         catch (Exception ex)
         {

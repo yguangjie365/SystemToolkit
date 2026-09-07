@@ -692,7 +692,8 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
         if (conflicts.Count == 0)
             return ConflictPolicy.Overwrite; // 无冲突直接写入
         if (userChoice is null)
-            return ConflictPolicy.Skip; // 无法询问安全降级
+            throw new InvalidOperationException(
+                "冲突策略为「逐条询问」但未提供用户裁决回调，已中止恢复以防静默跳过冲突文件。");
         return userChoice(conflicts); // 回到调用线程（UI）执行用户询问
     }
 

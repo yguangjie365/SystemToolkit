@@ -126,6 +126,38 @@ public sealed class ElevatedVssClient
         ElevatedRunResult result = await ElevatedProcessFinisher
             .FinishAsync(proc, outFile, VssTimeout, ct).ConfigureAwait(false);
         OutputDecoder.ForEachLine(result.Output, line => onLog?.Invoke($"[VSS] {line}"));
+        // 审查 S-2：create 快照 ID 已由 helper 持久化到 outFile.sid sidecar；
+        // helper 异常退出（超时/被强杀/崩溃）时据此补删可能遗留的卷影快照，避免孤儿卷影累积占盘。
+        if (verbArgs.Length > 0 && verbArgs[0] == "create")
+        {
+            string sentinel = outFile + ".sid";
+            if (result.ExitCode != 0 && File.Exists(sentinel))
+            {
+                string? orphan = null;
+                try
+                {
+                    orphan = (await File.ReadAllTextAsync(sentinel).ConfigureAwait(false)).Trim();
+                }
+                catch
+                {
+                    // sidecar 读取失败仅视为无孤儿可清（系统边界，捕获后继续）
+                }
+                if (Guid.TryParse(orphan, out _))
+                {
+                    onLog?.Invoke($"[VSS] ⚠️ 检测到可能遗留的卷影快照 {orphan}，尝试清理（若再次弹出 UAC 请允许）");
+                    await DeleteAsync(orphan!, onLog, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            try
+            {
+                File.Delete(sentinel);
+            }
+            catch
+            {
+                // 清理尽力而为
+            }
+        }
+
 
         if (result.ExitCode != 0)
         {

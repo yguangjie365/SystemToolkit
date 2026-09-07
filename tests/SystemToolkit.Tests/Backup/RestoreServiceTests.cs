@@ -525,11 +525,10 @@ public class RestoreServiceTests
                 info, target, ConflictPolicy.Ask, null, info.SourcePaths, null, CancellationToken.None);
             Assert.Equal(ConflictPolicy.Overwrite, noConflict);
 
-            // 目标已有同名文件 → 冲突；无 userChoice → 安全降级 Skip
+            // 目标已有同名文件 → 冲突；无 userChoice → 不得静默跳过，应显式失败
             File.WriteAllText(Path.Combine(target, "hello.txt"), "已有", Encoding.UTF8);
-            ConflictPolicy degraded = await svc.ResolvePolicyAsync(
-                info, target, ConflictPolicy.Ask, null, info.SourcePaths, null, CancellationToken.None);
-            Assert.Equal(ConflictPolicy.Skip, degraded);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                svc.ResolvePolicyAsync(info, target, ConflictPolicy.Ask, null, info.SourcePaths, null, CancellationToken.None));
 
             // 有 userChoice → 用户决策生效
             ConflictPolicy userDecided = await svc.ResolvePolicyAsync(

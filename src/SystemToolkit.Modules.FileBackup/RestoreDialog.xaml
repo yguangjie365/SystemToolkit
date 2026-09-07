@@ -8,7 +8,7 @@
         Background="{StaticResource Brush_Bg}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
     <!-- 2026-09-07 补齐旧版 RestoreDialog 能力：恢复目标二选一（原位置 / 指定目录）
-         + 冲突策略四选一。只负责收集用户选择，预演与执行由 VM 负责。 -->
+         + 冲突策略三选一。只负责收集用户选择，预演与执行由 VM 负责。 -->
     <StackPanel Margin="18,16">
 
         <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Margin="0,0,0,12"/>
@@ -43,8 +43,7 @@
                      Content="直接覆盖现有文件"/>
         <RadioButton x:Name="SkipRadio" GroupName="Policy" Margin="0,0,0,4"
                      Content="跳过冲突文件，保持现有"/>
-        <RadioButton x:Name="AskRadio" GroupName="Policy" Margin="0,0,0,4"
-                     Content="逐条询问（每条冲突都弹窗确认）"/>
+
 
         <TextBlock Text="⚠️ 恢复会写入目标目录；选择「覆盖」时现有同名文件将被替换。"
                    FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"

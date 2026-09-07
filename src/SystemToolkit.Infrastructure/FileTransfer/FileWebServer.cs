@@ -82,6 +82,9 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
     public int Port => _port;
 
     /// <inheritdoc/>
+    public bool IsHttps => _httpsEnabled;
+
+    /// <inheritdoc/>
     public string Url => IsRunning
         ? _httpsEnabled
             ? $"https://localhost:{_httpsPort}/?t={_token}"

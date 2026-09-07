@@ -51,7 +51,7 @@ public partial class RestoreDialog : Window
         ConflictPolicy policy = RenameRadio.IsChecked == true ? ConflictPolicy.Rename
             : OverwriteRadio.IsChecked == true ? ConflictPolicy.Overwrite
             : SkipRadio.IsChecked == true ? ConflictPolicy.Skip
-            : ConflictPolicy.Ask;
+            : ConflictPolicy.Rename;
         string? target = CustomRadio.IsChecked == true ? TargetBox.Text.Trim() : null;
         return new RestoreChoice(string.IsNullOrWhiteSpace(target) ? null : target, policy);
     }
