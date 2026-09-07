@@ -32,9 +32,9 @@ public sealed class BackupTaskSchedulerService
     public async Task<int> RegisterAsync(
         string ruleId, string dailyTime, string shellExePath, Action<string>? onLog = null, CancellationToken ct = default)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(dailyTime, @"^\d{2}:\d{2}$"))
+        if (!BackupSchedule.IsValidDailyTime(dailyTime))
         {
-            onLog?.Invoke($"[定时] ❌ 时间格式非法（应为 HH:mm）：{dailyTime}");
+            onLog?.Invoke($"[定时] ❌ 时间非法（应为 HH:mm，00:00-23:59）：{dailyTime}");
             return -1;
         }
 
