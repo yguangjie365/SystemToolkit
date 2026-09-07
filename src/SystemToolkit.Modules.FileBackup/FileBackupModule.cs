@@ -43,8 +43,8 @@ public sealed class FileBackupModule : ModuleBase
         services.AddSingleton<ElevatedVssClient>();
         services.AddSingleton<BackupService>();
         services.AddSingleton<RestoreService>();
-        services.AddSingleton<IBackupService, BackupService>();
-        services.AddSingleton<IRestoreService, RestoreService>();
+        services.AddSingleton<IBackupService>(sp => sp.GetRequiredService<BackupService>());
+        services.AddSingleton<IRestoreService>(sp => sp.GetRequiredService<RestoreService>());
         services.AddSingleton<IRestorePreviewProvider>(sp => sp.GetRequiredService<RestoreService>());
         services.AddSingleton<BackupTaskSchedulerService>();
 
@@ -68,8 +68,15 @@ public sealed class FileBackupModule : ModuleBase
         {
             logger.Info($"定时备份补做：{rule.RuleName}({rule.RuleId})");
             BackupResult result = await backup.BackupRuleAsync(rule, null, ct).ConfigureAwait(false);
-            rules.MarkRun(rule.RuleId, BackupSchedule.MarkRunDate(DateTime.Now));
-            logger.Info($"定时备份补做完成：{rule.RuleName} success={result.Success} files={result.FileCount}");
+            if (result.Success && !result.Canceled)
+            {
+                rules.MarkRun(rule.RuleId, BackupSchedule.MarkRunDate(DateTime.Now));
+                logger.Info($"定时备份补做完成：{rule.RuleName} success={result.Success} files={result.FileCount}");
+            }
+            else
+            {
+                logger.Warn($"定时备份补做未记账（失败或取消，留待下次重试）：{rule.RuleName} success={result.Success} canceled={result.Canceled}");
+            }
         }
     }
 }

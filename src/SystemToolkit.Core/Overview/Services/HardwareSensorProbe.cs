@@ -310,6 +310,14 @@ public sealed class HardwareSensorProbe
         catch (Exception ex)
         {
             _logger.Warn("传感器驱动初始化失败（温度/负载卡片将显示回退形态）：" + ex.Message);
+            try
+            {
+                computer.Close(); // 快速失败路径：避免部分初始化的 Computer 未释放句柄（审查 2026-09-08）
+            }
+            catch
+            {
+                // 部分初始化的 Computer 可能无句柄可释放，忽略
+            }
             return false;
         }
     }

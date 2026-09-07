@@ -209,8 +209,15 @@ public partial class App : Application
             IBackupService backup = _services!.GetRequiredService<IBackupService>();
             SystemToolkit.Core.Backup.Contracts.BackupResult result =
                 await backup.BackupRuleAsync(rule, null, CancellationToken.None).ConfigureAwait(false);
-            rules.MarkRun(ruleId, SystemToolkit.Core.Backup.Services.BackupSchedule.MarkRunDate(DateTime.Now));
-            CrashLog.Info($"backup-worker 完成：{ruleId} success={result.Success} files={result.FileCount}");
+            if (result.Success && !result.Canceled)
+            {
+                rules.MarkRun(ruleId, SystemToolkit.Core.Backup.Services.BackupSchedule.MarkRunDate(DateTime.Now));
+                CrashLog.Info($"backup-worker 完成：{ruleId} success={result.Success} files={result.FileCount}");
+            }
+            else
+            {
+                CrashLog.Info($"backup-worker 未记账（失败或取消，留待下次重试）：{ruleId} success={result.Success} canceled={result.Canceled}");
+            }
         }
         catch (Exception ex)
         {

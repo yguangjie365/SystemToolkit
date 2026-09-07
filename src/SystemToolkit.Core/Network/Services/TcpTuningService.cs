@@ -21,6 +21,16 @@ public sealed class TcpTuningService : ITcpTuningService
         WriteIndented = true,
     };
 
+    /// <summary>autotuninglevel 合法取值集（与 NetshTokenRules.TcpSetGlobal 白名单一致，取真机 netsh set global 帮助输出）。</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ValidAutoTuningLevels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "disabled", "highlyrestricted", "restricted", "normal", "experimental"
+    };
+
+    /// <summary>判定 autotuninglevel 是否为 netsh 白名单内的合法值；null/未知一律 false（绝不把任意串发往 netsh）。</summary>
+    private static bool IsValidAutoTuningLevel(string? level)
+        => level is not null && ValidAutoTuningLevels.Contains(level);
+
     private readonly ICommandRunner _runner;
     private readonly string _snapshotPath;
 
@@ -74,7 +84,12 @@ public sealed class TcpTuningService : ITcpTuningService
 
         if (target.AutoTuningLevel is not null)
         {
-            if (current.AutoTuningLevel is null)
+            if (!IsValidAutoTuningLevel(target.AutoTuningLevel))
+            {
+                onLine("[调优] ⚠️ 自动调谐级别不是白名单值，已跳过——绝不盲写");
+                skipped.Add("自动调谐级别（非法值）");
+            }
+            else if (current.AutoTuningLevel is null)
             {
                 onLine("[调优] ⚠️ 自动调谐级别当前值未知（show global 解析失败），已跳过——绝不盲写");
                 skipped.Add("自动调谐级别（当前值未知）");
@@ -159,7 +174,14 @@ public sealed class TcpTuningService : ITcpTuningService
         // 依快照逐项还原：快照里没有的项（当时解析失败）跳过，绝不拿「未知」去写系统
         if (snapshot.NetshValues.TryGetValue("autotuninglevel", out string? level))
         {
-            await SetGlobalAsync($"autotuninglevel={level}", onLine, ct).ConfigureAwait(false);
+            if (!IsValidAutoTuningLevel(level))
+            {
+                onLine("[调优] ⚠️ 快照中的自动调谐级别非法，已跳过还原（绝不盲写）");
+            }
+            else
+            {
+                await SetGlobalAsync($"autotuninglevel={level}", onLine, ct).ConfigureAwait(false);
+            }
         }
 
         if (TryGetSwitch(snapshot.NetshValues, "rss", out bool rss))

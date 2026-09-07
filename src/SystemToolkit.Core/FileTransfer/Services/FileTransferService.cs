@@ -663,6 +663,19 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return;
         }
 
+        // 安全边界五：文件大小不得为负——恶意握手声明负/超大 FileSize 可绕过偏移越界校验（见 HandleChunk 溢出修复）
+        if (tm.FileSize < 0)
+        {
+            _logger.Warn($"拒绝传输握手：文件大小非法（{tm.FileSize}，来源 {ipPort}）。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = "文件大小非法。",
+            });
+            return;
+        }
+
         // 任务对象统一在确认门前创建——待确认任务以 Negotiating 态出现在任务列表，
         // 并计入并发接收上限（防确认风暴占满配额）
         var task = new TransferTask
@@ -858,7 +871,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         if (tm.Offset < 0
             || tm.Offset > task.FileSize
             || data.Length > task.ChunkSize
-            || tm.Offset + data.Length > task.FileSize)
+            || data.Length > task.FileSize - tm.Offset)
         {
             throw new InvalidOperationException(
                 $"分片越界：Offset={tm.Offset}，长度={data.Length}，ChunkSize={task.ChunkSize}，FileSize={task.FileSize}。");

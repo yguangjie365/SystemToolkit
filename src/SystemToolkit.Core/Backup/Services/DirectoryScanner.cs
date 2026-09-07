@@ -180,6 +180,8 @@ public static class DirectoryScanner
     public static ScanResult ScanMultiSources(BackupRule rule, ILogger? logger = null)
     {
         IReadOnlyList<string> sources = rule.Sources();
+        // 审查：若某源被另一源包含（如 D:\Data 与 D:\Data\Sub），去掉子源，避免同一物理文件被备份两次
+        sources = RemoveOverlappingSources(sources);
         IReadOnlyList<string>? excludes = rule.ExcludePatterns;
         if (sources.Count == 1)
         {
@@ -259,6 +261,54 @@ public static class DirectoryScanner
         }
 
         return new ScanResult(dedupFiles, dedupEmptyDirs);
+    }
+
+    /// <summary>去掉被其它源包含的源（父子包含），仅保留外侧源，避免同一物理文件被重复备份。
+    /// 例如 D:\Data 与 D:\Data\Sub 同时配置时，Sub 已被 D:\Data 覆盖，跳过 Sub。</summary>
+    private static IReadOnlyList<string> RemoveOverlappingSources(IReadOnlyList<string> sources)
+    {
+        var result = new List<string>();
+        for (int i = 0; i < sources.Count; i++)
+        {
+            string si = sources[i];
+            bool redundant = false;
+            for (int j = 0; j < sources.Count; j++)
+            {
+                if (i == j)
+                {
+                    continue;
+                }
+                string sj = sources[j];
+                if (PathsEqual(si, sj))
+                {
+                    // 同路径（大小写/尾部斜杠差异）由 Sources() 已去重，此处不误判为包含
+                    continue;
+                }
+                if (PathUtil.IsUnder(si, sj))
+                {
+                    redundant = true;
+                    break;
+                }
+            }
+            if (!redundant)
+            {
+                result.Add(si);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>判定两个路径字符串是否指向同一位置（归一化后忽略大小写；非法路径回退原始修剪比较）。</summary>
+    private static bool PathsEqual(string a, string b)
+    {
+        try
+        {
+            return string.Equals(PathUtil.NormalizeDirectory(a), PathUtil.NormalizeDirectory(b), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return string.Equals(a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
