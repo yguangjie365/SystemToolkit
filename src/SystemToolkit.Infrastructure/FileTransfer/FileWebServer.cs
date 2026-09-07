@@ -731,9 +731,35 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
             {
                 return null;
             }
+            if (IsWindowsReservedDeviceName(part))
+            {
+                return null;
+            }
         }
 
         return Path.Combine(parts);
+    }
+
+    private static readonly string[] WindowsReservedDeviceNames =
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    /// <summary>判定文件名是否为 Windows 保留设备名（CON/NUL/COM1…，含带扩展名形式，如 CON.txt）。</summary>
+    private static bool IsWindowsReservedDeviceName(string fileName)
+    {
+        int dot = fileName.IndexOf('.');
+        string baseName = (dot >= 0 ? fileName[..dot] : fileName).TrimEnd(' ', '.');
+        foreach (string name in WindowsReservedDeviceNames)
+        {
+            if (string.Equals(baseName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -1050,13 +1076,51 @@ button:active{background:#334D63}
             }
 
             string prefix = fullRoot.EndsWith(Path.DirectorySeparatorChar) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
-            return fullTarget.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            if (!fullTarget.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // 安全硬化：共享根内若存在 symlink/junction，会让人从根外读取文件（download/zip），也影响写入落点。
+            // 词法 GetFullPath 不解析 reparse，此处沿相对路径逐段查找并拒绝。
+            if (HasReparsePointUnderRoot(fullRoot, fullTarget))
+            {
+                return false;
+            }
+
+            return true;
         }
         catch (Exception)
         {
             // 非法字符等 Path 异常一律视为越界
             return false;
         }
+    }
+
+    /// <summary>沿 fullRoot 到 fullTarget 的相对路径逐段检查；任一已存在段为 reparse point 则视为不安全。</summary>
+    private static bool HasReparsePointUnderRoot(string root, string target)
+    {
+        string rel = target.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string current = root;
+        foreach (string segment in rel.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            try
+            {
+                if (File.Exists(current) || Directory.Exists(current))
+                {
+                    if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                // 权限/命名等异常交由实际 IO 决定，不在此误判
+            }
+        }
+        return false;
     }
 
     /// <summary>目标目录内取不冲突的落定路径：同名时追加 " (n)" 序号，绝不覆盖已有文件。</summary>
