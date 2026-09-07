@@ -99,32 +99,45 @@ public sealed class SnapshotManager
         return dirs;
     }
 
+    /// <summary>
+    /// 快照目录名判定：前 15 位必须是 <c>yyyyMMdd_HHmmss</c>，其后允许任意后缀。
+    /// 2026-09-08 起新增随机后缀（<c>时间戳_随机6位[_序号]</c>，消除创建竞态），
+    /// 旧格式（<c>时间戳</c> / <c>时间戳_序号</c>）继续兼容。
+    /// </summary>
     private static bool IsTimestampName(string name)
     {
-        if (name.Length < 15)
+        if (name.Length < 15 || name[8] != '_')
             return false;
-        string baseName = name;
-        // 同秒冲突形如 20260810_100000_2：最后一个下划线在 idx>8 处且后面是序号
-        int idx = name.LastIndexOf('_');
-        if (idx > 8 && int.TryParse(name[(idx + 1)..], out _))
-            baseName = name[..idx];
-        return baseName.Length == 15 && baseName[8] == '_' &&
-               baseName[..8].All(char.IsDigit) && baseName[9..].All(char.IsDigit);
+        if (!name[..8].All(char.IsDigit) || !name[9..15].All(char.IsDigit))
+            return false;
+        return name.Length == 15 || name[15] == '_';
     }
 
     private static (string Base, int Seq) SortKey(string dir)
     {
         string name = Path.GetFileName(dir);
-        string baseName = name;
+        string stamp = name.Length >= 15 ? name[..15] : name;
+        string rest = name.Length > 15 ? name[16..] : "";
         int seq = 0;
-        // 同秒冲突形如 20260810_100000_2：取序号做数字比较，避免 _10 排在 _2 前
-        int idx = name.LastIndexOf('_');
-        if (idx > 8 && int.TryParse(name[(idx + 1)..], out int n) && name[..idx].Length == 15)
+
+        // 旧格式 20260810_100000_2：后缀整体是序号 → 数字比较（避免 _10 排 _2 前）
+        if (rest.Length > 0 && int.TryParse(rest, out int direct))
         {
-            baseName = name[..idx];
-            seq = n;
+            seq = direct;
+            rest = "";
         }
-        return (baseName, seq);
+        else
+        {
+            // 新格式 20260908_041500_ab12cd[_N]：随机串参与主键，尾序号数字比较
+            int idx = rest.LastIndexOf('_');
+            if (idx >= 0 && int.TryParse(rest[(idx + 1)..], out int n))
+            {
+                seq = n;
+                rest = rest[..idx];
+            }
+        }
+
+        return (stamp + rest, seq);
     }
 
     // ------------------------------------------------------------------
@@ -240,19 +253,34 @@ public sealed class SnapshotManager
     // ------------------------------------------------------------------
     // 目录创建 / 删除 / 上限清理
     // ------------------------------------------------------------------
-    /// <summary>创建新快照目录（yyyyMMdd_HHmmss 命名，同秒冲突追加 _N 序号）及 files 子目录，返回目录完整路径。</summary>
+    /// <summary>
+    /// 创建新快照目录（yyyyMMdd_HHmmss 命名，同秒冲突追加 _N 序号）及 files 子目录，返回目录完整路径。
+    /// 🔴 2026-09-08（审查 G-2）：目录名加 6 位随机后缀消除 TOCTOU——
+    /// 原实现「Exists 探测 → Create」之间存在窗口，两路同时备份同一规则时可能撞名；
+    /// 真撞名时重试（最多 8 次）而不是覆盖已有快照。
+    /// </summary>
     public string CreateSnapshotDir()
     {
         Directory.CreateDirectory(SnapRoot);
         string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string snap = Path.Combine(SnapRoot, ts);
+        string suffix = Path.GetRandomFileName()[..6].ToLowerInvariant();
+        string snap = Path.Combine(SnapRoot, $"{ts}_{suffix}");
         int i = 1;
-        while (Directory.Exists(snap))
+        while (Directory.Exists(snap) && i <= 8)
         {
-            snap = Path.Combine(SnapRoot, $"{ts}_{i}");
+            snap = Path.Combine(SnapRoot, $"{ts}_{suffix}_{i}");
             i++;
         }
-        Directory.CreateDirectory(Path.Combine(snap, FilesDir));
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(snap, FilesDir));
+        }
+        catch (IOException) when (i > 8)
+        {
+            throw new IOException($"无法创建快照目录（连续 8 次命名冲突）：{snap}");
+        }
+
         return snap;
     }
 

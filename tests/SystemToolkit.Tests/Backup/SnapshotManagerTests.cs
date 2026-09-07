@@ -50,7 +50,26 @@ public class SnapshotManagerTests
 
             Assert.True(Directory.Exists(snap));
             Assert.True(Directory.Exists(Path.Combine(snap, SnapshotManager.FilesDir)));
-            Assert.Matches(@"^\d{8}_\d{6}(_\d+)?$", Path.GetFileName(snap));
+            // 2026-09-08 起目录名带 6 位随机后缀（消除 TOCTOU 撞名），格式：时间戳_随机[ _序号]
+            Assert.Matches(@"^\d{8}_\d{6}_[0-9a-z]{6}(_\d+)?$", Path.GetFileName(snap));
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
+    [Fact]
+    public void CreateSnapshotDir_TwiceInSameSecond_NoNameCollision()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("fb_snap2");
+        try
+        {
+            var rule = new BackupRule { RuleName = "dir2", SourcePaths = [temp], SourceType = SourceTypes.Folder };
+            var mgr = SnapshotManager.FromRule(rule, cfg.Settings.BackupRoot);
+            string first = mgr.CreateSnapshotDir();
+            string second = mgr.CreateSnapshotDir();
+
+            Assert.NotEqual(first, second);
+            Assert.True(Directory.Exists(first));
+            Assert.True(Directory.Exists(second));
         }
         finally { Directory.Delete(temp, recursive: true); }
     }
