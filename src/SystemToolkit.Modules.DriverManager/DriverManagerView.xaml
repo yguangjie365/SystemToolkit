@@ -217,6 +217,7 @@ Background="{StaticResource Brush_Bg}">
                         <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
                         <TextBlock Text="正在扫描 Driver Store..." Margin="0,8,0,0" 
                                    Foreground="{StaticResource Brush_TextSecondary}"/>
+                        <Button Content="取消扫描" Command="{Binding CancelScanCommand}" Margin="{DynamicResource Space_Md}" HorizontalAlignment="Center" Style="{StaticResource CardButton}"/>
                     </StackPanel>
                 </Border>
             </Grid>

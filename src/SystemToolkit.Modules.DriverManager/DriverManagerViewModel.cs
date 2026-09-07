@@ -141,7 +141,10 @@ public partial class DriverManagerViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))] // 审查 M1：8.4.2 无 CommandManager 兜底，必须显式通知
+    [NotifyCanExecuteChangedFor(nameof(CancelScanCommand))]
     private bool _isScanning;
+
+    private CancellationTokenSource? _scanCts;
 
     [ObservableProperty]
     private int _selectedCount;
@@ -205,11 +208,13 @@ public partial class DriverManagerViewModel : ObservableObject
     private async Task ScanAsync()
     {
         IsScanning = true;
+        using var scanCts = new CancellationTokenSource();
+        _scanCts = scanCts;
         try
         {
             StatusText = "正在枚举 Driver Store…";
             Progress<string> progress = new(t => StatusText = t);
-            IReadOnlyList<DriverPackage> list = await _scanner.ScanAsync(default, progress).ConfigureAwait(true);
+            IReadOnlyList<DriverPackage> list = await _scanner.ScanAsync(scanCts.Token, progress).ConfigureAwait(true);
             DriverStoreClassifier.Classify(list, applyCleanupCategories: true);
 
             Packages.Clear();
@@ -227,6 +232,11 @@ public partial class DriverManagerViewModel : ObservableObject
             StatusText = $"找到 {list.Count} 个驱动包（第三方 {thirdParty} · 旧版本 {old} · 系统关键 {critical}）";
             _logger.Info($"驱动扫描完成：{list.Count} 个驱动包，第三方 {thirdParty}，旧版本 {old}，系统关键 {critical}");
         }
+        catch (OperationCanceledException)
+        {
+            StatusText = "扫描已取消";
+            _logger.Info("驱动扫描已取消");
+        }
         catch (Exception ex)
         {
             StatusText = "扫描失败：" + ex.Message;
@@ -235,10 +245,18 @@ public partial class DriverManagerViewModel : ObservableObject
         finally
         {
             IsScanning = false;
+            _scanCts?.Dispose();
+            _scanCts = null;
         }
     }
 
     private bool CanScan => !IsScanning;
+
+    /// <summary>取消正在进行的扫描（审查：长操作取消，命中 CancellationToken 抛 OperationCanceledException）。</summary>
+    [RelayCommand(CanExecute = nameof(CanCancelScan))]
+    private void CancelScan() => _scanCts?.Cancel();
+
+    private bool CanCancelScan => IsScanning;
 
     /// <summary>是否已有提权操作进行中（删除/导出互斥；扫描可并行，互不影响）。</summary>
     [ObservableProperty]
