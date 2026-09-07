@@ -84,4 +84,49 @@ public class ModulesWiringGuardTests
             "FileBackupModule.RunDueScheduledBackupsAsync 的第一个参数必须是 IServiceScopeFactory"
             + "（REVIEW-3 C-1 修复后的契约：宿主依赖参数注入，禁止回到实例字段模式）。");
     }
+
+    /// <summary>
+    /// 2026-09-08（审查 S-4）：DI 解析出的模块必须与 <c>KnownModules()</c> 同一引用。
+    /// 防止将来有人在组合根用 <c>KnownModules().OfType&lt;T&gt;()</c> 另起炉灶，
+    /// 形成「DI 一条链 / KnownModules 一条链」的实例分裂。
+    /// </summary>
+    private static string RepoRoot()
+    {
+        DirectoryInfo? dir = new(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SystemToolkit.sln")))
+        {
+            dir = dir.Parent;
+        }
+
+        return dir?.FullName ?? throw new InvalidOperationException("未定位到仓库根");
+    }
+
+    [Fact]
+    public void DiResolvedModule_IsSameInstanceAsKnownModules()
+    {
+        // 组合根（App.xaml.cs）必须同时按具体类型注册：只注册 IModule 会让
+        // GetRequiredService<FileBackupModule>() 解析失败 → 定时补做静默失效。
+        string appSource = File.ReadAllText(
+            Path.Combine(RepoRoot(), "src", "SystemToolkit.Shell", "App.xaml.cs"));
+        Assert.Contains("AddSingleton(module.GetType(), module)", appSource);
+
+        var services = new ServiceCollection();
+        foreach (IModule module in App.KnownModules())
+        {
+            module.RegisterServices(services);
+            services.AddSingleton(module);
+            services.AddSingleton(module.GetType(), module);
+        }
+
+        App.RegisterSharedInfrastructure(services);
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        foreach (IModule known in App.KnownModules())
+        {
+            object resolved = provider.GetRequiredService(known.GetType());
+            Assert.True(ReferenceEquals(known, resolved),
+                $"{known.GetType().Name}：DI 解析实例与 KnownModules() 不是同一引用——"
+                + "组合根只能有一个实例来源，否则模块状态会分裂。");
+        }
+    }
 }

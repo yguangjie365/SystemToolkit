@@ -92,6 +92,10 @@ public partial class App : Application
         {
             module.RegisterServices(services);
             services.AddSingleton(module);
+            // 🔴 同时按具体类型注册同一实例：AddSingleton(module) 的服务类型是 IModule，
+            // 只注册它会导致 GetRequiredService<FileBackupModule>() 这类按具体类型解析失败
+            // （2026-09-08：定时补做改走 DI 解析时踩到，补做会静默失效）。
+            services.AddSingleton(module.GetType(), module);
         }
         RegisterSharedInfrastructure(services);
         services.AddSingleton<IServiceProvider>(sp => sp);
@@ -225,8 +229,10 @@ public partial class App : Application
         {
             // REVIEW-3 C-1：scopeFactory 参数注入（旧实现依赖 AttachScopeFactory 字段注入——
             // 该方法全仓零调用 + KnownModules 影子实例，导致补做必抛 NRE 静默失败）
+            // 2026-09-08（审查 S-4）：模块也从 DI 解析，不再经 KnownModules()——
+            // 组合根应只有 DI 一个实例来源，避免"两条实例链"隐患。
             SystemToolkit.Modules.FileBackup.FileBackupModule fileBackupModule =
-                KnownModules().OfType<SystemToolkit.Modules.FileBackup.FileBackupModule>().First();
+                _services!.GetRequiredService<SystemToolkit.Modules.FileBackup.FileBackupModule>();
             await fileBackupModule
                 .RunDueScheduledBackupsAsync(_services!.GetRequiredService<IServiceScopeFactory>(), CancellationToken.None)
                 .ConfigureAwait(false);

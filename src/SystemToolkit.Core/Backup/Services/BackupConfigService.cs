@@ -1,4 +1,6 @@
 using System.Text.Json;
+using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Core.Backup.Services;
@@ -40,17 +42,24 @@ public sealed class BackupConfigService
     private readonly string _configDir;
     private readonly string _settingsFile;
     private readonly Action<string> _log;
+    private readonly ILogger _logger;
 
     /// <summary>当前生效的配置值（Load 后可用；Save 时序列化为 settings.json）。</summary>
     public BackupAppSettings Settings { get; private set; } = new();
 
     /// <summary>创建配置服务；<paramref name="configDir"/> 缺省 %APPDATA%\SystemToolkit\backup（测试注入临时目录）。</summary>
-    public BackupConfigService(string? configDir = null, Action<string>? log = null)
+    /// <param name="configDir">配置目录（测试注入用）。</param>
+    /// <param name="log">UI 日志回调（可选）。</param>
+    /// <param name="logger">结构化日志（可选；缺省自持一个 BusLogger）。</param>
+    public BackupConfigService(string? configDir = null, Action<string>? log = null, ILogger? logger = null)
     {
         _configDir = configDir ?? Path.Combine(
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "SystemToolkit", "backup");
         _settingsFile = Path.Combine(_configDir, "settings.json");
         _log = log ?? (msg => { });
+        // 🔴 2026-09-08（审查 G-3）：损坏恢复路径不能只靠 UI 回调——
+        // UI 未建/进程将死时回调无人接收，失败信息会彻底丢失。自持 logger 保证落盘。
+        _logger = logger ?? new BusLogger("backup");
     }
 
     /// <summary>配置目录绝对路径（settings.json 所在位置；恢复引擎也将其列为受保护目录）。</summary>
@@ -83,10 +92,12 @@ public sealed class BackupConfigService
                 string bak = $"{_settingsFile}.corrupt_{DateTime.Now:yyyyMMdd_HHmmss}.json";
                 File.Copy(_settingsFile, bak, overwrite: true);
                 _log($"配置文件损坏，已备份为 {Path.GetFileName(bak)}：{ex.Message}");
+                _logger.Error($"配置文件损坏，已备份为 {bak}：{ex.Message}");
             }
             catch
             {
                 _log($"配置文件损坏且备份失败，使用默认值：{ex.Message}");
+                _logger.Error("配置文件损坏且备份失败，将使用默认值：" + ex.Message);
             }
 
             Settings = new BackupAppSettings();
