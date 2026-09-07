@@ -207,6 +207,7 @@ public class FileBackupViewModelCommandTests
                 BackupPath = Path.Combine(snapDir, SnapshotManager.FilesDir),
                 FileCount = 1,
                 TotalSize = content.Length,
+                ChecksumStatus = "skipped", // 初始"未校验"，校验通过应写回 passed
             };
             info.Files.Add(new FileEntry
             {
@@ -235,7 +236,12 @@ public class FileBackupViewModelCommandTests
 
             await vm.VerifySnapshotCommand.ExecuteAsync(null);
 
-            Assert.Contains(vm.LogLines, l => l.Text.Contains("校验通过"));
+            // 🔴 断言落盘状态而非 UI 日志：LogFeed.Append 跨线程用 dispatcher.InvokeAsync
+            //（不等待），测试宿主里可能投递到不处理消息的 Dispatcher 而永不执行——
+            // 用日志断言会 flaky。校验通过必然把 ChecksumStatus 写回 manifest，更可靠。
+            SnapshotInfo? after = manager.ReadSnapshot(snapDir);
+            Assert.NotNull(after);
+            Assert.Equal("passed", after!.ChecksumStatus);
         }
         finally
         {
