@@ -39,6 +39,12 @@ public static class TokenKeys
         public const string Color_SegWarn = "Color_SegWarn";
         public const string Color_DarkSurface = "Color_DarkSurface";
         public const string Color_OnDark = "Color_OnDark";
+        // ── 状态语义（2026-09-08 阶段 2 补齐）：与 Success/Warning/Danger 同级，
+        //    均遵循 M-UI-2「语义色走 700 档」决策（白底对比度 ≥4.5）
+        public const string Color_Info = "Color_Info";
+        public const string Color_Disabled = "Color_Disabled";
+        public const string Color_Focus = "Color_Focus";
+        public const string Color_Selection = "Color_Selection";
     }
 
     public static class Brushes
@@ -72,6 +78,11 @@ public static class TokenKeys
         public const string Brush_CoverOverlay = "Brush_CoverOverlay";
         public const string Brush_SuccessOnDark = "Brush_SuccessOnDark";
         public const string Brush_DangerOnDark = "Brush_DangerOnDark";
+        // ── 状态语义画刷（2026-09-08 阶段 2）
+        public const string Brush_Info = "Brush_Info";
+        public const string Brush_Disabled = "Brush_Disabled";
+        public const string Brush_Focus = "Brush_Focus";
+        public const string Brush_Selection = "Brush_Selection";
     }
 
     public static class Fonts

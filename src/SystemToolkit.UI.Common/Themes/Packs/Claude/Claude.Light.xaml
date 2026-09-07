@@ -36,6 +36,13 @@
     <Color x:Key="Color_SegWarn">#FB923C</Color>
     <Color x:Key="Color_DarkSurface">#1F2937</Color>
     <Color x:Key="Color_OnDark">#F9FAFB</Color>
+    <!-- 状态语义（2026-09-08 阶段 2）：延续 M-UI-2「语义色 700 档」决策；
+         Info=blue-700 / Disabled=gray-400（WCAG 对 disabled 元素豁免对比度）/
+         Focus 同 Accent-teal-700（语义独立便于调整）/ Selection=teal-100 选中底 -->
+    <Color x:Key="Color_Info">#1D4ED8</Color>
+    <Color x:Key="Color_Disabled">#9CA3AF</Color>
+    <Color x:Key="Color_Focus">#0F766E</Color>
+    <Color x:Key="Color_Selection">#CCFBF1</Color>
 
     <!-- ===== 画刷 ===== -->
     <SolidColorBrush x:Key="Brush_Bg" Color="{StaticResource Color_Bg}"/>
@@ -81,6 +88,10 @@
          语义色 700 档在 DarkSurface 上对比不足，用 400 档：Success 7.64 / Danger 5.31，均达 AA） -->
     <SolidColorBrush x:Key="Brush_SuccessOnDark" Color="#34D399"/>
     <SolidColorBrush x:Key="Brush_DangerOnDark" Color="#F87171"/>
+    <SolidColorBrush x:Key="Brush_Info" Color="{StaticResource Color_Info}"/>
+    <SolidColorBrush x:Key="Brush_Disabled" Color="{StaticResource Color_Disabled}"/>
+    <SolidColorBrush x:Key="Brush_Focus" Color="{StaticResource Color_Focus}"/>
+    <SolidColorBrush x:Key="Brush_Selection" Color="{StaticResource Color_Selection}"/>
 
     <!-- ===== 字体族（五款打包字体按 NOTICE.md §五加载；西文在前中文在后按字符回退） ===== -->
     <!-- 正文：Inter（西文）→ HarmonyOS Sans SC（中文）→ 系统兜底 -->
