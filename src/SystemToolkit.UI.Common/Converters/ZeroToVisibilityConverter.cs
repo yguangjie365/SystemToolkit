@@ -2,9 +2,9 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace SystemToolkit.Modules.DriverManager;
+namespace SystemToolkit.UI.Common.Converters;
 
-/// <summary>整数为 0 时显示空态提示（Count == 0 → Visible）。</summary>
+/// <summary>整数为 0 时显示空态提示（Count == 0 → Visible）。共享转换器（AppManager/DriverManager/NetManager 原三份重复）。</summary>
 public sealed class ZeroToVisibilityConverter : IValueConverter
 {
     /// <summary>XAML 资源引用所需的默认构造函数。</summary>

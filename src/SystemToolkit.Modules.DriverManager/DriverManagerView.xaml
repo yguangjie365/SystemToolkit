@@ -2,9 +2,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:SystemToolkit.Modules.DriverManager"
-    Background="{StaticResource Brush_Bg}">
+xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
+Background="{StaticResource Brush_Bg}">
     <UserControl.Resources>
-        <local:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
+        <ui:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 抽屉详情的键值对行：统一 4px 下间距（布局细节，不提升到全局主题） -->
         <Style x:Key="DrawerRow" TargetType="Grid">
