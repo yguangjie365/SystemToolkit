@@ -1,0 +1,24 @@
+<Window x:Class="SystemToolkit.Modules.DriverManager.DriverBackupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="备份驱动向导"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{DynamicResource Brush_Bg}"
+        FontFamily="{DynamicResource Font_Body}" FontSize="{DynamicResource Font_SizeBody}">
+    <!-- 备份向导首步：范围（全部第三方 / 仅勾选）+ 目标目录。范围计数由构造参数注入（见 code-behind）。
+         与 SoftwareEditWindow 同款 XAML 模式，避免纯代码窗口裸值。 -->
+    <StackPanel Margin="18">
+        <TextBlock Text="备份范围" Margin="0,0,0,6"/>
+        <RadioButton x:Name="ScopeAllRadio" GroupName="Scope" Margin="0,0,0,6"/>
+        <RadioButton x:Name="ScopeSelectedRadio" GroupName="Scope" Margin="0,0,0,10"/>
+        <TextBlock Text="目标目录（将自动创建时间戳子目录）" Margin="0,0,0,4"/>
+        <TextBox x:Name="DestBox" Text="D:\DriverBackups" Margin="0,0,0,10"/>
+        <TextBlock x:Name="HintText" FontSize="{DynamicResource Font_SizeCaption}" Opacity="0.75"
+                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="开始备份（需提权）" Padding="14,4" IsDefault="True" Click="OnOkClick"/>
+            <Button Content="取消" Padding="14,4" Margin="8,0,0,0" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>
