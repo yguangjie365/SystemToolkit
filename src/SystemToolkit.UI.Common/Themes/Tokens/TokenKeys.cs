@@ -1,13 +1,22 @@
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace SystemToolkit.UI.Common.Themes.Tokens;
 
 /// <summary>
 /// 令牌契约（04-UI设计规范 §四：key 全集，无值）。
-/// 🔴 与 Claude.Light.xaml 的 x:Key 清单人工同步——主题包必须覆盖 <see cref="AllKeys"/> 全部 key，
-/// 缺一即被 TokenKeysCoverageTests 拦截。
-/// 结构：Colors（颜色）/ Brushes（画刷）/ Fonts（字体族）/ FontSizes（字号）/
-/// Radius（圆角现值冻结词汇）/ Spacing（4px 栅格间距）。
+/// 主题包必须覆盖 <see cref="AllKeys"/> 全部 key，缺一即被 TokenKeysCoverageTests 拦截。
+///
+/// <para><b>分层（2026-09-08 重构）</b>——设计令牌与组件样式此前混在同一个 <c>AllKeys</c> 里，
+/// 导致「新增一个基础令牌要手工登记两次」且层级不清。现拆为：</para>
+/// <list type="number">
+/// <item><see cref="BaseTokens"/>：设计令牌（颜色/画刷/字体/字号/圆角/间距），
+/// 由反射从下列嵌套类的 <c>public const string</c> 自动收集——**新增令牌只要加 const，无需再登记**。</item>
+/// <item><see cref="ComponentStyles"/>：组件样式与控件模板 key（定义在 XAML 资源中，无法反射，显式维护）。
+/// 其中若干由具体页面提升为全局（NetManagerView / DriverManagerView / FileTransferView，2026-09-06），
+/// 因其复用次数 ≥2 符合"复合模板抽象"纪律——它们属于组件层，不应与基础令牌混在一起。</item>
+/// </list>
+/// <see cref="AllKeys"/> = 两者之和，保持对既有校验的兼容（key 名与取值全部不变，XAML 零改动）。
 /// </summary>
 public static class TokenKeys
 {
@@ -114,128 +123,81 @@ public static class TokenKeys
         public const string Space_Lg = "Space_Lg";
     }
 
-    /// <summary>全量 key 清单（主题包覆盖校验的唯一数据源）。</summary>
-    public static readonly IReadOnlyList<string> AllKeys =
+    /// <summary>
+    /// 设计令牌清单（第 1–2 层）：反射自动收集上列嵌套类的全部 <c>public const string</c>。
+    /// 🔴 新增令牌只需在对应分组加 const，**不再需要手工登记到清单**——
+    /// 此前「定义一次 + 再登记一次」的重复维护是失同步的主要来源。
+    /// </summary>
+    public static readonly IReadOnlyList<string> BaseTokens = CollectBaseTokens();
+
+    /// <summary>
+    /// 组件样式 / 控件模板 key（第 3–4 层）：定义在 XAML 资源中，反射不可达，故显式维护。
+    /// 这些是 Style 与 ControlTemplate 的 x:Key，不是设计令牌——与基础令牌分列，避免层级混淆。
+    /// </summary>
+    public static readonly IReadOnlyList<string> ComponentStyles =
     [
-            "Color_Bg",
-            "Color_SurfaceAlt",
-            "Color_Surface",
-            "Color_Border",
-            "Color_Track",
-            "Color_TextPrimary",
-            "Color_TextSecondary",
-            "Color_TextMuted",
-            "Color_Accent",
-            "Color_AccentHover",
-            "Color_AccentPressed",
-            "Color_Success",
-            "Color_Warning",
-            "Color_Danger",
-            "Color_SegWarn",
-            "Color_DarkSurface",
-            "Color_OnDark",
-            "Brush_Bg",
-            "Brush_SurfaceAlt",
-            "Brush_Surface",
-            "Brush_Border",
-            "Brush_Track",
-            "Brush_TextPrimary",
-            "Brush_TextSecondary",
-            "Brush_TextMuted",
-            "Brush_Accent",
-            "Brush_AccentHover",
-            "Brush_AccentPressed",
-            "Brush_Success",
-            "Brush_Warning",
-            "Brush_SegWarn",
-            "Brush_Danger",
-            "Brush_DangerSoft",
-            "Brush_DangerBorder",
-            "Brush_DarkSurface",
-            "Brush_OnDark",
-            "Brush_AccentSoft",
-            "Brush_SuccessSoft",
-            "Brush_WarningSoft",
-            "Brush_NavySoft",
-            "Brush_SuccessBorder",
-            "Brush_OnDarkMuted",
-            "Brush_CoverFade",
-            "Brush_CoverOverlay",
-            "Brush_SuccessOnDark",
-            "Brush_DangerOnDark",
-            "Font_Body",
-            "Font_Mono",
-            "Font_TitleZh",
-            "Font_TitleEn",
-            "Font_WeightRegular",
-            "Font_WeightMedium",
-            "Font_WeightBold",
-            "Font_LineHeightCompact",
-            "Font_LineHeightNormal",
-            "Font_LineHeightRelaxed",
-            "Font_SizeDisplay",
-            "Font_SizeMetric",
-            "Font_SizeTitleLg",
-            "Font_SizeTitle",
-            "Font_SizeBodyLg",
-            "Font_SizeBody",
-            "Font_SizeBodySm",
-            "Font_SizeCaption",
-            "Font_SizeMono",
-            "Font_SizeTiny",
-            "Font_SizeMicro",
-            "Font_SizeNano",
-            "Radius_Chip",
-            "Radius_Control",
-            "Radius_Badge",
-            "Radius_CardSm",
-            "Radius_Card",
-            "Radius_CardLg",
-            "Space_Xxs",
-            "Space_Xs",
-            "Space_Sm",
-            "Space_Md",
-            "Space_Lg",
-            "CardBorder",
-            "CardBorderInteractive",
-            "MonoText",
-            "SectionLabel",
-            "PrimaryButton",
-            "SecondaryButton",
-            "LiveBadge",
-            "ListItemRowBaseStyle",
-            "ListItemRowStyle",
-            "ListItemRowTallStyle",
-            "SegmentedRadioItem",
-            "ToolkitContextMenu",
-            "ToolkitMenuItem",
-            "ToolkitMenuItemDanger",
-            "ToolkitMenuSeparator",
-            // NetManagerView 提升的全局样式（2026-09-06）
-            "FilterChip",
-            "SectionTab",
-            "RowActionButton",
-            "RowDangerButton",
-            "RowPrimaryButton",
-            "CardTitle",
-            "KvLabel",
-            "KvValue",
-            "FieldInput",
-            "FieldError",
-            "CardButton",
-            "ToolCard",
-            "ThemedComboBox",
-            "ThemedCheckBox",
-            "ThemedRadioButton",
-            "ThemedToggleButton",
-            // DriverManagerView 提升的全局样式（2026-09-06）
-            "CompactActionButton",
-            "CompactDangerButton",
-            "ListHeaderStyle",
-            "StateBadgeBorder",
-            "StateBadgeText",
-            "ThemedExpander",
-            // FileTransferView 提升的全局样式（2026-09-06）
-            "ListLog",
+        // ── 通用控件与组件 ──
+        "CardBorder",
+        "CardBorderInteractive",
+        "MonoText",
+        "SectionLabel",
+        "PrimaryButton",
+        "SecondaryButton",
+        "LiveBadge",
+        "ListItemRowBaseStyle",
+        "ListItemRowStyle",
+        "ListItemRowTallStyle",
+        "SegmentedRadioItem",
+        "ToolkitContextMenu",
+        "ToolkitMenuItem",
+        "ToolkitMenuItemDanger",
+        "ToolkitMenuSeparator",
+        // ── 自 NetManagerView 提升的全局样式（2026-09-06） ──
+        "FilterChip",
+        "SectionTab",
+        "RowActionButton",
+        "RowDangerButton",
+        "RowPrimaryButton",
+        "CardTitle",
+        "KvLabel",
+        "KvValue",
+        "FieldInput",
+        "FieldError",
+        "CardButton",
+        "ToolCard",
+        "ThemedComboBox",
+        "ThemedCheckBox",
+        "ThemedRadioButton",
+        "ThemedToggleButton",
+        // ── 自 DriverManagerView 提升的全局样式（2026-09-06） ──
+        "CompactActionButton",
+        "CompactDangerButton",
+        "ListHeaderStyle",
+        "StateBadgeBorder",
+        "StateBadgeText",
+        "ThemedExpander",
+        // ── 自 FileTransferView 提升的全局样式（2026-09-06） ──
+        "ListLog",
     ];
+
+    /// <summary>全量 key 清单（主题包覆盖校验的唯一数据源）= 基础令牌 + 组件样式。</summary>
+    public static readonly IReadOnlyList<string> AllKeys = [.. BaseTokens, .. ComponentStyles];
+
+    private static IReadOnlyList<string> CollectBaseTokens()
+    {
+        var keys = new List<string>();
+        foreach (Type nested in typeof(TokenKeys).GetNestedTypes(BindingFlags.Public))
+        {
+            foreach (FieldInfo field in nested.GetFields(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (field.IsLiteral && field.FieldType == typeof(string)
+                    && field.GetRawConstantValue() is string value)
+                {
+                    keys.Add(value);
+                }
+            }
+        }
+
+        return keys;
+    }
 }
