@@ -939,10 +939,16 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 try
                 {
                     DateTime modified = DateTimeOffset.FromUnixTimeMilliseconds(ctx.FileModifiedAt).UtcDateTime;
-                    DateTime minMTime = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    var minMTime = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                     DateTime maxMTime = DateTime.UtcNow.AddDays(1); // 与 Web 路径同窗口：拒绝远端伪造的 9999 年时间戳
-                    if (modified < minMTime) modified = minMTime;
-                    if (modified > maxMTime) modified = maxMTime;
+                    if (modified < minMTime)
+                    {
+                        modified = minMTime;
+                    }
+                    if (modified > maxMTime)
+                    {
+                        modified = maxMTime;
+                    }
                     File.SetLastWriteTimeUtc(finalPath, modified);
                 }
                 catch { }
