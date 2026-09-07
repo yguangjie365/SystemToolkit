@@ -249,6 +249,11 @@ public sealed partial class SteamService
 
     private static bool ShellOpen(string target)
     {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
         try
         {
             Process.Start(new ProcessStartInfo
@@ -260,16 +265,20 @@ public sealed partial class SteamService
         }
         catch (Exception)
         {
-            // 使用 cmd /c start 做兜底（对 steam:// 协议、URL、目录都更可靠）
+            // 🔴 2026-09-08（审查 S-5）：兜底不再用 `cmd /c start`——
+            // cmd 会解析 & | % ^ < > 等元字符，且原先 QuoteArg 的 \" 转义对 cmd 无效；
+            // 游戏路径/steam:// 参数含特殊字符时行为不可预期。
+            // 改用 explorer.exe：它把参数当作单个路径或 URL，不经过 cmd 解析。
+            // ArgumentList 由运行时转义，避免手工拼接引号。
             try
             {
-                Process.Start(new ProcessStartInfo
+                var psi = new ProcessStartInfo
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c start \"\" {QuoteArg(target)}",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                });
+                    FileName = "explorer.exe",
+                    UseShellExecute = true,
+                };
+                psi.ArgumentList.Add(target);
+                Process.Start(psi);
                 return true;
             }
             catch
@@ -279,7 +288,13 @@ public sealed partial class SteamService
         }
     }
 
-    private static string QuoteArg(string s) => "\"" + s.Replace("\"", "\\\"") + "\"";
+    /// <summary>
+    /// 命令行参数引号包裹。仅供 <c>-login 账户名</c> 这类<b>单个参数</b>拼接使用
+    /// （SteamProcessDetector.LaunchSteam 接受整串 Arguments）。
+    /// ⚠️ 不要用它构造 cmd.exe 的命令行——cmd 的元字符（&amp; | % ^ &lt; &gt;）在引号内仍可能被解释，
+    /// 且这里的 " 转义对 cmd 无效（审查 S-5）。
+    /// </summary>
+    internal static string QuoteArg(string s) => "\"" + s.Replace("\"", "\\\"") + "\"";
 
     private static string? FindAvatarCacheDir(string? steamInstallPath)
     {
