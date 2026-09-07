@@ -11,12 +11,6 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <local:EnabledToBrushConverter x:Key="EnabledBrush"/>
         <local:InverseBoolConverter x:Key="Inverse"/>
-        <!-- 日志列表样式（页面级局部资源，不提升到全局主题） -->
-        <Style x:Key="ListLog" TargetType="ListBox">
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-        </Style>
         <!-- 快照表头（对齐 AppManagerView.AppListHeader 口径；页面级局部资源） -->
         <Style x:Key="SnapHeader" TargetType="GridViewColumnHeader">
             <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
