@@ -162,6 +162,9 @@ public partial class AppManagerViewModel
     /// 审查 2026-09-04（P2）：原 TryEnterOperationAsync 恒返回 true，9 处 if 判空是死分支——
     /// 改为无返回值，语义即"获取闸门"；并发防护由 CanOperate（UI 层）+ 闸门串行化（最终层）承担。
     /// </summary>
+    /// <summary>当前单条安装/升级/卸载的取消令牌（CancelOperation 触发；操作结束置空）。</summary>
+    private CancellationTokenSource? _opCts;
+
     private async Task AcquireOperationAsync()
     {
         await _wingetGate.WaitAsync();
@@ -172,6 +175,14 @@ public partial class AppManagerViewModel
     {
         IsOperating = false;
         _wingetGate.Release();
+    }
+
+    /// <summary>取消当前单条 winget 操作（命中 CancellationToken 抛 OperationCanceledException）。</summary>
+    [RelayCommand]
+    private void CancelOperation()
+    {
+        _opCts?.Cancel();          // 单条安装/升级/卸载
+        _batchCts?.Cancel();      // 批量安装（批次二已有取消令牌）
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -185,7 +196,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "安装", async () => await _winget.InstallAsync(pkg.Id, pkg.Model.Source), pkg.MarkInstalled);
+                await RunPackageOperationAsync(pkg, "安装", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -199,7 +210,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "升级", async () => await _winget.UpgradeAsync(pkg.Id, pkg.Model.Source), pkg.MarkInstalled);
+                await RunPackageOperationAsync(pkg, "升级", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -221,19 +232,20 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "卸载", async () => await _winget.UninstallAsync(pkg.Id, pkg.Model.Source), pkg.MarkNotInstalled);
+                await RunPackageOperationAsync(pkg, "卸载", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
     }
 
     /// <summary>单包操作公共编排：执行→结果留痕→局部状态更新（避免全量刷新导致状态集体闪变）。</summary>
     private async Task RunPackageOperationAsync(WingetPackageVm pkg, string action,
-        Func<Task<WingetRunResult>> run, Action markLocal)
+        Func<CancellationToken, Task<WingetRunResult>> run, Action markLocal)
     {
         pkg.IsBusy = true;
+        _opCts = new CancellationTokenSource(); // 审查：单条安装/升级/卸载可取消（CancelOperation 触发）
         bool stateChanged = false;
         try
         {
             AddLog($"开始{action}：{pkg.Name}（{pkg.Id}）");
-            WingetRunResult result = await run();
+            WingetRunResult result = await run(_opCts.Token);
             stateChanged = result.Success;
             AddLog(result.Success
                 ? $"✅ {action}完成：" + pkg.Name
@@ -252,6 +264,8 @@ public partial class AppManagerViewModel
         {
             pkg.IsBusy = false;
             ExitOperation();
+            _opCts?.Dispose();
+            _opCts = null;
             if (stateChanged)
             {
                 markLocal();

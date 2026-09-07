@@ -6,6 +6,7 @@ xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolki
 Background="{StaticResource Brush_Bg}">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <ui:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
         
@@ -499,6 +500,7 @@ Background="{StaticResource Brush_Bg}">
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Foreground="{StaticResource Brush_OnDark}" VerticalAlignment="Center">
                     <Run Text="已选 "/><Run Text="{Binding SelectedCount, Mode=OneWay}"/><Run Text=" 项"/>
@@ -521,6 +523,10 @@ Background="{StaticResource Brush_Bg}">
                         Background="{StaticResource Brush_Accent}" Foreground="{StaticResource Brush_OnDark}"
                         BorderThickness="0" Cursor="Hand" Margin="8,0,0,0"
                         Command="{Binding BatchInstallCommand}"/>
+                <Button Grid.Column="6" Content="取消当前操作" Command="{Binding CancelOperationCommand}"
+                        Style="{StaticResource CardButton}" Margin="{DynamicResource Space_Xs}"
+                        Foreground="{StaticResource Brush_Danger}"
+                        Visibility="{Binding IsOperating, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </Border>
 
