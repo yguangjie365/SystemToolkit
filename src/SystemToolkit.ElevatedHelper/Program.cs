@@ -42,6 +42,15 @@ public static class Program
             return WriteError("拒绝执行：--out 结果文件必须位于当前用户临时目录");
         }
 
+        // 安全硬化：out 结果文件所在目录不得为 reparse point（symlink/junction）——
+        // 攻击者可在 %TEMP% 预建 junction 指向系统目录，借提权进程向系统路径写文件（S-1 残余防御）。
+        string? outDir = Path.GetDirectoryName(outFull);
+        if (outDir is not null && Directory.Exists(outDir)
+            && (File.GetAttributes(outDir) & FileAttributes.ReparsePoint) != 0)
+        {
+            return WriteError("拒绝执行：--out 结果文件目录不能是符号链接/联接点");
+        }
+
         // 子命令分派：classnames = 翻译设备类 GUID（方案甲，读中文类名需提权）
         if (args.Length >= 3 && args[2].Equals("classnames", StringComparison.OrdinalIgnoreCase))
         {
