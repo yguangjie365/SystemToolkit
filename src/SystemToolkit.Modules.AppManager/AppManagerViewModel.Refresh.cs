@@ -196,7 +196,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-                await RunPackageOperationAsync(pkg, "安装", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, "安装", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -210,7 +210,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-                await RunPackageOperationAsync(pkg, "升级", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, "升级", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -232,7 +232,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-                await RunPackageOperationAsync(pkg, "卸载", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
+        await RunPackageOperationAsync(pkg, "卸载", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
     }
 
     /// <summary>单包操作公共编排：执行→结果留痕→局部状态更新（避免全量刷新导致状态集体闪变）。</summary>
