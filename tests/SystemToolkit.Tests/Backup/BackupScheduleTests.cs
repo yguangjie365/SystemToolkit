@@ -68,3 +68,37 @@ public class BackupScheduleTests
         Assert.False(BackupSchedule.IsDue(MakeRule(dailyTime: dailyTime), Now));
     }
 }
+
+/// <summary>
+/// 每日时间合法性校验（2026-09-08）：UI 曾用 <c>\d{2}:\d{2}</c> 只查格式不查范围，
+/// "25:00" 能存进规则却永远判定不成立 → 定时静默失效。
+/// 校验口径收敛到 BackupSchedule.IsValidDailyTime，与 IsDue 共用。
+/// </summary>
+public class BackupScheduleDailyTimeTests
+{
+    [Theory]
+    [InlineData("00:00", true)]
+    [InlineData("03:00", true)]
+    [InlineData("23:59", true)]
+    [InlineData("25:00", false)]   // 越界小时：旧格式校验会放过
+    [InlineData("12:60", false)]   // 越界分钟
+    [InlineData("3:00", false)]    // 单位数小时：与 IsDue 的 hh:mm 判定保持一致
+    [InlineData("", false)]
+    [InlineData("3点", false)]
+    public void IsValidDailyTime_MatchesIsDueParsing(string input, bool expected)
+        => Assert.Equal(expected, BackupSchedule.IsValidDailyTime(input));
+
+    [Fact]
+    public void IsValidDailyTime_AndIsDue_AgreeOnOutOfRangeValue()
+    {
+        var rule = new BackupRule
+        {
+            Enabled = true,
+            EnableSchedule = true,
+            DailyTime = "25:00",
+        };
+
+        Assert.False(BackupSchedule.IsValidDailyTime(rule.DailyTime));
+        Assert.False(BackupSchedule.IsDue(rule, new DateTime(2026, 9, 8, 23, 30, 0)));
+    }
+}

@@ -777,10 +777,11 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        if (EnableScheduleInput is false
-            || !System.Text.RegularExpressions.Regex.IsMatch(DailyTimeInput.Trim(), @"^\d{2}:\d{2}$"))
+        // 🔴 校验口径与 BackupSchedule.IsDue 一致（含范围）：此前只查 \d{2}:\d{2} 格式，
+        // "25:00" 能存下但判定永远不成立 → 定时静默失效。
+        if (EnableScheduleInput is false || !BackupSchedule.IsValidDailyTime(DailyTimeInput))
         {
-            Log("[定时] ❌ 请先勾选「启用定时」并填写合法的 HH:mm 时间");
+            Log("[定时] ❌ 请先勾选「启用定时」并填写合法的 HH:mm 时间（00:00–23:59）");
             return;
         }
 

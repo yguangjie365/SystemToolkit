@@ -36,4 +36,16 @@ public static class BackupSchedule
 
     /// <summary>执行完成后的 LastRunDate 记账值（本地当天）。</summary>
     public static string MarkRunDate(DateTime now) => now.ToString("yyyy-MM-dd");
+
+    /// <summary>
+    /// 每日时间是否合法（<c>HH:mm</c>，00:00–23:59）。
+    /// 🔴 2026-09-08：UI 此前只校验 <c>\d{2}:\d{2}</c> 格式而不校验范围——
+    /// "25:00" 能存进规则，但 <see cref="IsDue"/> 解析失败 → 定时<b>永不执行且无任何提示</b>。
+    /// 校验口径集中于此，UI 与本类的判定共用同一事实来源。
+    /// </summary>
+    public static bool IsValidDailyTime(string? dailyTime)
+        => !string.IsNullOrWhiteSpace(dailyTime)
+           && TimeSpan.TryParseExact(dailyTime.Trim(), @"hh\:mm",
+               System.Globalization.CultureInfo.InvariantCulture, out TimeSpan t)
+           && t >= TimeSpan.Zero && t < TimeSpan.FromDays(1);
 }
