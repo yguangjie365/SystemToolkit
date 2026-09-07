@@ -1,7 +1,7 @@
 <UserControl x:Class="SystemToolkit.Modules.Settings.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Brush_Bg}">
+             Background="{StaticResource Brush_Background}">
     <!-- 2026-09-07 建立（主人裁定：备份设置并入 Settings 模块统一管理）。
          左分组 + 右内容；当前只有「备份」分区，「通用」为占位（后续模块设置接进来）。 -->
     <UserControl.Resources>
@@ -14,7 +14,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_Badge}"
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_MD}"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>

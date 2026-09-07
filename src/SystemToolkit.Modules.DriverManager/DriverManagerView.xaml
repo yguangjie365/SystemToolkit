@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:SystemToolkit.Modules.DriverManager"
 xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
-Background="{StaticResource Brush_Bg}">
+Background="{StaticResource Brush_Background}">
     <UserControl.Resources>
         <ui:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -49,7 +49,7 @@ Background="{StaticResource Brush_Bg}">
             </StackPanel>
             <Border HorizontalAlignment="Right" Width="240" Height="30"
                     Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_Chip}">
+                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
@@ -217,7 +217,7 @@ Background="{StaticResource Brush_Bg}">
                         <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
                         <TextBlock Text="正在扫描 Driver Store..." Margin="0,8,0,0" 
                                    Foreground="{StaticResource Brush_TextSecondary}"/>
-                        <Button Content="取消扫描" Command="{Binding CancelScanCommand}" Margin="{DynamicResource Space_Md}" HorizontalAlignment="Center" Style="{StaticResource CardButton}"/>
+                        <Button Content="取消扫描" Command="{Binding CancelScanCommand}" Margin="{DynamicResource Space_MD}" HorizontalAlignment="Center" Style="{StaticResource CardButton}"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -228,7 +228,7 @@ Background="{StaticResource Brush_Bg}">
                  态 B（SelectedPackage != null）：该包详情（键值对）+ 包级操作
                  🔴 两套状态正交：点行 = 选中看详情（SelectedPackage）；勾 CheckBox = 加入操作集（IsSelected） -->
             <Border Grid.Column="1" Margin="12,0,0,0" Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_CardSm}"
+                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}"
                     Padding="10" VerticalAlignment="Stretch">
                 <Grid>
                     <!-- ===== 态 A：未选中 → 全局操作 ===== -->
@@ -361,7 +361,7 @@ Background="{StaticResource Brush_Bg}">
 
         <!-- ============ 底部状态栏（M-UI-3：SelectedCount==0 时整条折叠，与 AppManager M-UI-2 同款） ============ -->
         <Border Grid.Row="4" Margin="0,12,0,10" Background="{StaticResource Brush_DarkSurface}"
-                CornerRadius="{DynamicResource Radius_CardSm}" Padding="14,8">
+                CornerRadius="{DynamicResource Radius_LG}" Padding="14,8">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Visible"/>

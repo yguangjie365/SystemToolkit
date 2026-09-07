@@ -4,7 +4,7 @@
         Title="备份驱动向导"
         Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
-        Background="{DynamicResource Brush_Bg}"
+        Background="{DynamicResource Brush_Background}"
         FontFamily="{DynamicResource Font_Body}" FontSize="{DynamicResource Font_SizeBody}">
     <!-- 备份向导首步：范围（全部第三方 / 仅勾选）+ 目标目录。范围计数由构造参数注入（见 code-behind）。
          与 SoftwareEditWindow 同款 XAML 模式，避免纯代码窗口裸值。 -->

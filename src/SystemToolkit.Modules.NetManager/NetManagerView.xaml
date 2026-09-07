@@ -11,7 +11,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
 
         <!-- 仅保留 NetManagerView 独有样式 -->
         <Style x:Key="Badge" TargetType="{x:Type Border}">
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_Badge}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="6,2"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
@@ -20,7 +20,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
     </UserControl.Resources>
 
     <UserControl.Background>
-        <StaticResource ResourceKey="Brush_Bg"/>
+        <StaticResource ResourceKey="Brush_Background"/>
     </UserControl.Background>
 
     <Grid Margin="24,20,24,0">
@@ -335,7 +335,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="{DynamicResource Radius_CardSm}"
+                            <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="{DynamicResource Radius_LG}"
                                     Background="{StaticResource Brush_SurfaceAlt}">
                                 <TextBlock Text="{Binding Diagnostics.Conclusion}" TextWrapping="Wrap" FontSize="{DynamicResource Font_SizeBodySm}"
                                            Foreground="{StaticResource Brush_TextPrimary}"/>
@@ -646,7 +646,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                     <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
                 </Grid>
                 <Border Grid.Row="1" x:Name="LogHost" Background="{StaticResource Brush_DarkSurface}"
-                        CornerRadius="{DynamicResource Radius_CardSm}" Padding="10,6" MaxHeight="160">
+                        CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="160">
                     <ListBox Style="{StaticResource ListLog}" ItemsSource="{Binding LogLines}"
                              ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource Font_Mono}">
                         <ListBox.ItemTemplate>

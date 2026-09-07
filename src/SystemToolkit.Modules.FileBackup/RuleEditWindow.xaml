@@ -6,7 +6,7 @@
         Width="560" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Bg}"
+        Background="{StaticResource Brush_Background}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
     <Window.Resources>
         <!-- Inverse 转换器在主页面是页面级资源，弹窗需自备（跨 Window 不共享 StaticResource） -->

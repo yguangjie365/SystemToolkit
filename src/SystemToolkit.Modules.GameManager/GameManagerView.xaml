@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.GameManager"
              xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
-             Background="{StaticResource Brush_Bg}">
+             Background="{StaticResource Brush_Background}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 封面限宽解码（REVIEW-3 S-4：直绑 string 按原始尺寸解码，1200×1800 竖版 4 倍冗余内存） -->
@@ -16,7 +16,7 @@
             <Setter Property="Background" Value="{StaticResource Brush_Surface}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Brush_Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_CardLg}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XLLg}"/>
             <Setter Property="Padding" Value="0"/>
             <!-- 封面贴边 + hover 缩放不外溢：整卡裁剪（HTML .game-card overflow:hidden 等效） -->
             <Setter Property="ClipToBounds" Value="True"/>
@@ -73,7 +73,7 @@
             </StackPanel>
             <!-- 账户区：头像 + 账户名（本地 avatarcache PNG；缺失字母占位） -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
-                <Border Width="34" Height="34" CornerRadius="{DynamicResource Radius_CardLg}" ClipToBounds="True"
+                <Border Width="34" Height="34" CornerRadius="{DynamicResource Radius_XLLg}" ClipToBounds="True"
                         Background="{StaticResource Brush_DarkSurface}">
                     <Grid>
                         <Image Source="{Binding AvatarPath}" Stretch="UniformToFill">
@@ -139,7 +139,7 @@
             </Grid.ColumnDefinitions>
             <Border Width="320" Height="30" HorizontalAlignment="Left"
                     Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_Chip}">
+                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
@@ -187,8 +187,8 @@
         <!-- ============ 内容区：三态 ============ -->
         <Grid Grid.Row="3">
             <!-- 未安装 Steam -->
-            <Border Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_CardLg}"
-                    Padding="{DynamicResource Space_Lg}" VerticalAlignment="Center" HorizontalAlignment="Center"
+            <Border Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_XLLg}"
+                    Padding="{DynamicResource Space_LG}" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Visibility="{Binding SteamInstalled, Converter={x:Static local:InverseBoolConverter.Instance}}">
                 <StackPanel>
                     <TextBlock Text="&#xE9F5;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
@@ -306,7 +306,7 @@
                                                 <Border HorizontalAlignment="Right" Margin="12,8,12,8"
                                                         Background="{StaticResource Brush_WarningSoft}"
                                                         BorderBrush="{StaticResource Brush_Warning}" BorderThickness="1"
-                                                        CornerRadius="{DynamicResource Radius_Chip}" Padding="7,2">
+                                                        CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
                                                     <TextBlock Text="下载/更新中" FontFamily="{StaticResource Font_Mono}"
                                                                FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Warning}"/>
                                                 </Border>
@@ -321,7 +321,7 @@
                                                 <Border HorizontalAlignment="Right" Margin="12,8,12,8"
                                                         Background="{StaticResource Brush_DangerSoft}"
                                                         BorderBrush="{StaticResource Brush_Danger}" BorderThickness="1"
-                                                        CornerRadius="{DynamicResource Radius_Chip}" Padding="7,2">
+                                                        CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
                                                     <TextBlock Text="库离线" FontFamily="{StaticResource Font_Mono}"
                                                                FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Danger}"/>
                                                 </Border>
@@ -392,7 +392,7 @@
             </vwp:VirtualizingItemsControl>
 
             <!-- 态：搜索无结果（过滤后空 + 有游戏数据；参考稿「未找到匹配的游戏」） -->
-            <Border Background="{StaticResource Brush_Bg}" Padding="{DynamicResource Space_Lg}"
+            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding ShowNoResultEmpty, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
@@ -405,7 +405,7 @@
             </Border>
 
             <!-- 态：库为空（Steam 已安装但没有任何游戏） -->
-            <Border Background="{StaticResource Brush_Bg}" Padding="{DynamicResource Space_Lg}"
+            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding ShowEmptyLibrary, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE719;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
@@ -418,7 +418,7 @@
             </Border>
 
             <!-- 态：加载中（压最上层；IsLoading 由 LoadAsync 驱动，此前该状态无 UI 消费——审查核验属实） -->
-            <Border Background="{StaticResource Brush_Bg}" Padding="{DynamicResource Space_Lg}"
+            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <!-- 旋转圆环：Accent 弧 + Track 底环，Loaded 触发无限旋转 -->
@@ -450,7 +450,7 @@
         <!-- ============ 底部状态栏（操作反馈通道，HTML toast 的 WPF 等效；
              M-UI-2：按 StatusLevel 语义着色——0 信息/1 成功/2 失败，深色底用 400 档亮色变体） ============ -->
         <Border Grid.Row="4" Margin="0,12,0,0" Background="{StaticResource Brush_DarkSurface}"
-                CornerRadius="{DynamicResource Radius_CardSm}" Padding="{DynamicResource Space_Sm}">
+                CornerRadius="{DynamicResource Radius_LG}" Padding="{DynamicResource Space_SM}">
             <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">

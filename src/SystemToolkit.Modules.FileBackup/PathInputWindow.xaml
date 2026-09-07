@@ -5,7 +5,7 @@
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Bg}"
+        Background="{StaticResource Brush_Background}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
     <!-- 规则编辑弹窗「手动输入」路径的小输入窗（2026-09-07 用户裁定对齐旧版四按钮） -->
     <StackPanel Margin="18,16">

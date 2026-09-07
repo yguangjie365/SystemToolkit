@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.AppManager"
 xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
-Background="{StaticResource Brush_Bg}">
+Background="{StaticResource Brush_Background}">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -12,7 +12,7 @@ Background="{StaticResource Brush_Bg}">
         
         <!-- 状态徽章：按 StatusKey 着色（0=已安装绿 1=有更新橙 2=未安装灰 3=未知蓝） -->
         <Style x:Key="StatusTagBorder" TargetType="Border">
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_Badge}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -83,7 +83,7 @@ Background="{StaticResource Brush_Bg}">
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_CardSm}" Background="{StaticResource Brush_AccentSoft}">
+            <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{StaticResource Brush_AccentSoft}">
                 <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeBody}"
                            Foreground="{StaticResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
@@ -150,7 +150,7 @@ Background="{StaticResource Brush_Bg}">
             </StackPanel>
             <!-- 源搜索框：用户 2026-09-04 移到最右，且仅微软商店应用 Tab 显示 -->
             <Border x:Name="SearchHost" Width="320" Height="32" Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_Chip}"
+                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}"
                     HorizontalAlignment="Right">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
@@ -217,7 +217,7 @@ Background="{StaticResource Brush_Bg}">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_Control}"
+                                                    <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_SM}"
                                                             Background="{StaticResource Brush_AccentSoft}">
                                                         <TextBlock Text="{Binding Initial}" FontSize="{DynamicResource Font_SizeNano}" FontWeight="Bold"
                                                                    Foreground="{StaticResource Brush_Accent}"
@@ -318,7 +318,7 @@ Background="{StaticResource Brush_Bg}">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_Control}"
+                                                        <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_SM}"
                                                                 Background="{StaticResource Brush_AccentSoft}">
                                                             <TextBlock Text="{Binding Initial}" FontSize="{DynamicResource Font_SizeNano}" FontWeight="Bold"
                                                                        Foreground="{StaticResource Brush_Accent}"
@@ -478,7 +478,7 @@ Background="{StaticResource Brush_Bg}">
              · SelectedCount==0 时整条淡出（DataTrigger Collapsed）
              · 新增「批量升级」/「批量卸载」入口（VM 命令已加，串行 winget 流水线留 V0.x 后续补）
              · 视觉：深底白字、强对比、与"导出报告"等主色操作形成层次） ============ -->
-        <Border Grid.Row="4" Background="{StaticResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_Card}"
+        <Border Grid.Row="4" Background="{StaticResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_XL}"
                 Padding="14,10" Margin="0,10,0,8">
             <Border.Style>
                 <Style TargetType="Border">
@@ -524,7 +524,7 @@ Background="{StaticResource Brush_Bg}">
                         BorderThickness="0" Cursor="Hand" Margin="8,0,0,0"
                         Command="{Binding BatchInstallCommand}"/>
                 <Button Grid.Column="6" Content="取消当前操作" Command="{Binding CancelOperationCommand}"
-                        Style="{StaticResource CardButton}" Margin="{DynamicResource Space_Xs}"
+                        Style="{StaticResource CardButton}" Margin="{DynamicResource Space_XS}"
                         Foreground="{StaticResource Brush_Danger}"
                         Visibility="{Binding IsOperating, Converter={StaticResource BoolToVis}}"/>
             </Grid>
@@ -558,7 +558,7 @@ Background="{StaticResource Brush_Bg}">
                PlacementTarget="{Binding ElementName=SearchHost}" Placement="Bottom"
                HorizontalOffset="-100" StaysOpen="False" Width="420" MaxHeight="320" AllowsTransparency="True">
             <Border Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" CornerRadius="{DynamicResource Radius_CardSm}" Padding="8">
+                    BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}" Padding="8">
                 <StackPanel>
                     <TextBlock Text="winget 源搜索结果（点击安装并加入清单）" FontSize="{DynamicResource Font_SizeNano}"
                                Style="{StaticResource MonoText}" Margin="4,0,0,6"/>
@@ -597,7 +597,7 @@ Background="{StaticResource Brush_Bg}">
         <Popup x:Name="SourcePopup" PlacementTarget="{Binding ElementName=SourceMenuButton}"
                Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
             <Border Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" CornerRadius="{DynamicResource Radius_CardSm}" Padding="6" Width="200" Margin="0,4,0,0">
+                    BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}" Padding="6" Width="200" Margin="0,4,0,0">
                 <StackPanel>
                     <Button Content="⟳ 更新软件源" Style="{StaticResource RowActionButton}" Height="24"
                             HorizontalContentAlignment="Left" Padding="10,0"

@@ -5,7 +5,7 @@
         Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Bg}"
+        Background="{StaticResource Brush_Background}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
     <!-- 2026-09-07 补齐旧版 RestoreDialog 能力：恢复目标二选一（原位置 / 指定目录）
          + 冲突策略三选一。只负责收集用户选择，预演与执行由 VM 负责。 -->

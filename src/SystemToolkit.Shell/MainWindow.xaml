@@ -9,7 +9,7 @@
         WindowStartupLocation="CenterScreen"
         WindowState="Normal"
         FontFamily="{StaticResource Font_Body}">
-    <Grid Background="{StaticResource Brush_Bg}">
+    <Grid Background="{StaticResource Brush_Background}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220"/>
             <ColumnDefinition Width="*"/>
@@ -21,7 +21,7 @@
                 <!-- 品牌区 -->
                 <StackPanel DockPanel.Dock="Top" Margin="14,14,14,10">
                     <StackPanel Orientation="Horizontal">
-                        <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius_CardSm}"
+                        <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius_LG}"
                                 Background="{StaticResource Brush_DarkSurface}">
                             <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="Bold"
                                        Foreground="{StaticResource Brush_OnDark}"
@@ -79,7 +79,7 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
-                                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_Badge}"
+                                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{DynamicResource Radius_MD}"
                                                 Padding="{TemplateBinding Padding}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>

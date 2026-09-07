@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
              xmlns:local="clr-namespace:SystemToolkit.Modules.Overview"
-             Background="{StaticResource Brush_Bg}">
+             Background="{StaticResource Brush_Background}">
 
     <UserControl.Resources>
         <FontFamily x:Key="IconFont">Segoe MDL2 Assets</FontFamily>
@@ -43,7 +43,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="{DynamicResource Radius_Card}" Background="{StaticResource Brush_DarkSurface}">
+                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="{DynamicResource Radius_XL}" Background="{StaticResource Brush_DarkSurface}">
                     <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
@@ -138,10 +138,10 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_CardSm}" Background="{StaticResource Brush_AccentSoft}">
+                                    <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{StaticResource Brush_AccentSoft}">
                                         <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeBodyLg}" Foreground="{StaticResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <Border Grid.Column="2" CornerRadius="{DynamicResource Radius_Control}" Padding="8,3" VerticalAlignment="Top" Height="22"
+                                    <Border Grid.Column="2" CornerRadius="{DynamicResource Radius_SM}" Padding="8,3" VerticalAlignment="Top" Height="22"
                                             Visibility="{Binding BadgeText, Converter={x:Static local:NullToCollapsedConverter.Instance}}">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -211,7 +211,7 @@
 
 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding SegLevel}" Value="1">
-                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{StaticResource Brush_SegWarn}"/>
+                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{StaticResource Brush_SegmentWarn}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding SegLevel}" Value="2">
                                         <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{StaticResource Brush_Danger}"/>
@@ -243,7 +243,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="22" Height="22" CornerRadius="{DynamicResource Radius_Control}" Background="{StaticResource Brush_NavySoft}" VerticalAlignment="Center">
+                                    <Border Width="22" Height="22" CornerRadius="{DynamicResource Radius_SM}" Background="{StaticResource Brush_NavySoft}" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">

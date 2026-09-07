@@ -22,7 +22,7 @@ public static class TokenKeys
 {
     public static class Colors
     {
-        public const string Color_Bg = "Color_Bg";
+        public const string Color_Background = "Color_Background";
         public const string Color_SurfaceAlt = "Color_SurfaceAlt";
         public const string Color_Surface = "Color_Surface";
         public const string Color_Border = "Color_Border";
@@ -36,7 +36,7 @@ public static class TokenKeys
         public const string Color_Success = "Color_Success";
         public const string Color_Warning = "Color_Warning";
         public const string Color_Danger = "Color_Danger";
-        public const string Color_SegWarn = "Color_SegWarn";
+        public const string Color_SegmentWarn = "Color_SegmentWarn";
         public const string Color_DarkSurface = "Color_DarkSurface";
         public const string Color_OnDark = "Color_OnDark";
         // ── 状态语义（2026-09-08 阶段 2 补齐）：与 Success/Warning/Danger 同级，
@@ -49,7 +49,7 @@ public static class TokenKeys
 
     public static class Brushes
     {
-        public const string Brush_Bg = "Brush_Bg";
+        public const string Brush_Background = "Brush_Background";
         public const string Brush_SurfaceAlt = "Brush_SurfaceAlt";
         public const string Brush_Surface = "Brush_Surface";
         public const string Brush_Border = "Brush_Border";
@@ -62,7 +62,7 @@ public static class TokenKeys
         public const string Brush_AccentPressed = "Brush_AccentPressed";
         public const string Brush_Success = "Brush_Success";
         public const string Brush_Warning = "Brush_Warning";
-        public const string Brush_SegWarn = "Brush_SegWarn";
+        public const string Brush_SegmentWarn = "Brush_SegmentWarn";
         public const string Brush_Danger = "Brush_Danger";
         public const string Brush_DangerSoft = "Brush_DangerSoft";
         public const string Brush_DangerBorder = "Brush_DangerBorder";
@@ -117,21 +117,21 @@ public static class TokenKeys
 
     public static class Radius
     {
-        public const string Radius_Chip = "Radius_Chip";
-        public const string Radius_Control = "Radius_Control";
-        public const string Radius_Badge = "Radius_Badge";
-        public const string Radius_CardSm = "Radius_CardSm";
-        public const string Radius_Card = "Radius_Card";
-        public const string Radius_CardLg = "Radius_CardLg";
+        public const string Radius_XS = "Radius_XS";
+        public const string Radius_SM = "Radius_SM";
+        public const string Radius_MD = "Radius_MD";
+        public const string Radius_LG = "Radius_LG";
+        public const string Radius_XL = "Radius_XL";
+        public const string Radius_XLLg = "Radius_XLLg";
     }
 
     public static class Spacing
     {
-        public const string Space_Xxs = "Space_Xxs";
-        public const string Space_Xs = "Space_Xs";
-        public const string Space_Sm = "Space_Sm";
-        public const string Space_Md = "Space_Md";
-        public const string Space_Lg = "Space_Lg";
+        public const string Space_XXS = "Space_XXS";
+        public const string Space_XS = "Space_XS";
+        public const string Space_SM = "Space_SM";
+        public const string Space_MD = "Space_MD";
+        public const string Space_LG = "Space_LG";
     }
 
     /// <summary>

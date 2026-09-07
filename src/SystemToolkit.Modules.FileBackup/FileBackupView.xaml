@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.FileBackup"
-             Background="{StaticResource Brush_Bg}">
+             Background="{StaticResource Brush_Background}">
     <!-- 2026-09-07 单屏改造（用户拍板，参考旧版单功能版截图）：
          原「备份规则 / 快照与恢复」两 Tab 合并为一屏——左规则列表、右所选规则快照表，
          选规则即见快照，不再来回切换；编辑表单迁至 RuleEditWindow 弹窗；
@@ -22,7 +22,7 @@
         </Style>
         <!-- 快照状态徽章：成功绿 / 失败红 -->
         <Style x:Key="SnapStatusBadge" TargetType="Border">
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_Badge}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
             <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -43,7 +43,7 @@
         </Style>
         <!-- 校验徽章：通过绿 / 失败红 / 未校验灰 -->
         <Style x:Key="SnapChecksumBadge" TargetType="Border">
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_Badge}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
             <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -139,7 +139,7 @@
                                 <!-- 2026-09-08 用户反馈：每条规则加边框 + 条目间距，增强区分（参考旧版卡片样式） -->
                                 <Border Background="{StaticResource Brush_Surface}"
                                         BorderBrush="{StaticResource Brush_Border}" BorderThickness="1"
-                                        CornerRadius="{DynamicResource Radius_Control}" Padding="10,7"
+                                        CornerRadius="{DynamicResource Radius_SM}" Padding="10,7"
                                         Margin="0,0,0,6"
                                         ToolTip="{Binding ToolTipText}" ToolTipService.InitialShowDelay="300">
                                     <StackPanel>
@@ -276,7 +276,7 @@
                         </ListView.View>
                     </ListView>
                         <!-- 空态覆盖层（不用 Template 替换：显式 Style 会丢主题默认 ListView 模板） -->
-                        <Border Background="{StaticResource Brush_Bg}">
+                        <Border Background="{StaticResource Brush_Background}">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -324,7 +324,7 @@
                     <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
                 </Grid>
                 <Border Grid.Row="1" x:Name="LogHost" Background="{StaticResource Brush_DarkSurface}"
-                        CornerRadius="{DynamicResource Radius_CardSm}" Padding="10,6" MaxHeight="160">
+                        CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="160">
                     <ListBox Style="{StaticResource ListLog}" ItemsSource="{Binding LogLines}"
                              ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource Font_Mono}">
                         <ListBox.ItemTemplate>

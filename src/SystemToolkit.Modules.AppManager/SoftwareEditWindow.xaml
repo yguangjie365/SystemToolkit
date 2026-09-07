@@ -5,7 +5,7 @@
         Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Bg}"
+        Background="{StaticResource Brush_Background}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
     <Grid Margin="18,16">
         <Grid.RowDefinitions>

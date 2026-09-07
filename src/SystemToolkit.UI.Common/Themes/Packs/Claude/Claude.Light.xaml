@@ -13,7 +13,7 @@
     <!-- ===== 颜色（M-UI-1 落地 2026-09-05：暖米→冷灰白 + 暖棕主色→深青；
          暖系成功/警告/危险→Tailwind 标准 emerald/amber/red；
          改值不改 key，TokenKeys 契约不变，4 个模块 200+ 引用同步刷新） ===== -->
-    <Color x:Key="Color_Bg">#F7F8FA</Color>
+    <Color x:Key="Color_Background">#F7F8FA</Color>
     <Color x:Key="Color_SurfaceAlt">#F1F3F5</Color>
     <Color x:Key="Color_Surface">#ffffff</Color>
     <Color x:Key="Color_Border">#E5E7EB</Color>
@@ -33,7 +33,7 @@
          延续 M-UI-1b「语义色文字走 700 档」决策 -->
     <Color x:Key="Color_Danger">#B91C1C</Color>
     <!-- M-UI-2：分段条警戒段亮橙纳入 Color_ 契约（原 Brush 硬编码，审查指认契约缺口） -->
-    <Color x:Key="Color_SegWarn">#FB923C</Color>
+    <Color x:Key="Color_SegmentWarn">#FB923C</Color>
     <Color x:Key="Color_DarkSurface">#1F2937</Color>
     <Color x:Key="Color_OnDark">#F9FAFB</Color>
     <!-- 状态语义（2026-09-08 阶段 2）：延续 M-UI-2「语义色 700 档」决策；
@@ -45,7 +45,7 @@
     <Color x:Key="Color_Selection">#CCFBF1</Color>
 
     <!-- ===== 画刷 ===== -->
-    <SolidColorBrush x:Key="Brush_Bg" Color="{StaticResource Color_Bg}"/>
+    <SolidColorBrush x:Key="Brush_Background" Color="{StaticResource Color_Background}"/>
     <SolidColorBrush x:Key="Brush_SurfaceAlt" Color="{StaticResource Color_SurfaceAlt}"/>
     <SolidColorBrush x:Key="Brush_Surface" Color="{StaticResource Color_Surface}"/>
     <SolidColorBrush x:Key="Brush_Border" Color="{StaticResource Color_Border}"/>
@@ -61,7 +61,7 @@
     <SolidColorBrush x:Key="Brush_Warning" Color="{StaticResource Color_Warning}"/>
     <!-- 分段条 60-85% 警戒段专用亮橙（与 Warning #F59E0B 保持视觉区分；M-UI-1 同步换系；
          M-UI-2 纳入 Color_ 契约） -->
-    <SolidColorBrush x:Key="Brush_SegWarn" Color="{StaticResource Color_SegWarn}"/>
+    <SolidColorBrush x:Key="Brush_SegmentWarn" Color="{StaticResource Color_SegmentWarn}"/>
     <SolidColorBrush x:Key="Brush_Danger" Color="{StaticResource Color_Danger}"/>
     <!-- 软色（低透明度底，用于徽章/图标底块；M-UI-1 改值同步新主色） -->
     <SolidColorBrush x:Key="Brush_DangerSoft" Color="#1FEF4444"/>
@@ -132,19 +132,19 @@
     <!-- ===== 圆角（M-UI-1b 微调 2026-09-06：整体上调一档
           原 3/4/5/6/7/10 在高分屏上偏「系统原生味」，上调后更接近现代桌面工具观感；
           只改值不改 key——TokenKeys 契约零变更，全站引用同步刷新） ===== -->
-    <CornerRadius x:Key="Radius_Chip">4</CornerRadius>
-    <CornerRadius x:Key="Radius_Control">6</CornerRadius>
-    <CornerRadius x:Key="Radius_Badge">6</CornerRadius>
-    <CornerRadius x:Key="Radius_CardSm">8</CornerRadius>
-    <CornerRadius x:Key="Radius_Card">10</CornerRadius>
-    <CornerRadius x:Key="Radius_CardLg">12</CornerRadius>
+    <CornerRadius x:Key="Radius_XS">4</CornerRadius>
+    <CornerRadius x:Key="Radius_SM">6</CornerRadius>
+    <CornerRadius x:Key="Radius_MD">6</CornerRadius>
+    <CornerRadius x:Key="Radius_LG">8</CornerRadius>
+    <CornerRadius x:Key="Radius_XL">10</CornerRadius>
+    <CornerRadius x:Key="Radius_XLLg">12</CornerRadius>
 
     <!-- ===== 间距（04 规范 4px 栅格） ===== -->
-    <Thickness x:Key="Space_Xxs">4</Thickness>
-    <Thickness x:Key="Space_Xs">8</Thickness>
-    <Thickness x:Key="Space_Sm">12</Thickness>
-    <Thickness x:Key="Space_Md">16</Thickness>
-    <Thickness x:Key="Space_Lg">24</Thickness>
+    <Thickness x:Key="Space_XXS">4</Thickness>
+    <Thickness x:Key="Space_XS">8</Thickness>
+    <Thickness x:Key="Space_SM">12</Thickness>
+    <Thickness x:Key="Space_MD">16</Thickness>
+    <Thickness x:Key="Space_LG">24</Thickness>
 
     <!-- ===== 通用轻样式 ===== -->
     <!-- 卡片（04 规范 Elevation_Card：靠色阶区分层次，不靠阴影——去掉阴影后结构不散才算合格）。
@@ -153,8 +153,8 @@
         <Setter Property="Background" Value="{StaticResource Brush_Surface}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius_Card}"/>
-        <Setter Property="Padding" Value="{DynamicResource Space_Md}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius_XL}"/>
+        <Setter Property="Padding" Value="{DynamicResource Space_MD}"/>
     </Style>
 
     <!-- 卡片（可交互）：M-UI-2 落地（2026-09-05）
@@ -195,7 +195,7 @@
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Border x:Name="ThumbBg" Background="{StaticResource Brush_Border}"
-                                                    CornerRadius="{DynamicResource Radius_Control}"/>
+                                                    CornerRadius="{DynamicResource Radius_SM}"/>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="ThumbBg" Property="Background"
@@ -294,7 +294,7 @@
                 <ControlTemplate TargetType="RadioButton">
                     <Border x:Name="ChipBg" Background="{StaticResource Brush_Surface}"
                             BorderBrush="{StaticResource Brush_Border}" BorderThickness="1"
-                            CornerRadius="{DynamicResource Radius_CardLg}" Padding="12,3">
+                            CornerRadius="{DynamicResource Radius_XLLg}" Padding="12,3">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -320,10 +320,10 @@
                     <Grid>
                         <StackPanel>
                             <ContentPresenter x:Name="Text" Margin="0,0,0,6"/>
-                            <Border Height="2" CornerRadius="{DynamicResource Radius_Chip}" Background="Transparent"/>
+                            <Border Height="2" CornerRadius="{DynamicResource Radius_XS}" Background="Transparent"/>
                         </StackPanel>
                         <Border x:Name="Indicator" VerticalAlignment="Bottom" Height="2"
-                                CornerRadius="{DynamicResource Radius_Chip}" Background="Transparent"/>
+                                CornerRadius="{DynamicResource Radius_XS}" Background="Transparent"/>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
@@ -476,7 +476,7 @@
                                 Width="16" Height="16" 
                                 BorderBrush="{StaticResource Brush_Border}" 
                                 BorderThickness="1.5"
-                                CornerRadius="{DynamicResource Radius_Control}"
+                                CornerRadius="{DynamicResource Radius_SM}"
                                 Background="{StaticResource Brush_Surface}">
                             <Path x:Name="CheckMark" 
                                   Data="M 1,4 L 4,8 L 8,1" 
@@ -576,7 +576,7 @@
     <!-- 状态徽章基样式（DriverManager DriverStateBorder / AppManager StatusTagBorder 统一形态）
          StateKey 映射：0=当前/已安装(中性) 1=旧版本/有更新(琥珀) 2=系统关键/未安装(灰) 3=无关联/未知(Accent蓝) -->
     <Style x:Key="StateBadgeBorder" TargetType="Border">
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius_Chip}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius_XS}"/>
         <Setter Property="Padding" Value="10,4"/>
         <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
         <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -703,7 +703,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
                     <Border x:Name="Pill" Background="{TemplateBinding Background}"
-                            CornerRadius="{DynamicResource Radius_Chip}" Padding="{TemplateBinding Padding}">
+                            CornerRadius="{DynamicResource Radius_XS}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -776,7 +776,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{DynamicResource Radius_Card}"
+                            CornerRadius="{DynamicResource Radius_XL}"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                         <ItemsPresenter/>
                     </Border>
