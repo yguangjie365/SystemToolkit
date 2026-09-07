@@ -12,6 +12,9 @@ public sealed class BackupService : IBackupService
 {
     private readonly BackupConfigService _config;
     private readonly int? _maxWorkersOverride;
+    /// <summary>磁盘空间安全余量倍数（20%：manifest/meta + 目录开销 + .old 归档）。</summary>
+    private const double SpaceSafetyMultiplier = 1.2;
+
     private readonly ILogger _logger;
     private readonly ElevatedVssClient? _vss;
 
@@ -128,7 +131,9 @@ public sealed class BackupService : IBackupService
 
             // 磁盘空间检查：无法确认（网络路径 / 驱动器未就绪）时不阻断，但必须留痕，
             // 不能像过去那样被静默当成"空间充足"而继续复制到一半失败。
-            long required = (long)(totalSize * 1.2);
+            // 含 20% 安全余量（manifest/meta + 目录开销 + .old 归档），
+            // 避免"刚好够"却在写元数据时耗尽空间导致半截失败。VSS 卷影在源卷，不计入。
+            long required = (long)(totalSize * SpaceSafetyMultiplier);
             DiskSpaceCheck space = DiskSpaceUtil.Check(backupRoot, required);
             if (space == DiskSpaceCheck.Unknown)
             {
@@ -377,14 +382,19 @@ public sealed class BackupService : IBackupService
     }
 
     /// <summary>VSS 设备路径 → 活动路径反查（manifest 语义）；非设备路径原样返回。</summary>
-    private static string MapToLive(string shadowPath, IReadOnlyDictionary<string, string> shadowMap)
+    // internal：对测试程序集开放直测（Core 已有 InternalsVisibleTo），覆盖混合分隔符场景
+    internal static string MapToLive(string shadowPath, IReadOnlyDictionary<string, string> shadowMap)
     {
+        // 2026-09-08（审查 A-1）：两端都做规范化——Windows 下 / 与 \ 等价，
+        // 未规范化的 StartsWith 在混合分隔符场景会漏匹配，导致 manifest 记错活动路径。
+        string normalized = NormalizePath(shadowPath);
         foreach (KeyValuePair<string, string> kv in shadowMap)
         {
-            string prefix = kv.Value + "\\";
-            if (shadowPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            string prefix = NormalizePath(kv.Value);
+            if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return kv.Key + shadowPath[prefix.Length..];
+                string tail = normalized[prefix.Length..].TrimStart('\\');
+                return tail.Length == 0 ? kv.Key : kv.Key + "\\" + tail;
             }
         }
 
@@ -392,7 +402,8 @@ public sealed class BackupService : IBackupService
     }
 
     /// <summary>把活动源路径映射为 VSS 快照设备路径（无映射 = 原样返回）。设备路径无尾分隔符，需补一个。</summary>
-    private static string MapToShadow(string livePath, IReadOnlyDictionary<string, string> shadowMap)
+    // internal：对测试程序集开放直测（Core 已有 InternalsVisibleTo），覆盖混合分隔符场景
+    internal static string MapToShadow(string livePath, IReadOnlyDictionary<string, string> shadowMap)
     {
         if (shadowMap.Count == 0)
         {
@@ -401,19 +412,29 @@ public sealed class BackupService : IBackupService
 
         string full;
         try
-        { full = Path.GetFullPath(livePath); }
+        { full = NormalizePath(livePath); }
         catch
         { return livePath; }
 
         foreach (KeyValuePair<string, string> kv in shadowMap)
         {
-            if (full.StartsWith(kv.Key, StringComparison.OrdinalIgnoreCase))
+            string prefix = NormalizePath(kv.Key);
+            if (full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return kv.Value + "\\" + full[kv.Key.Length..];
+                string tail = full[prefix.Length..].TrimStart('\\');
+                return tail.Length == 0 ? kv.Value : kv.Value + "\\" + tail;
             }
         }
 
         return livePath;
+    }
+
+    /// <summary>路径规范化：转绝对路径、分隔符统一反斜杠、去尾分隔符（根路径保留）。</summary>
+    private static string NormalizePath(string path)
+    {
+        string full = Path.GetFullPath(path);
+        full = full.Replace('/', '\\');
+        return full.Length > 3 ? full.TrimEnd('\\') : full; // C:\ 这类根保留尾分隔符
     }
 
     /// <summary>

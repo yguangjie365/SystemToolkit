@@ -69,7 +69,8 @@ UI.Common（共享控件与设计令牌）
 - **在这之前**：跨模块逻辑**一律不放这里**。若某处确实需要组合两个模块能力，
   先提出来讨论，不要自行在本层起接口。
 - **机器约束**：`tests/SystemToolkit.Tests/Architecture/ApplicationLayerReservedGuardTests.cs`
-  会拦截"往本层塞代码"的行为——测试红时按测试消息里的步骤走（改文档 + 移除守卫），不要绕过。
+  **已实装**（2026-09-05 落地，当前全绿）：`tests/SystemToolkit.Tests/Architecture/ApplicationLayerReservedGuardTests.cs`
+会拦截"往本层塞代码"的行为——测试红时按测试消息里的步骤走（改文档 + 移除守卫），不要绕过。
 
 ---
 

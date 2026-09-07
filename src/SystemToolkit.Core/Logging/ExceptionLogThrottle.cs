@@ -48,7 +48,7 @@ public sealed class ExceptionLogThrottle
             return false;
         }
 
-        return _buckets.TryAdd(key, new Bucket(ex));
+        return _buckets.TryAdd(key, new Bucket());
     }
 
     /// <summary>
@@ -91,7 +91,9 @@ public sealed class ExceptionLogThrottle
         return $"{ex.GetType().FullName} @ {top ?? "<no-stack>"}";
     }
 
-    private sealed class Bucket(Exception ex)
+    /// <summary>同一异常的计数桶。2026-09-08 起不再持有 Exception 对象
+    /// （原 Sample 字段让每个桶都留住完整异常，200 种异常可占几十 MB）。</summary>
+    private sealed class Bucket
     {
         private int _count = 1;
 
@@ -100,9 +102,6 @@ public sealed class ExceptionLogThrottle
         public DateTime FirstAt { get; } = DateTime.Now;
 
         public DateTime LastAt { get; private set; } = DateTime.Now;
-
-        /// <summary>保留异常对象只为 Debug 期排查；生产路径不读它。</summary>
-        public Exception Sample { get; } = ex;
 
         public void Increment()
         {
