@@ -27,6 +27,7 @@ public class UiTokenRatchetTests
         "src/SystemToolkit.Modules.FileBackup/RestoreDialog.xaml",
         "src/SystemToolkit.Modules.FileBackup/RuleEditWindow.xaml",
         "src/SystemToolkit.Modules.Settings/SettingsView.xaml",
+        "src/SystemToolkit.Modules.MusicManager/MusicManagerView.xaml",
     };
 
     private static readonly Regex FontSizeLiteral = new(@"FontSize=""\d", RegexOptions.Compiled);

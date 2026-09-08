@@ -12,7 +12,10 @@ using SystemToolkit.Modules.DriverManager;
 using SystemToolkit.Modules.FileBackup;
 using SystemToolkit.Modules.FileTransfer;
 using SystemToolkit.Modules.GameManager;
+using SystemToolkit.Core.Music.Services;
+using SystemToolkit.Modules.MusicManager;
 using SystemToolkit.Modules.NetManager;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SystemToolkit.Tests.Architecture;
 
@@ -382,6 +385,53 @@ public class ViewLoadSmokeGuardTests
     /// 🔴 System.Windows.Application 全 AppDomain 仅允许一个实例（实测「不能在同一 AppDomain
     /// 中创建多个 Application 实例」）——本类多个运行时用例必须复用。
     /// </summary>
+    /// <summary>
+    /// 音乐管理视图加载冒烟（MUSIC-6，2026-09-08）：三 Tab 构造 + Measure/Arrange。
+    /// 引擎未注册（GetService 返回 null）——正是引擎缺席场景的隔离验证。
+    /// </summary>
+    [Fact]
+    public void MusicManagerView_LoadsWithThreeTabs_WithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+        string dir = Path.Combine(Path.GetTempPath(), $"music-view-smoke-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct services + VM + View";
+                ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+                var store = new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json"));
+                var scanner = new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger()));
+                var vm = new MusicManagerViewModel(
+                    services, store, scanner, new PlaybackQueueService(), new NoopLogger());
+                var view = new MusicManagerView(vm);
+
+                stage = "measure + arrange";
+                view.Measure(new Size(1600, 900));
+                view.Arrange(new Rect(0, 0, 1600, 900));
+                view.UpdateLayout();
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"音乐管理 View 加载抛异常（阶段：{stage}）：\n{captured}");
+    }
+
     internal static Application EnsureApplication()
     {
         if (Application.Current is not null)

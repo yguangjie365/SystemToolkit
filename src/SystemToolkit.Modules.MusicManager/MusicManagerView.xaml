@@ -1,0 +1,250 @@
+<UserControl x:Class="SystemToolkit.Modules.MusicManager.MusicManagerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SystemToolkit.Modules.MusicManager"
+             Background="{StaticResource Brush_Background}"
+             Loaded="OnLoaded">
+    <!-- MUSIC-6（2026-09-08）：三 Tab 布局——曲库（歌曲视图+搜索+扫描）/ 播放（当前曲目+控制+队列）/ 歌词（跟随播放滚动）。
+         用户 2026-09-08 拍板：只做歌曲视图；队列内嵌播放 Tab 下方；双击播放。
+         全部尺寸/颜色走令牌；列表虚拟化（禁 ViewBox）；引擎可空——未接通时播放控制禁用。 -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:BoolToVisibilityConverter x:Key="BoolToVis2"/>
+        <local:InverseBoolConverter x:Key="Inverse"/>
+        <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
+        <local:InverseBoolToVisibilityConverter x:Key="InverseToVis"/>
+    </UserControl.Resources>
+
+    <Grid Margin="16,12,16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 页头：标题 + 计数 + 扫描 + 搜索 -->
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="音乐管理"
+                           FontSize="{DynamicResource Font_SizeDisplay}"
+                           Foreground="{StaticResource Brush_TextPrimary}"/>
+                <TextBlock Text="{Binding LibraryCountText}" Margin="12,4,0,0"
+                           FontSize="{DynamicResource Font_SizeBodySm}"
+                           Foreground="{StaticResource Brush_TextMuted}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Height="32" Content="扫描曲库" Command="{Binding ScanCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsScanning}" Value="True">
+                                    <Setter Property="IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Style="{StaticResource RowActionButton}" Height="32" Content="取消" Margin="8,0,0,0"
+                        Command="{Binding CancelScanCommand}"
+                        Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis2}}"/>
+                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=OneWayToSource}"
+                         Width="220" Margin="12,0,0,0" Padding="8,5"
+                         VerticalContentAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 状态行：扫描状态 / 曲库警告（🔴 降级不静默） -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,6">
+            <TextBlock Text="{Binding ScanStatusText}" FontSize="{DynamicResource Font_SizeCaption}"
+                       Foreground="{StaticResource Brush_TextMuted}"
+                       Visibility="{Binding ScanStatusText, Converter={StaticResource StrToVis}}"/>
+            <Border Background="{StaticResource Brush_WarningSoft}" CornerRadius="{DynamicResource Radius_MD}"
+                    Padding="10,6" Margin="0,4,0,0"
+                    Visibility="{Binding LibraryWarning, Converter={StaticResource StrToVis}}">
+                <TextBlock Text="{Binding LibraryWarning}" FontSize="{DynamicResource Font_SizeCaption}"
+                           Foreground="{StaticResource Brush_Warning}"/>
+            </Border>
+        </StackPanel>
+
+        <!-- 三 Tab -->
+        <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
+
+            <!-- Tab 1 曲库 -->
+            <TabItem Header="曲库">
+                <ListBox ItemsSource="{Binding SongsView}"
+                         SelectedItem="{Binding SelectedSong, Mode=OneWayToSource}"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling">
+                    <ListBox.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding PlayFromLibraryCommand}"/>
+                    </ListBox.InputBindings>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="4,4,4,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Name, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBody}"
+                                           Foreground="{StaticResource Brush_TextPrimary}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Artist, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextMuted}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Album, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextMuted}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="3" Text="{Binding DurationText, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextMuted}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </TabItem>
+
+            <!-- Tab 2 播放 -->
+            <TabItem Header="播放">
+                <Grid Margin="4,12,4,4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 当前曲目 + 控制 -->
+                    <Grid Grid.Row="0" Margin="24,8,24,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Width="96" Height="96"
+                                Background="{StaticResource Brush_SurfaceAlt}"
+                                CornerRadius="{DynamicResource Radius_LG}"/>
+                        <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CurrentTitle}"
+                                       FontSize="{DynamicResource Font_SizeTitle}"
+                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding CurrentSub}" Margin="0,4,0,0"
+                                       FontSize="{DynamicResource Font_SizeBody}"
+                                       Foreground="{StaticResource Brush_TextMuted}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding PositionText}" Margin="0,8,0,0"
+                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                       Foreground="{StaticResource Brush_TextMuted}"/>
+                            <ProgressBar Value="{Binding ProgressValue, Mode=OneWay}" Maximum="100"
+                                         Height="4" Margin="0,6,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Style="{StaticResource RowActionButton}" Height="32" Content="上一首" Margin="0,0,8,0"
+                                        Command="{Binding PreviousCommand}"/>
+                                <Button Height="32" Margin="0,0,8,0" Command="{Binding PlayPauseCommand}">
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="播放"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                                        <Setter Property="Text" Value="暂停"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Button>
+                                <Button Style="{StaticResource RowActionButton}" Height="32" Content="下一首" Margin="0,0,8,0"
+                                        Command="{Binding NextCommand}"/>
+                                <Button Style="{StaticResource RowActionButton}" Height="32"
+                                        Command="{Binding ToggleModeCommand}">
+                                    <TextBlock Text="{Binding ModeText, Mode=OneWay}"/>
+                                </Button>
+                                <TextBlock Text="播放引擎未就绪" Margin="16,0,0,0" VerticalAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_Warning}"
+                                           Visibility="{Binding IsEngineReady, Converter={StaticResource InverseToVis}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Grid.Row="1" Text="即将播放" Margin="24,10,0,4"
+                               FontSize="{DynamicResource Font_SizeBodySm}"
+                               Foreground="{StaticResource Brush_TextMuted}"/>
+
+                    <!-- 队列（用户拍板：内嵌播放 Tab 下方） -->
+                    <ListBox Grid.Row="2" ItemsSource="{Binding UpNext}" Margin="24,0,24,8"
+                             Background="Transparent" BorderThickness="0"
+                             VirtualizingPanel.IsVirtualizing="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,2,2,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding Name, Mode=OneWay}"/>
+                                        <Run Text=" — "/>
+                                        <Run Text="{Binding Artist, Mode=OneWay}"/>
+                                    </TextBlock>
+                                    <Button Grid.Column="1" Content="移除" Padding="8,2"
+                                            FontSize="{DynamicResource Font_SizeMicro}"
+                                            Command="{Binding DataContext.RemoveFromQueueCommand,
+                                                RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            CommandParameter="{Binding Id}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </TabItem>
+
+            <!-- Tab 3 歌词 -->
+            <TabItem Header="歌词">
+                <Grid Margin="24,16,24,16">
+                    <ListBox x:Name="LyricsList" ItemsSource="{Binding LyricRows}"
+                             Background="Transparent" BorderThickness="0"
+                             HorizontalContentAlignment="Center"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             SelectionMode="Single">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text, Mode=OneWay}" Padding="8,6"
+                                           TextWrapping="Wrap" TextAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodyLg}"/>
+                                            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
+                                                    <Setter Property="FontSize" Value="{DynamicResource Font_SizeDisplay}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush_TextPrimary}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Visibility="{Binding HasLyrics, Converter={StaticResource InverseToVis}}">
+                        <TextBlock Text="未找到歌词" FontSize="{DynamicResource Font_SizeTitle}"
+                                   Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding LyricsHint}" Margin="0,8,0,0"
+                                   FontSize="{DynamicResource Font_SizeBodySm}"
+                                   Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
