@@ -100,14 +100,31 @@ public partial class GameManagerViewModel : ObservableObject
     private readonly SteamService _steam;
     private readonly ILogger _logger;
 
-    public GameManagerViewModel(SteamService steam, ILogger? logger = null)
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
+
+    public GameManagerViewModel(SteamService steam, ILogger? logger = null, System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         _steam = steam;
         _logger = logger ?? NullLogger.Instance;
+        _dispatcher = dispatcher;
         GamesView = new ListCollectionView(Games)
         {
             Filter = FilterGame,
         };
+    }
+
+    /// <summary>CDN 封面补全在后台线程回调——PropertyChanged 统一编组回 UI 线程（审查 🔴-2）。</summary>
+    private void RunOnUi(Action action)
+    {
+        System.Windows.Threading.Dispatcher? d = _dispatcher;
+        if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive || d.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            _ = d.BeginInvoke(action);
+        }
     }
 
     /// <summary>确认对话框回调（View 注入；AppManager 同款模式）。</summary>
@@ -219,7 +236,11 @@ public partial class GameManagerViewModel : ObservableObject
 
     partial void OnSortModeChanged(int value) => ApplySort();
 
-    partial void OnIsLoadingChanged(bool value) => NotifySummary(); // 加载层/空态互斥
+    partial void OnIsLoadingChanged(bool value)
+    {
+        NotifySummary(); // 加载层/空态互斥
+        LoadCommand.NotifyCanExecuteChanged(); // 审查 🔴-3：CanLoad=!IsLoading，加载态变化必须刷新按钮
+    }
 
     [RelayCommand]
     private void SetSort(string? mode)
@@ -251,6 +272,8 @@ public partial class GameManagerViewModel : ObservableObject
         {
             1 => new SortDescription(nameof(GameCardVm.SortPlaytime), ListSortDirection.Ascending),
             2 => new SortDescription(nameof(GameCardVm.SortSize), ListSortDirection.Ascending),
+            // 3=名称（审查 🔴-1 采纳：原落入 _ 分支按最近游玩排序，与 UI 选项不符）
+            3 => new SortDescription(nameof(GameCardVm.Name), ListSortDirection.Ascending),
             _ => new SortDescription(nameof(GameCardVm.SortRecent), ListSortDirection.Ascending),
         });
         GamesView.Refresh();
@@ -283,10 +306,18 @@ public partial class GameManagerViewModel : ObservableObject
                     var map = new System.Collections.Concurrent.ConcurrentDictionary<uint, string>();
                     Parallel.ForEach(data.Games, new ParallelOptions { MaxDegreeOfParallelism = 4 }, g =>
                     {
-                        string? found = SteamService.FindCoverArt(installPath, g.LibraryPath, g.AppId);
-                        if (found is not null)
+                        // 审查 🔴-4：单张封面探测失败不得炸掉整个加载（AggregateException → 全量失败）
+                        try
                         {
-                            map[g.AppId] = found;
+                            string? found = SteamService.FindCoverArt(installPath, g.LibraryPath, g.AppId);
+                            if (found is not null)
+                            {
+                                map[g.AppId] = found;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warn($"封面探测失败（AppId {g.AppId}）：{ex.Message}");
                         }
                     });
                     return map;
@@ -333,7 +364,7 @@ public partial class GameManagerViewModel : ObservableObject
                                 string? path = await SteamService.EnsureCoverFromCdnAsync(cacheDir, vm.AppId)
                                     .ConfigureAwait(false);
                                 if (path is not null)
-                                    vm.SetCover(path);
+                                    RunOnUi(() => vm.SetCover(path)); // 审查 🔴-2：后台线程 PropertyChanged 统一编组
                             }
                             finally
                             {

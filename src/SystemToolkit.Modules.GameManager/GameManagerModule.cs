@@ -30,7 +30,11 @@ public sealed class GameManagerModule : ModuleBase
         services.AddKeyedSingleton<ILogger>("gamemanager", new FileLogger("gamemanager"));
         // Steam 全栈服务（Core/Game 域，旧工程 1:1 移植）
         services.AddSingleton(sp => new SteamService(sp.GetRequiredKeyedService<ILogger>("gamemanager")));
-        services.AddSingleton<GameManagerViewModel>();
+        // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger）+ UI Dispatcher（审查 🔴-5）
+        services.AddSingleton(sp => new GameManagerViewModel(
+            sp.GetRequiredService<SteamService>(),
+            sp.GetRequiredKeyedService<ILogger>("gamemanager"),
+            System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<GameManagerView>();
     }
 }
