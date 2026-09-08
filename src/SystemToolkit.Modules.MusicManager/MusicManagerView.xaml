@@ -308,36 +308,14 @@
                 </Grid>
 
                 <!-- 右：黑胶唱片（右缘出血；播放时旋转，暂停保持角度——纯 XAML Storyboard） -->
-                <Grid Grid.Column="1" Width="540" Height="540"
+                <Grid Grid.Column="1" x:Name="DiscHost" Width="540" Height="540"
                       Margin="0,-100,-170,-100" RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform>
                         <RotateTransform x:Name="DiscRotation"/>
                     </Grid.RenderTransform>
-                    <Grid.Triggers>
-                        <EventTrigger RoutedEvent="Loaded">
-                            <BeginStoryboard x:Name="DiscSpinStoryboard">
-                                <Storyboard>
-                                    <DoubleAnimation Duration="0:0:24" RepeatBehavior="Forever"
-                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                     From="0" To="360"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </EventTrigger>
-                    </Grid.Triggers>
-                    <Grid.Style>
-                        <Style TargetType="Grid">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                    <DataTrigger.EnterActions>
-                                        <ResumeStoryboard BeginStoryboardName="DiscSpinStoryboard"/>
-                                    </DataTrigger.EnterActions>
-                                    <DataTrigger.ExitActions>
-                                        <PauseStoryboard BeginStoryboardName="DiscSpinStoryboard"/>
-                                    </DataTrigger.ExitActions>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Grid.Style>
+                    <!-- 旋转控制经 code-behind（🔴 Style 的 DataTrigger 无法引用元素树 NameScope
+                         中的 BeginStoryboardName——跨 NameScope 必抛 InvalidOperationException，
+                         2026-09-08 真机实证） -->
                     <Ellipse Fill="{StaticResource Brush_PlayerVinyl}"/>
                     <Ellipse Margin="26" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.35"/>
                     <Ellipse Margin="52" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.28"/>

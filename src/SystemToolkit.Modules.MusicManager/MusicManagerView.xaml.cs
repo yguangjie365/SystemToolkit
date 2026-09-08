@@ -72,9 +72,47 @@ public partial class MusicManagerView : UserControl
     private void OnSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(SeekSlider.Value);
 
+    private System.Windows.Media.Animation.Storyboard? _discSpin;
+    private bool _discSpinStarted;
+
+    /// <summary>黑胶旋转：播放 → 旋转（首次 Begin，暂停后 Resume），非播放 → Pause 保持角度。</summary>
+    private void UpdateDiscSpin()
+    {
+        if (_vm.IsPlaying)
+        {
+            if (!_discSpinStarted)
+            {
+                var spin0 = new System.Windows.Media.Animation.DoubleAnimation(
+                    0, 360, TimeSpan.FromSeconds(24))
+                {
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                };
+                _discSpin = new System.Windows.Media.Animation.Storyboard();
+                var spin = (System.Windows.Media.Animation.DoubleAnimation)spin0.Clone();
+                _discSpin.Children.Add(spin);
+                System.Windows.Media.Animation.Storyboard.SetTarget(spin, DiscHost);
+                _discSpin.Begin(DiscHost, true); // controllable
+                _discSpinStarted = true;
+            }
+            else
+            {
+                _discSpin?.Resume(DiscHost);
+            }
+        }
+        else if (_discSpinStarted)
+        {
+            _discSpin?.Pause(DiscHost);
+        }
+    }
+
     /// <summary>歌词高亮行变化 → 自动滚动到当前行（右栏跟随播放）。</summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
+        {
+            UpdateDiscSpin();
+        }
+
         if (e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)

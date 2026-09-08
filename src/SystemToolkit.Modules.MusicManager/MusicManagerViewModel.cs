@@ -62,15 +62,32 @@ public partial class MusicManagerViewModel : ObservableObject
         System.Windows.Threading.Dispatcher? d = _dispatcher;
         if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
         {
-            action();
+            RunGuarded(action);
         }
         else if (d.CheckAccess())
         {
-            action();
+            RunGuarded(action);
         }
         else
         {
-            d.BeginInvoke(action);
+            d.BeginInvoke(() => RunGuarded(action));
+        }
+    }
+
+    /// <summary>
+    /// 🔴 处理器异常不得反噬引擎调用方：直执行路径的异常会沿同步调用链
+    /// 传回引擎 PlayAsync 的 catch 被误报为「播放失败」（2026-09-08 实证）。
+    /// </summary>
+    private void RunGuarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            ScanStatusText = $"界面更新异常：{ex.Message}";
+            _log.Error("[Music] UI 事件处理器异常", ex);
         }
     }
     private List<LyricLine> _lyricLineSource = [];
