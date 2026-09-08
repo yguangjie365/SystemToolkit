@@ -35,6 +35,38 @@ public sealed class InverseBoolToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// 比例换算（审查 P1-7/8）：把绑定到的实际尺寸乘以参数比例，用于"跟随窗口缩放"的装饰尺寸
+/// （黑胶圆盘、现代模板封面卡），替代原先写死的 540 / 220 像素。
+/// 参数形式："0.62" 或 "0.62|300|520"（比例|最小值|最大值）。
+/// ⚠️ 不能用逗号分隔：XAML MarkupExtension 会把逗号当作名/值对分隔符（MC3042）。
+/// </summary>
+public sealed class RatioConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not double source || source <= 0)
+        {
+            return 0d;
+        }
+
+        string[] parts = (parameter as string ?? "1").Split('|');
+        double ratio = double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double r) ? r : 1d;
+        double result = source * ratio;
+        if (parts.Length > 2)
+        {
+            double min = double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double mn) ? mn : 0d;
+            double max = double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double mx) ? mx : double.MaxValue;
+            result = Math.Clamp(result, min, max);
+        }
+
+        return result;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// 字符串相等 → Visible，否则 Collapsed（参数 = 期望值；音量图标三态切换用，审查 P0-1）。
 /// </summary>
 public sealed class StringEqualsToVisibilityConverter : IValueConverter

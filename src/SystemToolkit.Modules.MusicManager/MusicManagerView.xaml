@@ -14,6 +14,7 @@
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
         <local:EmptyCollectionToVisibilityConverter x:Key="EmptyToVis"/>
         <local:StringEqualsToVisibilityConverter x:Key="StrEqToVis"/>
+        <local:RatioConverter x:Key="Ratio"/>
         <!-- 音量图标（审查 P0-1）：喇叭 + 0/1/2 道声波，静音态多一道斜杠 -->
         <Geometry x:Key="IconVolumeHigh">M4,9 H8 L13,5 V19 L8,15 H4 Z M16,8.5 A4.5,4.5 0 0 1 16,15.5 M18.5,6 A8,8 0 0 1 18.5,18</Geometry>
         <Geometry x:Key="IconVolumeLow">M4,9 H8 L13,5 V19 L8,15 H4 Z M16,9.5 A3,3 0 0 1 16,14.5</Geometry>
@@ -713,7 +714,8 @@
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="160"/>
+                        <!-- 审查 P1-6：原固定 160px，窄窗口挤压文本；改为自适应 + 最小宽保证可读 -->
+                        <ColumnDefinition Width="*" MinWidth="120"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -1047,8 +1049,12 @@
                 </Grid>
 
                 <!-- 右：彩胶圆盘（右缘出血；主色环 + 封面圆心；播放时旋转——code-behind 控制） -->
-                <Grid Grid.Column="1" x:Name="DiscHost" Width="540" Height="540"
-                      Margin="0,-60,-170,-60" RenderTransformOrigin="0.5,0.5">
+                <!-- 审查 P1-7：黑胶原固定 540px 且右出血 -170，窄窗口会遮住歌词；
+                     改为跟随 Row1 实际高度的 62%（钳制 300–520），出血同步收敛 -->
+                <Grid Grid.Column="1" x:Name="DiscHost"
+                      Width="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.62|300|520}"
+                      Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.62|300|520}"
+                      Margin="0,-40,-110,-40" RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform>
                         <RotateTransform x:Name="DiscRotation"/>
                     </Grid.RenderTransform>
@@ -1091,17 +1097,21 @@
                 </Grid>
 
                 <!-- 模板③ 现代：中调主色底（背景层承担）+ 左上歌曲信息卡 + 右侧歌词列表（对照截图） -->
-                <Grid Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">                    <Grid.ColumnDefinitions>
+                <Grid Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="340"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- 左：歌曲信息卡（白卡：封面方图 + 歌名 + 艺术家 + 专辑） -->
-                    <Border Grid.Column="0" Width="250" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    <!-- 审查 P1-8：原固定 250 宽 / 220 封面；改为按窗口宽度 26%（钳制 200–300），封面按高度 30% -->
+                    <Border Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.26|200|300}"
                             Margin="56,24,0,0" CornerRadius="{DynamicResource Radius_LG}"
                             Background="{StaticResource Brush_Surface}" Padding="14">
                         <StackPanel>
-                            <Border Height="220" CornerRadius="{DynamicResource Radius_MD}"
+                            <Border CornerRadius="{DynamicResource Radius_MD}"
+                                    Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.3|160|260}"
                                     Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}">
                                 <Border.Background>
                                     <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
@@ -1169,10 +1179,15 @@
                     </ListBox>
                 </Grid>
                 <!-- OM-7 EQ 面板浮层（2026-09-09 浅色化融入主题：主题卡+预设填充胶囊高亮+dB 读数；顶栏 EQ 钮弹出/收起） -->
+                <!-- 审查 P1-9：11 段滑块 + 7 枚预设横排总宽 600px+，窄窗口会溢出覆盖层；
+                     加最大宽 + 内部横向滚动，保证任何窗口宽度下都不越界 -->
                 <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"
+                        MaxWidth="880"
                         Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_SurfaceAlt}"
                         BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}"
                         Padding="16,10" Visibility="{Binding IsEqPanelOpen, Converter={StaticResource BoolToVis}}">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  MaxWidth="848">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Button Height="24" Padding="10,0" Content="{Binding EqStateText, Mode=OneWay}"
@@ -1312,6 +1327,7 @@
                             </ItemsControl>
                         </StackPanel>
                     </StackPanel>
+                    </ScrollViewer>
                 </Border>
             </Grid>
 
