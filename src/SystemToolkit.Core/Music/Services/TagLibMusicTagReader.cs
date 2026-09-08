@@ -7,8 +7,9 @@ namespace SystemToolkit.Core.Music.Services;
 /// <see cref="IMusicTagReader"/> 的 TagLibSharp 2.3.0 实现（替换旧工程的 ATL.NET）。
 /// </summary>
 /// <remarks>
-/// <para><b>为什么换库</b>：ATL 的传递依赖 <c>Ude.NetStandard</c> 含 GPL 授权选项，触碰本项目
-/// MIT 开源的许可证红线（ADR-002 §5.4）。TagLibSharp 是 LGPL-2.1-only，经 NuGet 动态引用、
+/// <para><b>为什么换库</b>：ATL 的传递依赖 <c>Ude.NetStandard</c> 含 GPL 授权选项但包内无许可证
+/// 全文、无法自证合规（ADR-002 §5.4；本项目 2026-09-08 转为 GPL-3.0，见 ADR-004，弃用结论维持）。
+/// TagLibSharp 是 LGPL-2.1-only，经 NuGet 动态引用、
 /// 不合并不 ILMerge 即满足合规要求，且零传递依赖。</para>
 /// <para><b>命名空间陷阱</b>：本文件位于 <c>SystemToolkit.Core.Music.Services</c>，
 /// ImplicitUsings 会引入 <c>System.IO</c>，裸写 <c>File</c> 在 <see cref="System.IO.File"/>

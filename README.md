@@ -5,9 +5,9 @@
 面向 Windows 10 / 11 的综合系统维护与环境恢复工具。不是"Windows 小工具集合"，而是一套把**驱动 / 软件 / 网络 / 配置 / 数据**保存下来、在系统重装后完整恢复的工作环境平台。
 
 > 📌 **项目性质声明**：本项目为**个人爱好与自用需求驱动的非商业项目**，不以任何形式盈利，将开源发布到 GitHub，并在应用 About 中说明所借鉴与引用的开源项目。
-> 该性质直接影响第三方代码引入策略，详见 [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md)。
+> 该性质直接影响第三方代码引入策略，详见 [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md)；许可证变更（MIT → GPL-3.0）见 [ADR-004](Docs/decisions/ADR-004-开源许可证变更MIT转GPL-3.0.md)。
 
-**许可证**：[MIT](LICENSE) ｜ Copyright © 2026 yguangjie365
+**许可证**：[GPL-3.0](LICENSE) ｜ Copyright © 2026 yguangjie365（2026-09-08 前的历史版本按 MIT 发布）
 第三方字体与图标资源遵循各自独立许可证，见 [NOTICE.md](NOTICE.md)。
 
 ---
@@ -201,16 +201,17 @@ Docs/
 | [03-数据库设计](Docs/03-数据库设计.md) | 24 张表结构、ER 图、迁移策略、ORM 选型分析 |
 | [04-UI设计规范](Docs/04-UI设计规范.md) | 五维设计令牌、窗口与缩放、主题包机制、组件基础规格 |
 | [ADR-001](Docs/decisions/ADR-001-UI技术栈选型.md) | UI 技术栈为什么选 WPF |
-| [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md) | 许可证红线与第三方代码引入流程 |
+| [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md) | 许可证红线与第三方代码引入流程（许可证结论部分被 ADR-004 取代） |
 | [ADR-003](Docs/decisions/ADR-003-主题系统与初始视觉风格.md) | 主题系统、窗口缩放、初始视觉风格、字体方案 |
+| [ADR-004](Docs/decisions/ADR-004-开源许可证变更MIT转GPL-3.0.md) | 开源许可证 MIT → GPL-3.0 变更与新引入白名单 |
 | [Docs/Design/01-09](Docs/Design/) | 各模块详细设计 |
-| [LICENSE](LICENSE) / [NOTICE.md](NOTICE.md) | MIT 许可证 / 第三方资源归属 |
+| [LICENSE](LICENSE) / [NOTICE.md](NOTICE.md) | GPL-3.0 许可证 / 第三方资源归属 |
 
 ---
 
 ## 待决事项
 
-完整清单见 [任务板 Q 组](Docs/09-开发规范/TASKS.md#二待决事项需用户拍板)。已定决策不再列出（UI 技术栈 = WPF、文档编号 = 已统一、ORM = Dapper、打包 = 传统安装程序、传输协议 = WatsonTcp、恢复包 = 目录形态）。当前待决：
+完整清单见 [任务板 Q 组](Docs/09-开发规范/TASKS.md#二待决事项需用户拍板)。已定决策不再列出（UI 技术栈 = WPF、文档编号 = 已统一、ORM = Dapper、打包 = 传统安装程序、传输协议 = WatsonTcp、恢复包 = 目录形态、开源协议 = GPL-3.0）。当前待决：
 
 1. 🟠 **缺失的横向文档** —— 文件传输协议、安全设计、日志与错误处理 3 份尚无归属（开发规范已建）。
 2. 🟠 其余 Q 组待决项（Store 安装方案 / 备份 Worker 形态 / 音乐曲库 / 便携模式 / 本地化 / 第二主题包）。

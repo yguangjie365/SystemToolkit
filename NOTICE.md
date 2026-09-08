@@ -1,7 +1,7 @@
 # NOTICE — 第三方资源归属与许可证
 
-> SystemToolkit 源代码采用 **MIT** 许可证（见 [LICENSE](LICENSE)，Copyright © 2026 yguangjie365）。
-> 本文件列出随软件分发的**第三方字体与图标资源**，它们遵循各自独立的许可证，**不适用 MIT**。
+> SystemToolkit 源代码采用 **GPL-3.0** 许可证（见 [LICENSE](LICENSE)，Copyright © 2026 yguangjie365；2026-09-08 前的历史版本按 MIT 许可发布，变更决策见 [ADR-004](Docs/decisions/ADR-004-开源许可证变更MIT转GPL-3.0.md)）。
+> 本文件列出随软件分发的**第三方字体与图标资源**，它们遵循各自独立的许可证，**不适用 GPL-3.0**。
 
 ---
 
@@ -86,7 +86,7 @@
 
 | 项目 | 许可证 | 参考了什么 |
 |---|---|---|
-| [lostindark/DriverStoreExplorer](https://github.com/lostindark/DriverStoreExplorer) | GPL-2.0 | 驱动管理模块的清理分类思路、pnputil 输出多语言解析的坑。**未使用其任何源码**（本项目 MIT，GPL 不兼容） |
+| [lostindark/DriverStoreExplorer](https://github.com/lostindark/DriverStoreExplorer) | GPL-2.0 | 驱动管理模块的清理分类思路、pnputil 输出多语言解析的坑。**未使用其任何源码**（原 MIT 时期不兼容；本项目现为 GPL-3.0，可否吸收其源码取决于其文件头是否「version 2 or later」授权，核实前维持仅参考，见 ADR-004） |
 | Claude.com 品牌设计分析（`DESIGN.md`） | — | 初始视觉风格的色彩体系与排版气质 |
 
 ---
@@ -110,14 +110,14 @@
 
 ### 4.1 ⚠️ LibreHardwareMonitorLib（MPL-2.0）义务说明
 
-**MPL-2.0 不在 AGENTS.md §2 的许可证红线禁列内（禁列：GPL/AGPL/SSPL/CC-BY-SA/CC-BY-NC/无许可证），因此引入合规。但 MPL-2.0 是「文件级 copyleft」，带有以下义务，本项目必须遵守：**
+**MPL-2.0 不在 AGENTS.md §2 的许可证红线禁列内（2026-09-08 起的禁列：GPL-2.0-only / LGPL-2.1-only / SSPL / CC-BY-SA / CC-BY-NC / 无许可证），因此引入合规。但 MPL-2.0 是「文件级 copyleft」，带有以下义务，本项目必须遵守：**
 
 | 义务 | 本项目落实情况 |
 |---|---|
 | ① **显著声明**该组件使用 MPL-2.0 | ✅ 本表 + About 页数据源（ADR-002 §5.3）均已登记 |
 | ② 提供 **MPL-2.0 许可证全文** | 🟠 须随分发物附带（打包时把 `MPL-2.0.txt` 放进安装目录 `LICENSES/`） |
 | ③ **被修改的 MPL 源文件须开源** | ✅ 本项目以 NuGet 二进制引用，**未修改其任何源文件**，故无源码披露义务 |
-| ④ 与本项目 MIT 代码的**分离** | ✅ 仅通过公开 API 调用（依赖注入 + 接口隔离），未见源码级混合、未见复制片段 |
+| ④ 与本项目自有代码的**分离** | ✅ 仅通过公开 API 调用（依赖注入 + 接口隔离），未见源码级混合、未见复制片段 |
 
 **⚠️ 衍生组件提示（非本项目直接依赖，但随 LHM 二进制分发）：**
 LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项目走「PawnIO 路线」（见 `Docs/09-开发规范/TASKS.md` K-001 复诊），
@@ -128,7 +128,7 @@ LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项�
 
 ### 4.2 ⚠️ TagLibSharp（LGPL-2.1-only）义务说明
 
-**LGPL-2.1 属 `02 分册 §9.2` 许可证白名单的 🟡 级（需用户确认），不在 AGENTS.md §2 红线禁列内（禁列：GPL/AGPL/SSPL/CC-BY-SA/CC-BY-NC/无许可证）。
+**LGPL-2.1 属 `02 分册 §9.2` 许可证白名单的 🟡 级（需用户确认），不在 AGENTS.md §2 红线禁列内（2026-09-08 起禁列：GPL-2.0-only / LGPL-2.1-only / SSPL / CC-BY-SA / CC-BY-NC / 无许可证）。
 用户已于 2026-09-07 裁定引入，该裁定即构成步骤② 的 🟡 确认。LGPL-2.1 是「库级弱 copyleft」，义务如下：**
 
 | 义务 | 本项目落实情况 |
@@ -137,11 +137,12 @@ LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项�
 | ② 提供 **LGPL-2.1 许可证全文** | 🟠 须随分发物附带（打包时把 `LGPL-2.1.txt` 放进安装目录 `LICENSES/`，与 MPL-2.0 同批处理） |
 | ③ 用户须能**替换该库**（反向工程/重新链接的权利） | ✅ 以 NuGet 独立 DLL 引用，**不合并、不 ILMerge、不嵌入单文件发布**，用户可直接替换 `taglib-sharp.dll` |
 | ④ **未修改其源文件**故无源码披露义务 | ✅ 仅通过公开 API（`TagLib.File.Create` / `Tag` / `Properties` / `Pictures`）调用 |
-| ⑤ 与本项目 MIT 代码的**分离** | ✅ 经 `Core/Music/Services/IMusicTagReader` 接口隔离，唯一实现类 `TagLibMusicTagReader` 封装全部 TagLib 类型，其余代码零 TagLib 依赖 |
+| ⑤ 与本项目自有代码的**分离** | ✅ 经 `Core/Music/Services/IMusicTagReader` 接口隔离，唯一实现类 `TagLibMusicTagReader` 封装全部 TagLib 类型，其余代码零 TagLib 依赖 |
 
 **为什么不是 ATL（`z440.atl.core`）**：旧工程 `LocalMusicScanner` 用的是 ATL，但 ATL 7.16.0 的传递依赖 `Ude.NetStandard` 1.2.0
-是 **MPL-1.1 / GPL v2+ / LGPL v2.1+ 三重授权**且包内不含许可证全文。三重授权里的 GPL 选项直接触碰本项目（MIT 开源）红线，
-而「可选择 LGPL」这一判断缺乏包内文本佐证，无法自证合规。`TagLibSharp` 2.3.0 **零传递依赖**，许可证由 NuGet 明确标注为
+是 **MPL-1.1 / GPL v2+ / LGPL v2.1+ 三重授权**且包内不含许可证全文。原 MIT 时期 GPL 选项直接触碰红线；
+本项目转为 GPL-3.0（ADR-004）后 GPL v2+ 选项本身已可兼容，但「可选择 LGPL」的判断缺乏包内文本佐证、
+无法自证合规的问题仍在，**弃用结论维持**。`TagLibSharp` 2.3.0 **零传递依赖**，许可证由 NuGet 明确标注为
 `LGPL-2.1-only`，合规链条完整，故取代 ATL。详见 ADR-002 §5.4 音乐中心条目。
 
 ---

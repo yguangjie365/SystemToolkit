@@ -106,10 +106,12 @@ UI.Common（共享控件与设计令牌）
 
 🔴 **敏感数据**：配对令牌、Session Secret、第三方凭据一律经 DPAPI / Credential Manager 加密，禁止明文落库。
 
-🔴 **第三方代码许可证红线**（本项目为 MIT 开源的非商业项目）：
-GPL-2.0 / GPL-3.0 / AGPL / SSPL / CC-BY-SA / CC-BY-NC / 无许可证的代码**一律禁止引入**，无论多好用。
+🔴 **第三方代码许可证红线**（本项目为 **GPL-3.0** 开源项目；2026-09-08 由 MIT 变更，见 [ADR-004](Docs/decisions/ADR-004-开源许可证变更MIT转GPL-3.0.md)）：
+无许可证 / SSPL / **GPL-2.0-only / LGPL-2.1-only** / CC-BY-SA / CC-BY-NC / 专有许可证的代码**一律禁止引入**，无论多好用。
+🟢 GPL-3.0 / LGPL-3.0-or-later / AGPL-3.0 源码可吸收（并入后整体按 GPL-3.0 授权）；MIT / Apache-2.0 / BSD / ISC 可引入（保留版权声明并登记，许可证原样保留）。
+🟡 GPL-2.0-or-later / LGPL-2.1-or-later / MPL-2.0 / CDDL：有版本或文件级兼容条件，引入前须逐项核实并登记。
 引入任何第三方代码前必须走 [02 分册 §9.2](Docs/09-开发规范/02-架构与依赖规范.md#92-强制流程-缺一不可) 的五步流程并登记。
-典型陷阱：`DriverStoreExplorer` 是 **GPLv2，只能作参考实现，禁止复制源码**（替代方案见 [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md)）。
+典型陷阱：`DriverStoreExplorer` 源码为 GPLv2——**须核实其文件头是否「version 2 or later」授权**：v2-only 不可并入 GPL-3.0 项目；核实前仍只作参考实现、禁止复制源码（详见 [ADR-002](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md)）。
 
 🟠 **修改类操作**（DNS / 静态 IP / 调优 / 注册表）必须：保存快照 → 修改 → 验证 → 失败可一键回滚。
 
