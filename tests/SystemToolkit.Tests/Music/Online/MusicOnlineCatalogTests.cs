@@ -61,8 +61,18 @@ public class MusicOnlineCatalogTests
     {
         public OnlineLoginInfo Login { get; set; } = new() { Provider = OnlineProvider.QQMusic, LoggedIn = false };
 
+        public List<string> SeenCookies { get; } = [];
+        public List<OnlinePlaylist> Playlists { get; set; } = [];
+        public bool ThrowOnPlaylists { get; set; }
+
         public Task<List<OnlineTrack>> SearchAsync(string keywords, int limit = 30, string cookie = "", CancellationToken ct = default) =>
             Task.FromResult(new List<OnlineTrack> { new() { Provider = OnlineProvider.QQMusic, Id = "q1", Name = "QQ 曲" } });
+
+        public Task<List<OnlinePlaylist>> LoadUserPlaylistsAsync(string cookie = "", CancellationToken ct = default)
+        {
+            SeenCookies.Add(cookie);
+            return ThrowOnPlaylists ? throw new HttpRequestException("网络断开") : Task.FromResult(Playlists);
+        }
 
         public Task<OnlineLoginInfo> GetLoginStatusAsync(string cookie = "", CancellationToken ct = default) =>
             Task.FromResult(Login);
@@ -100,14 +110,35 @@ public class MusicOnlineCatalogTests
     }
 
     [Fact]
-    public async Task Catalog_QqUserPlaylists_Unsupported_ReturnsEmptyWithVisibleError()
+    public async Task Catalog_QqUserPlaylists_RoutesThroughQqApiAndInjectsCookie()
     {
-        var catalog = new OnlineMusicCatalogService(new FakeNetEaseApi(), new FakeQqApi(), new FakeCredentialStore(), new NoopLogger());
+        // 2026-09-09 修复：QQ 用户歌单此前被目录层误当"不支持"返回空（接口声明过时）
+        var store = new FakeCredentialStore();
+        store.SetCookie(OnlineProvider.QQMusic, "uin=123; qm_keyst=key");
+        var qq = new FakeQqApi
+        {
+            Playlists = [new OnlinePlaylist { Provider = OnlineProvider.QQMusic, Id = "qp", Name = "QQ 歌单", TrackCount = 5 }],
+        };
+        var catalog = new OnlineMusicCatalogService(new FakeNetEaseApi(), qq, store, new NoopLogger());
+
+        List<OnlinePlaylist> playlists = await catalog.LoadUserPlaylistsAsync(OnlineProvider.QQMusic);
+
+        Assert.Single(playlists);
+        Assert.Equal("QQ 歌单", playlists[0].Name);
+        Assert.Equal("uin=123; qm_keyst=key", qq.SeenCookies.Single());
+        Assert.Equal(string.Empty, catalog.CatalogError);
+    }
+
+    [Fact]
+    public async Task Catalog_QqUserPlaylists_ClientException_ConvergesToEmptyPlusError()
+    {
+        var qq = new FakeQqApi { ThrowOnPlaylists = true };
+        var catalog = new OnlineMusicCatalogService(new FakeNetEaseApi(), qq, new FakeCredentialStore(), new NoopLogger());
 
         List<OnlinePlaylist> playlists = await catalog.LoadUserPlaylistsAsync(OnlineProvider.QQMusic);
 
         Assert.Empty(playlists);
-        Assert.Contains("不支持", catalog.CatalogError, StringComparison.Ordinal);
+        Assert.Contains("加载歌单失败", catalog.CatalogError, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,15 +242,21 @@ public class MusicOnlineCatalogTests
     }
 
     [Fact]
-    public async Task PlatformSwitchToQq_SurfacesUnsupportedNotice()
+    public async Task PlatformSwitchToQq_LoadsQqPlaylistsWithoutError()
     {
-        (MusicManagerViewModel vm, _, _) = CreateVm(netEase: new FakeNetEaseApi(), qq: new FakeQqApi());
+        var qq = new FakeQqApi
+        {
+            Playlists = [new OnlinePlaylist { Provider = OnlineProvider.QQMusic, Id = "qp", Name = "QQ 歌单" }],
+        };
+        (MusicManagerViewModel vm, _, _) = CreateVm(netEase: new FakeNetEaseApi(), qq: qq);
 
         await vm.SelectPlatformCommand.ExecuteAsync("QQMusic");
 
         Assert.Equal(OnlineProvider.QQMusic, vm.SelectedPlatform);
         Assert.Equal("QQ 音乐", vm.SelectedPlatformText);
-        Assert.Contains("不支持", vm.OnlineStatusText, StringComparison.Ordinal);
+        // 2026-09-09 修复后：QQ 歌单正常加载，无"不支持"降级文案
+        Assert.Equal(string.Empty, vm.OnlineStatusText);
+        Assert.Single(vm.UserPlaylists);
     }
 
     [Fact]

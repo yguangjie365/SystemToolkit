@@ -157,8 +157,8 @@ public class MusicPlayerStyleTests
         vm.ApplyEqPresetCommand.Execute("重低音");
 
         (_, _, double[] gains) = engine.Applied.Single();
-        Assert.Equal(4.0, gains[0]); // 重低音首段 +4
-        Assert.Equal(4.0, vm.EqBands[0].Gain); // 滑条同步
+        Assert.Equal(8.0, gains[0]); // 重低音首段 +8（2026-09-09 预设整体增强约一倍）
+        Assert.Equal(8.0, vm.EqBands[0].Gain); // 滑条同步
         Assert.Equal(0.0, vm.EqBands[9].Gain);
         Assert.Contains("重低音", vm.ScanStatusText, StringComparison.Ordinal);
     }

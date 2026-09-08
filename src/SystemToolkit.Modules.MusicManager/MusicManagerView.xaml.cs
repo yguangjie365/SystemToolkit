@@ -133,6 +133,20 @@ public partial class MusicManagerView : UserControl
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
 
+    /// <summary>
+    /// 音质按钮左键弹出菜单（2026-09-09 修复"点击无反应"）：
+    /// ContextMenu 默认只响应右键，左键需代码显式打开；Placement 锚定按钮底部。
+    /// </summary>
+    private void OnQualityMenuButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
+    }
+
     /// <summary>进度条拖动：开始（暂停位置回写）/ 结束（按百分比跳转）。</summary>
     private void OnSeekDragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
         => _vm.BeginSeek();

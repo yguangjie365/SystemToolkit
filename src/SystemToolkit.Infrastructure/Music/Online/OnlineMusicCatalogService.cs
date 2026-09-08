@@ -75,15 +75,21 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     public async Task<List<OnlinePlaylist>> LoadUserPlaylistsAsync(OnlineProvider provider, CancellationToken ct = default)
     {
         ClearError();
-        if (provider != OnlineProvider.NetEase || _netEase is null)
-        {
-            SetError("QQ 音乐暂不支持在应用内浏览用户歌单");
-            return [];
-        }
-
         try
         {
-            return await _netEase.LoadUserPlaylistsAsync(_credentials.GetCookie(provider) ?? string.Empty, ct).ConfigureAwait(true);
+            // 2026-09-09 修复「QQ 登录后歌单为空」：QQ 客户端 9-3 已实现三层回退的用户歌单
+            // （对照 NexBox qqmusic.rs），但目录层此前未接线（直接当不支持返回空）——接口声明过时所致
+            string cookie = _credentials.GetCookie(provider) ?? string.Empty;
+            return provider switch
+            {
+                OnlineProvider.NetEase when _netEase is not null
+                    => await _netEase.LoadUserPlaylistsAsync(cookie, ct).ConfigureAwait(true),
+                OnlineProvider.QQMusic when _qq is not null
+                    => await _qq.LoadUserPlaylistsAsync(cookie, ct).ConfigureAwait(true),
+                OnlineProvider.NetEase or OnlineProvider.QQMusic
+                    => throw new InvalidOperationException("平台客户端未注册"),
+                _ => throw new InvalidOperationException("未知音乐来源"),
+            };
         }
         catch (OperationCanceledException)
         {

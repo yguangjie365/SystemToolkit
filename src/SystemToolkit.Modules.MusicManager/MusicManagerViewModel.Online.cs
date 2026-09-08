@@ -71,7 +71,7 @@ public partial class MusicManagerViewModel
     private async Task SelectPlatformAsync(string? platform)
     {
         SelectedPlatform = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
-        await LoadPlaylistsAsync(); // 歌单面板跟随平台（QQ 显示不支持说明）
+        await LoadPlaylistsAsync(); // 歌单面板跟随平台（双平台用户歌单均已接线）
         await RefreshLoginStateAsync();
     }
 

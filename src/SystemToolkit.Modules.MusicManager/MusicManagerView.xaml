@@ -12,6 +12,55 @@
         <local:InverseBoolConverter x:Key="Inverse"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseToVis"/>
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
+        <!-- 2026-09-09 修复"进度条被底色吞掉"：默认 Slider 轨道为主题底色，压在播放器染色背景上隐形（只剩滑块）。
+             自绘模板：剩余轨道半透明灰 + 已播段强调色 + 白色圆形滑块——浅底/彩胶/沉浸/现代四背景通用 -->
+        <Style x:Key="SeekSliderStyle" TargetType="Slider">
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Background="Transparent" VerticalAlignment="Center" Height="14">
+                            <Border Height="4" CornerRadius="2" Background="#26808080"
+                                    VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Grid Background="Transparent">
+                                                    <Border Height="4" CornerRadius="2"
+                                                            Background="{StaticResource Brush_Accent}"
+                                                            VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Grid Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Width="12" Height="12" Focusable="False">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Fill="#FFFFFF" Stroke="#40000000" StrokeThickness="1"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="16,12,16,12">
@@ -465,10 +514,9 @@
                                Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding CurrentSub}" FontSize="{DynamicResource Font_SizeCaption}"
                                Foreground="{StaticResource Brush_TextMuted}" TextTrimming="CharacterEllipsis"/>
-                    <Slider x:Name="SeekSlider" Maximum="100"
+                    <Slider x:Name="SeekSlider" Maximum="100" Style="{StaticResource SeekSliderStyle}"
                             Value="{Binding ProgressValue, Mode=OneWay}"
-                            Height="18" Margin="0,4,0,0"
-                            IsMoveToPointEnabled="True"
+                            Margin="0,4,0,0"
                             Thumb.DragStarted="OnSeekDragStarted"
                             Thumb.DragCompleted="OnSeekDragCompleted"/>
                     <Grid>
@@ -596,7 +644,9 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button Height="30" Padding="10,0" Content="音质" Margin="8,0,0,0">
+                    <!-- 2026-09-09 修复：ContextMenu 只响应右键——左键经 Click 代码后置弹出（OnQualityMenuButtonClick） -->
+                    <Button Height="30" Padding="10,0" Content="音质" Margin="8,0,0,0"
+                            Click="OnQualityMenuButtonClick">
                         <Button.ContextMenu>
                             <!-- ContextMenu 独立可视树：命令/数据经 PlacementTarget 回主树（GameManager 同款套路） -->
                             <ContextMenu Style="{StaticResource ToolkitContextMenu}"
@@ -984,9 +1034,9 @@
                     <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
                                Foreground="{Binding PlayerMutedBrush, Mode=OneWay}"
                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                    <Slider Grid.Column="1" x:Name="FullSeekSlider" Margin="16,0" Maximum="100" Height="6"
+                    <Slider Grid.Column="1" x:Name="FullSeekSlider" Margin="16,0" Maximum="100"
+                            Style="{StaticResource SeekSliderStyle}"
                             Value="{Binding ProgressValue, Mode=OneWay}"
-                            IsMoveToPointEnabled="True"
                             Thumb.DragStarted="OnSeekDragStarted"
                             Thumb.DragCompleted="OnFullSeekDragCompleted"
                             VerticalAlignment="Center"/>

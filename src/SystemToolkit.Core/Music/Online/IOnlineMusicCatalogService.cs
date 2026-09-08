@@ -35,11 +35,18 @@ public interface INetEaseOnlineApi
 /// <summary>
 /// QQ 音乐平台 API 子集（OM-5 目录服务用）。由 <c>QQMusicOnlineClient</c> 实现。
 /// </summary>
-/// <remarks>QQ 无歌单列表/每日推荐接口（NexBox 同 limitation）——目录层按能力声明，不硬造。</remarks>
+/// <remarks>
+/// 用户歌单已支持（2026-09-09：对照 NexBox qqmusic.rs 三层回退——创建 fcg_user_created_diss /
+/// 收藏 fcg_get_profile_order_asset / 回退 musicu PlaylistBaseRead）；每日推荐/推荐歌单仍无
+/// 对应接口——目录层按能力声明，不硬造。
+/// </remarks>
 public interface IQqMusicOnlineApi
 {
     /// <summary>搜索歌曲。</summary>
     Task<List<OnlineTrack>> SearchAsync(string keywords, int limit = 30, string cookie = "", CancellationToken ct = default);
+
+    /// <summary>当前用户歌单（创建 + 收藏，需登录 Cookie）。</summary>
+    Task<List<OnlinePlaylist>> LoadUserPlaylistsAsync(string cookie = "", CancellationToken ct = default);
 
     /// <summary>登录态。</summary>
     Task<OnlineLoginInfo> GetLoginStatusAsync(string cookie = "", CancellationToken ct = default);
@@ -58,7 +65,7 @@ public interface IQqMusicOnlineApi
 /// <para>实现位于 Infrastructure（组合双平台客户端），模块经 DI 可选解析（缺席时在线浏览降级，
 /// 本地功能不受影响）。所有失败路径以<b>空结果 + <see cref="CatalogError"/> 文本</b>表达——🔴 不静默，
 /// 由 VM 把错误透传到 UI。</para>
-/// <para>QQ 不支持的能力（用户歌单列表/每日推荐/推荐歌单）返回空结果并置
+/// <para>QQ 不支持的能力（每日推荐/推荐歌单）返回空结果并置
 /// <see cref="CatalogError"/> 说明，VM 据此显示空态文案。</para>
 /// </remarks>
 public interface IOnlineMusicCatalogService
@@ -69,7 +76,7 @@ public interface IOnlineMusicCatalogService
     /// <summary>搜索歌曲。</summary>
     Task<List<OnlineTrack>> SearchAsync(OnlineProvider provider, string keywords, int limit = 30, CancellationToken ct = default);
 
-    /// <summary>当前用户歌单列表（QQ 不支持 → 空结果 + CatalogError）。</summary>
+    /// <summary>当前用户歌单列表（双平台；QQ = 创建 + 收藏歌单）。</summary>
     Task<List<OnlinePlaylist>> LoadUserPlaylistsAsync(OnlineProvider provider, CancellationToken ct = default);
 
     /// <summary>歌单曲目（分页）。</summary>
