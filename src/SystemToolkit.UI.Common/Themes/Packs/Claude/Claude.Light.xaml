@@ -159,6 +159,9 @@
     <sys:Double x:Key="Icon_SizeMd">20</sys:Double>
     <sys:Double x:Key="Icon_SizeLg">24</sys:Double>
     <sys:Double x:Key="Icon_Stroke">1.5</sys:Double>
+    <!-- 竖向滑条（音量等弹出面板用）：避免尺寸裸值，审查 P0-1 配套 -->
+    <sys:Double x:Key="Slider_VerticalWidth">26</sys:Double>
+    <sys:Double x:Key="Slider_VerticalHeight">110</sys:Double>
 
     <!-- ===== 间距（04 规范 4px 栅格） ===== -->
     <Thickness x:Key="Space_XXS">4</Thickness>

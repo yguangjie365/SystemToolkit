@@ -145,6 +145,8 @@ public static class TokenKeys
         public const string Icon_SizeMd = "Icon_SizeMd";
         public const string Icon_SizeLg = "Icon_SizeLg";
         public const string Icon_Stroke = "Icon_Stroke";
+        public const string Slider_VerticalWidth = "Slider_VerticalWidth";
+        public const string Slider_VerticalHeight = "Slider_VerticalHeight";
     }
 
     public static class Spacing

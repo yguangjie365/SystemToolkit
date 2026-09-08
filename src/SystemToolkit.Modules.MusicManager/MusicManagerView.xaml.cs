@@ -148,6 +148,15 @@ public partial class MusicManagerView : UserControl
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
 
+    /// <summary>音量按钮：左键弹出音量滑块面板（Popup；图标本身不切静音，静音在面板内）。</summary>
+    private void OnVolumeButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (VolumePopup is not null)
+        {
+            VolumePopup.IsOpen = true;
+        }
+    }
+
     /// <summary>
     /// 音质按钮左键弹出菜单（2026-09-09 修复"点击无反应"）：
     /// ContextMenu 默认只响应右键，左键需代码显式打开；Placement 锚定按钮底部。

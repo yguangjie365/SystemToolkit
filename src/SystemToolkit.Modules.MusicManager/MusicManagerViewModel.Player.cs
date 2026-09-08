@@ -232,6 +232,69 @@ public partial class MusicManagerViewModel
         return image;
     }
 
+    // ════════ 音量（审查 P0-1 补齐；引擎侧 Volume/Muted 已实现，此处只做 VM 桥接） ════════
+
+    private double _volume = 1.0;
+    private bool _muted;
+
+    /// <summary>音量（0–1；UI 滑条按百分比绑定）。引擎缺席时只记录值，接线后自动下发。</summary>
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            double clamped = Math.Clamp(value, 0d, 1d);
+            if (SetProperty(ref _volume, clamped))
+            {
+                OnPropertyChanged(nameof(VolumePercent));
+                OnPropertyChanged(nameof(VolumeIconKind));
+                if (clamped > 0 && _muted)
+                {
+                    Muted = false; // 拖动音量即自动解除静音（符合直觉）
+                }
+
+                ApplyVolumeToEngine();
+            }
+        }
+    }
+
+    /// <summary>滑条用的百分比（0–100）。</summary>
+    public double VolumePercent
+    {
+        get => _volume * 100d;
+        set => Volume = value / 100d;
+    }
+
+    /// <summary>静音开关（静音期间保留音量值，取消静音后恢复）。</summary>
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            if (SetProperty(ref _muted, value))
+            {
+                OnPropertyChanged(nameof(VolumeIconKind));
+                ApplyVolumeToEngine();
+            }
+        }
+    }
+
+    /// <summary>图标档位：静音 / 小音量 / 大音量（供 UI 切换图标几何）。</summary>
+    public string VolumeIconKind =>
+        _muted || _volume <= 0.001 ? "muted" : _volume < 0.5 ? "low" : "high";
+
+    [RelayCommand]
+    private void ToggleMute() => Muted = !Muted;
+
+    private void ApplyVolumeToEngine()
+    {
+        if (ResolveEngine() is { } engine)
+        {
+            engine.Volume = (float)_volume;
+            engine.Muted = _muted;
+        }
+    }
+
     // ════════ 音质菜单 ════════
 
     /// <summary>音质档（值 = 平台 level 参数；标签按 NexBox 音质菜单中文）。</summary>
