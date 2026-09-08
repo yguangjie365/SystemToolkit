@@ -37,13 +37,21 @@ public partial class MusicManagerView : UserControl
         _ = InitializeOnceAsync();
     }
 
-    /// <summary>曲库双击 → 播放该曲（MouseBinding 双击手势被 ListBoxItem 吞掉，改用冒泡事件）。</summary>
+    /// <summary>
+    /// 曲库双击 → 播放该曲。
+    /// ⚠️ 不要用 ItemsControl.ItemsControlFromItemContainer(OriginalSource) 判定——
+    /// 它对容器内部元素（模板中的 TextBlock 等）返回 null，条件永远为 false（2026-09-08 实测回归）。
+    /// 选中状态由单击的 SelectedItem 绑定维护；边界（点在行上但未选中）从行 DataContext 兜底。
+    /// </summary>
     private void OnSongListDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        // 事件源在行模板内，向上找 ListBoxItem 拿数据项
-        if (e.OriginalSource is DependencyObject source
-            && ItemsControl.ItemsControlFromItemContainer(source) is ListBox list
-            && list.SelectedItem is MusicSong)
+        if (_vm.SelectedSong is null
+            && e.OriginalSource is System.Windows.FrameworkElement { DataContext: MusicSong hit })
+        {
+            _vm.SelectedSong = hit;
+        }
+
+        if (_vm.SelectedSong is not null)
         {
             _vm.PlayFromLibraryCommand.Execute(null);
         }

@@ -279,21 +279,33 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null)
         {
+            ScanStatusText = "播放引擎未就绪，无法播放";
             return;
         }
 
         if (IsPlaying)
         {
             engine.Pause();
+            return;
         }
-        else if (QueueCurrent is not null)
+
+        if (QueueCurrent is not null)
         {
             engine.Resume();
+            return;
         }
-        else
+
+        // 程序启动后尚未播放过：以选中曲起播（未选中则从首曲开始），
+        // 🔴 不得静默早退——这是播放按钮的主路径（2026-09-08 真机「没声音」回归修复）
+        MusicSong? start = SelectedSong ?? Songs.FirstOrDefault();
+        if (start is null)
         {
-            await PlayFromLibraryAsync();
+            ScanStatusText = "曲库为空，请先扫描添加音乐";
+            return;
         }
+
+        _queue.SetQueue(Songs, start);
+        await PlayCurrentCoreAsync(engine);
     }
 
     [RelayCommand]
