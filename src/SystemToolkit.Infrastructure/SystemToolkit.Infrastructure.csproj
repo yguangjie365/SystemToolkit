@@ -22,6 +22,7 @@
   <!-- NAudioMusicPlaybackEngine（音乐播放内核：WASAPI / WaveOut）需要 NAudio -->
   <ItemGroup>
     <PackageReference Include="NAudio" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
 </Project>
