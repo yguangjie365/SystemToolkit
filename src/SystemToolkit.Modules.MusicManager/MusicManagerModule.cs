@@ -56,7 +56,7 @@ public sealed class MusicManagerModule : ModuleBase
             sp.GetRequiredService<LocalMusicScanner>(),
             sp.GetRequiredService<IPlaybackQueueService>(),
             sp.GetRequiredKeyedService<ILogger>("musicmanager"),
-            engineProvider: () => sp.GetService<IMusicPlaybackEngine>(), // 引擎可选（MUSIC-4 合入前 null）
+            engineProvider: () => sp.GetService<IMusicPlaybackEngine>(), // 引擎可选依赖（DI 未注册时为 null，模块降级可用）
             tagReader: sp.GetRequiredService<IMusicTagReader>(),
             dispatcher: System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<MusicManagerView>();

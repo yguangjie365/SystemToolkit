@@ -167,6 +167,7 @@ public partial class MusicManagerViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStartScan))]
     private async Task ScanAsync()
     {
+        WireEngineOnce(); // 扫描按钮不受 IsEngineReady 禁用——是引擎热接通后的自愈入口（审查 🔴-2 采纳）
         string? picked = PickFolder?.Invoke();
         if (string.IsNullOrWhiteSpace(picked) || !Directory.Exists(picked))
         {
@@ -238,7 +239,7 @@ public partial class MusicManagerViewModel : ObservableObject
 
     // ════════ 播放 ════════
 
-    /// <summary>解析引擎（null = MUSIC-4 未合入，播放禁用）。每次操作前取，便于热接通。</summary>
+    /// <summary>解析引擎（可选依赖：DI 未注册时为 null，播放禁用）。每次操作前取，便于热接通。</summary>
     private IMusicPlaybackEngine? ResolveEngine() => _engineProvider?.Invoke();
 
     private bool _engineWired;
@@ -277,6 +278,7 @@ public partial class MusicManagerViewModel : ObservableObject
     [RelayCommand]
     private async Task PlayFromLibraryAsync()
     {
+        WireEngineOnce(); // 引擎热接通自愈：若此前未接线，此时补接并刷新 IsEngineReady（审查 🔴-2 采纳）
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null || SelectedSong is null)
         {
@@ -293,6 +295,7 @@ public partial class MusicManagerViewModel : ObservableObject
     [RelayCommand]
     private async Task PlayPauseAsync()
     {
+        WireEngineOnce(); // 引擎热接通自愈（审查 🔴-2 采纳）
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null)
         {
@@ -454,7 +457,7 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null)
         {
-            return; // MUSIC-4 未合入：保持可重试，下次 InitializeAsync 再接
+            return; // 引擎未注册：保持可重试（InitializeAsync / 播放 / 扫描入口都会再尝试接线）
         }
 
         _engineWired = true;
@@ -493,18 +496,35 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private bool _seeking;
 
-    /// <summary>拖动进度条开始：引擎位置刷新期间暂停回写 Slider（避免拖动与轮询打架）。</summary>
+    /// <summary>拖动开始：引擎位置刷新期间暂停回写 Slider（避免拖动与轮询打架）。</summary>
     public void BeginSeek() => _seeking = true;
 
     /// <summary>拖动结束：按百分比 Seek 到目标位置并恢复位置回写。</summary>
     public void EndSeek(double percent)
     {
         IMusicPlaybackEngine? engine = ResolveEngine();
-        if (engine is not null && engine.Duration > TimeSpan.Zero)
+        if (engine is null)
         {
-            engine.Seek(TimeSpan.FromMilliseconds(engine.Duration.TotalMilliseconds * Math.Clamp(percent, 0, 100) / 100));
+            ScanStatusText = "播放引擎未就绪，无法定位进度";
+            _seeking = false;
+            return;
         }
 
+        if (engine.Duration <= TimeSpan.Zero)
+        {
+            // 🔴 时长未知：显式提示，禁止「拖了没反应」的静默（审查 🔴-1 采纳）
+            ScanStatusText = "当前曲目尚未开始播放或时长未知，无法定位进度";
+            _seeking = false;
+            return;
+        }
+
+        var target = TimeSpan.FromMilliseconds(
+            engine.Duration.TotalMilliseconds * Math.Clamp(percent, 0, 100) / 100);
+        engine.Seek(target);
+        // 立即本地回显，不等下一次位置轮询（审查 🟠-2 采纳：消除拖动结束的视觉延迟）
+        PositionCurrentText = FormatTime(target);
+        PositionDurationText = FormatTime(engine.Duration);
+        ProgressValue = Math.Clamp(percent, 0, 100);
         _seeking = false;
     }
 
@@ -616,6 +636,12 @@ public partial class MusicManagerViewModel : ObservableObject
             // 歌词读取失败不影响播放，但要可见（🔴 不静默）
             _log.Warn($"[Music] 歌词加载失败：{song.Name}（{ex.Message}）");
             doc = LyricDocument.None();
+        }
+
+        // 🔴 快速切歌竞态防护：A 曲的慢 IO 若晚于 B 曲完成，不得覆盖 B 的歌词
+        if (!ReferenceEquals(song, _queue.Current))
+        {
+            return;
         }
 
         RunOnUi(() => ApplyLyrics(doc));

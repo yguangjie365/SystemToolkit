@@ -34,7 +34,19 @@ public partial class MusicManagerView : UserControl
             return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
         };
 
+        // 订阅平衡：Loaded 订阅 / Unloaded 退订（View/VM 均为 DI 单例，Shell 切换导航会卸载重挂同一实例；
+        // 不退订则隐藏中的旧实例继续消费 VM 事件）。「-= 先行」保证 Loaded 重复触发也只有一个订阅
+        _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        _vm.PropertyChanged += OnViewModelPropertyChanged;
+        UpdateDiscSpin(); // 重挂后同步黑胶状态（Unloaded 时已暂停；若正在播放需恢复旋转）
+
         _ = InitializeOnceAsync();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        _discSpin?.Pause(DiscHost); // 切走页面：黑胶暂停，避免不可见空转（审查 🟠-1 采纳——修正其论据后落地）
     }
 
     /// <summary>
@@ -145,7 +157,6 @@ public partial class MusicManagerView : UserControl
         }
 
         _initialized = true;
-        _vm.PropertyChanged += OnViewModelPropertyChanged;
         try
         {
             await _vm.InitializeAsync();
