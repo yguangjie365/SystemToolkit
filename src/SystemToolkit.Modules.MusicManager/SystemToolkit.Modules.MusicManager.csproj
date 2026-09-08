@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
