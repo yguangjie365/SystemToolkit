@@ -118,6 +118,35 @@ public partial class FileTransferView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 拖到哪行就发到哪行（审查 🔴-3 采纳）：沿可视树向上找 ListBoxItem 取行 DataContext，
+    /// 找不到再回退 SelectedItem——不再要求「先选中再拖」。
+    /// ⚠️ 不要用 ItemsControl.ItemsControlFromItemContainer——它对容器内部元素返回 null
+    /// （MusicManager 双击回归同款教训，2026-09-08 实证）。
+    /// </summary>
+    private static object? ResolveRowUnderMouse(object? source, ListBox list)
+    {
+        if (source is not DependencyObject start)
+        {
+            return list.SelectedItem;
+        }
+
+        DependencyObject d = start;
+        while (d is not null)
+        {
+            if (d is ListBoxItem item)
+            {
+                return item.DataContext;
+            }
+
+            d = d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+
+        return list.SelectedItem;
+    }
+
     private void OnDiscoveredDeviceDrop(object sender, DragEventArgs e)
     {
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
@@ -125,13 +154,18 @@ public partial class FileTransferView : UserControl
             return;
         }
 
-        if (sender is ListBox { SelectedItem: DiscoveredDeviceRowVm device })
+        if (sender is not ListBox list)
+        {
+            return;
+        }
+
+        if (ResolveRowUnderMouse(e.OriginalSource, list) is DiscoveredDeviceRowVm device)
         {
             _ = Vm.Desktop.SendFilesToAsync(device.Model.IPAddress.ToString(), device.Model.TransferPort, files);
         }
         else
         {
-            System.Windows.MessageBox.Show("请先选中目标设备行，再拖入文件。", "文件互传",
+            System.Windows.MessageBox.Show("请把文件拖到目标设备行上，再松开发送。", "文件互传",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
@@ -143,7 +177,12 @@ public partial class FileTransferView : UserControl
             return;
         }
 
-        if (sender is ListBox { SelectedItem: KnownPeerRowVm peer }
+        if (sender is not ListBox list)
+        {
+            return;
+        }
+
+        if (ResolveRowUnderMouse(e.OriginalSource, list) is KnownPeerRowVm peer
             && System.Net.IPAddress.TryParse(peer.Ip, out _)
             && peer.Port is >= 1 and <= 65535)
         {
@@ -151,7 +190,7 @@ public partial class FileTransferView : UserControl
         }
         else
         {
-            System.Windows.MessageBox.Show("请先选中目标设备行（IP/端口需合法），再拖入文件。", "文件互传",
+            System.Windows.MessageBox.Show("请把文件拖到目标已知设备行上（IP/端口需合法），再松开发送。", "文件互传",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }

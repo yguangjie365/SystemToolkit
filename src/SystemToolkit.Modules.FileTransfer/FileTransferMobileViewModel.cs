@@ -26,6 +26,50 @@ public partial class FileTransferMobileViewModel : ObservableObject
         _log = log;
     }
 
+    private static readonly string MobileConfigPath = Path.Combine(
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+        "SystemToolkit", "net", "filetransfer-mobile.json");
+
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+
+    private sealed record MobileConfig(string? ShareDirectory);
+
+    /// <summary>页面 Loaded：恢复上次共享目录（审查 🟠-3 采纳——手机通道免每次重选）。</summary>
+    public void Initialize()
+    {
+        try
+        {
+            if (File.Exists(MobileConfigPath))
+            {
+                MobileConfig? config = System.Text.Json.JsonSerializer.Deserialize<MobileConfig>(
+                    File.ReadAllText(MobileConfigPath), JsonOpts);
+                if (!string.IsNullOrWhiteSpace(config?.ShareDirectory))
+                {
+                    ShareDirectory = config.ShareDirectory;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log("[手机] ⚠️ 配置读取失败（使用默认值）：" + ex.Message);
+        }
+    }
+
+    /// <summary>Web 启动成功即持久化共享目录（原子写）。</summary>
+    private void SaveShareDirectory()
+    {
+        try
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(MobileConfigPath)!);
+            AtomicFile.WriteAllText(MobileConfigPath,
+                System.Text.Json.JsonSerializer.Serialize(new MobileConfig(ShareDirectory), JsonOpts));
+        }
+        catch (Exception ex)
+        {
+            _log("[手机] ⚠️ 配置保存失败：" + ex.Message);
+        }
+    }
+
     /// <summary>确认对话框回调（由组合根转接）。</summary>
     public Func<string, string, bool>? ConfirmRequest { get; set; }
 
@@ -68,6 +112,7 @@ public partial class FileTransferMobileViewModel : ObservableObject
             QrImage = RenderQr(_web.LanUrl);
             RefreshPairingDisplay();
             EnsureCodeTimer();
+            SaveShareDirectory();
             _log($"[手机] ✅ Web 服务已启动：{_web.LanUrl}（{(_web.IsHttps ? "HTTPS 加密" : "⚠️ HTTP 未加密")}），配对码 10 分钟轮换");
         }
         catch (Exception ex)

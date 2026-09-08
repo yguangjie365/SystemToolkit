@@ -33,10 +33,11 @@ public partial class FileTransferViewModel : ObservableObject
         TransferHistoryService history,
         IFileWebServer webServer,
         PairingService pairing,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
-        Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger);
+        Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger, dispatcher);
         Mobile = new FileTransferMobileViewModel(webServer, pairing, Log);
     }
 
@@ -51,6 +52,7 @@ public partial class FileTransferViewModel : ObservableObject
     public Task LoadAsync()
     {
         Desktop.Initialize();
+        Mobile.Initialize(); // 手机通道：恢复上次共享目录（审查 🟠-3 采纳）
         return Task.CompletedTask;
     }
 }

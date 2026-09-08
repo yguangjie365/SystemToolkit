@@ -37,7 +37,16 @@ public sealed class FileTransferModule : ModuleBase
         // 统一配对模型：Web 通道与桌面 TCP 通道共用同一 PairingService 实例（批次二）
         services.AddSingleton<PairingService>();
 
-        services.AddSingleton<FileTransferViewModel>();
+        // 工厂注册：显式传 UI Dispatcher（后台事件编组）+ 键控日志器（原纯类型注册下
+        // ILogger? 可选参数拿到的是 null → NullLogger，键控 "filetransfer" 日志器从未被用上）
+        services.AddSingleton(sp => new FileTransferViewModel(
+            sp.GetRequiredService<IDeviceDiscoveryService>(),
+            sp.GetRequiredService<FileTransferService>(),
+            sp.GetRequiredService<TransferHistoryService>(),
+            sp.GetRequiredService<IFileWebServer>(),
+            sp.GetRequiredService<PairingService>(),
+            sp.GetRequiredKeyedService<ILogger>("filetransfer"),
+            System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<FileTransferView>();
     }
 }

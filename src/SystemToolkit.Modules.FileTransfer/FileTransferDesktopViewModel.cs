@@ -99,24 +99,63 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     private readonly TransferHistoryService _history;
     private readonly Action<string> _log;
     private readonly ILogger _logger;
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
 
     public FileTransferDesktopViewModel(
         IDeviceDiscoveryService discovery,
         FileTransferService transfer,
         TransferHistoryService history,
         Action<string> log,
-        ILogger logger)
+        ILogger logger,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         _discovery = discovery;
         _transfer = transfer;
         _history = history;
         _log = log;
         _logger = logger;
+        _dispatcher = dispatcher;
 
         _transfer.TaskUpdated += OnTaskUpdated;
         _transfer.TaskCompleted += OnTaskCompleted;
         _transfer.TransferRequested += OnTransferRequested;
         _discovery.DeviceChanged += OnDeviceChanged;
+    }
+
+    /// <summary>
+    /// 后台事件 → UI 线程编组（审查 🔴-1 采纳：替换 Application.Current?.Dispatcher.Invoke——
+    /// 同步 Invoke 有死锁风险、Application 为 null 时静默跳过；与 MusicManager 统一为
+    /// 「显式 Dispatcher 注入 + 死线程检测 + BeginInvoke」模式）。测试传 null 直执行。
+    /// </summary>
+    private void RunOnUi(Action action)
+    {
+        System.Windows.Threading.Dispatcher? d = _dispatcher;
+        if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
+        {
+            RunGuarded(action);
+        }
+        else if (d.CheckAccess())
+        {
+            RunGuarded(action);
+        }
+        else
+        {
+            d.BeginInvoke(() => RunGuarded(action));
+        }
+    }
+
+    /// <summary>处理器异常不得反噬服务回调线程：落可见日志（🔴 不静默）。</summary>
+    private void RunGuarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ⚠️ 界面更新异常：{ex.Message}");
+            _logger.Error("[互传] UI 事件处理器异常", ex);
+        }
     }
 
     /// <summary>确认对话框回调（由组合根转接）。</summary>
@@ -312,8 +351,11 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [RelayCommand]
     private void AddKnownPeer()
     {
-        KnownPeers.Add(new KnownPeerRowVm());
-        _log("[互传] 已添加空白已知设备行（填写后保存）");
+        // 带默认名并自动选中（审查 🔴-2 采纳）：避免完全空白行漏填漏存
+        var row = new KnownPeerRowVm { Name = "新设备" };
+        KnownPeers.Add(row);
+        SelectedKnownPeer = row;
+        _log("[互传] 已添加「新设备」并选中（填写 IP 后点保存）");
     }
 
     [RelayCommand]
@@ -357,7 +399,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     private void OnDeviceChanged(object? sender, DeviceChangeEventArgs e)
     {
         // 事件来自 UDP 回调线程 → 封送 UI 线程
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        RunOnUi(() =>
         {
             DiscoveredDevices.Clear();
             foreach (DiscoveredDevice device in _discovery.Devices.OrderByDescending(d => d.IsOnline).ThenBy(d => d.Name))
@@ -465,7 +507,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     private void OnTaskUpdated(object? sender, TransferTask task)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        RunOnUi(() =>
         {
             TransferTaskRowVm? row = ActiveTasks.FirstOrDefault(r => r.Model.Id == task.Id);
             if (row is null)
@@ -487,7 +529,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     private void OnTaskCompleted(object? sender, TransferTask task)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        RunOnUi(() =>
         {
             TransferTaskRowVm? row = ActiveTasks.FirstOrDefault(r => r.Model.Id == task.Id);
             if (row is not null)
@@ -556,6 +598,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         TransferTaskRowVm? target = row ?? SelectedTask;
         if (target is null)
         {
+            _log("[互传] ⚠️ 请先选择要取消的任务"); // 🔴 不静默（审查 🟠-5 采纳）
             return;
         }
 
@@ -567,7 +610,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     private void OnTransferRequested(object? sender, TransferRequestEventArgs e)
     {
         // 事件来自 WatsonTcp 回调线程：确认弹窗必须在 UI 线程
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        RunOnUi(() =>
         {
             bool accept = ConfirmRequest?.Invoke(
                 "接收文件请求",
