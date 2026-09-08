@@ -14,11 +14,15 @@
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
         <local:EmptyCollectionToVisibilityConverter x:Key="EmptyToVis"/>
         <local:StringEqualsToVisibilityConverter x:Key="StrEqToVis"/>
+        <local:EmptyStringToVisibilityConverter x:Key="EmptyStrToVis"/>
         <local:RatioConverter x:Key="Ratio"/>
         <!-- 音量图标（审查 P0-1）：喇叭 + 0/1/2 道声波，静音态多一道斜杠 -->
         <Geometry x:Key="IconVolumeHigh">M4,9 H8 L13,5 V19 L8,15 H4 Z M16,8.5 A4.5,4.5 0 0 1 16,15.5 M18.5,6 A8,8 0 0 1 18.5,18</Geometry>
         <Geometry x:Key="IconVolumeLow">M4,9 H8 L13,5 V19 L8,15 H4 Z M16,9.5 A3,3 0 0 1 16,14.5</Geometry>
         <Geometry x:Key="IconVolumeMuted">M4,9 H8 L13,5 V19 L8,15 H4 Z M17,9.5 L21.5,14 M21.5,9.5 L17,14</Geometry>
+        <!-- 播放队列（图3 对齐）。⚠️ 必须页内定义：ViewLoadSmoke 测试宿主不合并 App 级资源，
+             StaticResource 指向 Icons.xaml 会在解析期抛"找不到资源"（实测教训 2026-09-09） -->
+        <Geometry x:Key="IconQueue">M8.1 16.6A1.7 1.7 0 1 1 4.7 16.6A1.7 1.7 0 1 1 8.1 16.6 M8.1 16.6V7.4 M8.1 7.4C11.2 7.3 12.2 9.4 11 10.8 M12.4 8.6H19.4M12.4 12.8H19.4M12.4 17H19.4</Geometry>
         <!-- 列表空态提示样式（审查 P0-2）：统一文案外观，避免每处内联重复 -->
         <Style x:Key="ListEmptyHint" TargetType="TextBlock">
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
@@ -465,11 +469,25 @@
 
                 <!-- 态③ 歌单详情（标题/全部播放/返回已上移左卡卡头） -->
                 <DockPanel Visibility="{Binding IsPlaylistDetailView, Converter={StaticResource BoolToVis}}">
+                    <!-- 图2 对齐：搜索本歌单（只过滤当前歌单显示） -->
+                    <Grid DockPanel.Dock="Top" Margin="2,0,2,6">
+                        <TextBox Height="30" Padding="8,5,8,5" VerticalContentAlignment="Center"
+                                 Text="{Binding PlaylistFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="搜索本歌单"/>
+                        <TextBlock Text="搜索本歌单" FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"
+                                   Margin="10,0,0,0" IsHitTestVisible="False"
+                                   Visibility="{Binding PlaylistFilterText, Converter={StaticResource EmptyStrToVis}}"/>
+                    </Grid>
                     <!-- 审查 P0-2：空态 -->
                     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource ListEmptyHint}"
                                Text="该歌单暂无曲目（或加载失败，见状态行）"
                                Visibility="{Binding PlaylistTracks.Count, Converter={StaticResource EmptyToVis}}"/>
-                    <ListBox x:Name="PlaylistTrackList" ItemsSource="{Binding PlaylistTracks}"
+                    <!-- 搜索字把列表过滤光时的提示（与"歌单为空"区分） -->
+                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource ListEmptyHint}"
+                               Text="没有匹配的曲目 — 换个关键字试试"
+                               Visibility="{Binding PlaylistFilterNoMatch, Converter={StaticResource BoolToVis}}"/>
+                    <ListBox x:Name="PlaylistTrackList" ItemsSource="{Binding PlaylistTracksView}"
                              MouseDoubleClick="OnPlaylistTrackDoubleClick"
                              Background="Transparent" BorderThickness="0"
                              HorizontalContentAlignment="Stretch"
@@ -675,7 +693,7 @@
                 <TextBlock Grid.Row="6" Style="{StaticResource ListEmptyHint}"
                            Text="队列为空 — 双击曲目即可加入"
                            Visibility="{Binding UpNext.Count, Converter={StaticResource EmptyToVis}}"/>
-                <ListBox Grid.Row="6" ItemsSource="{Binding UpNext}"
+                <ListBox Grid.Row="6" x:Name="UpNextList" ItemsSource="{Binding UpNext}"
                          Background="Transparent" BorderThickness="0"
                          HorizontalContentAlignment="Stretch"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -779,12 +797,12 @@
                                        FontSize="{DynamicResource Font_SizeCaption}"
                                        Foreground="{StaticResource Brush_TextSecondary}"/>
                         </Border>
-                        <!-- 审查 P0-1：音量。左键弹出滑块（ContextMenu 只响应右键，故用 Popup） -->
+                        <!-- 音量（图3 对齐改为常驻横向滑块）：喇叭点击=静音切换，滑块直接调节 -->
                         <Button x:Name="VolumeButton" Width="28" Height="28" Padding="0"
                                 Background="Transparent" BorderThickness="0"
-                                Click="OnVolumeButtonClick"
-                                AutomationProperties.Name="音量"
-                                ToolTip="音量（点击调节）">
+                                Command="{Binding ToggleMuteCommand}"
+                                AutomationProperties.Name="静音切换"
+                                ToolTip="静音 / 取消静音">
                             <Grid>
                                 <Path Data="{StaticResource IconVolumeHigh}" StrokeLineJoin="Round"
                                       Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
@@ -800,6 +818,20 @@
                                       Visibility="{Binding VolumeIconKind, Converter={StaticResource StrEqToVis}, ConverterParameter=muted}"/>
                             </Grid>
                         </Button>
+                        <Slider Minimum="0" Maximum="100"
+                                Width="{DynamicResource Slider_HorizontalWidth}"
+                                Value="{Binding VolumePercent, Mode=TwoWay}"
+                                IsMoveToPointEnabled="True" VerticalAlignment="Center" Margin="2,0,10,0"
+                                AutomationProperties.Name="音量大小"/>
+                        <!-- 队列（图3 对齐）：收起全屏并定位到右卡 Up Next -->
+                        <Button Width="28" Height="28" Padding="0" Margin="0,0,10,0"
+                                Background="Transparent" BorderThickness="0"
+                                Click="OnQueueButtonClick" AutomationProperties.Name="播放队列"
+                                ToolTip="播放队列">
+                            <Path Data="{StaticResource IconQueue}" StrokeLineJoin="Round"
+                                  Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
                         <Button Width="28" Height="28" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 Command="{Binding OpenFullPlayerCommand}" ToolTip="展开完整播放器">
@@ -812,41 +844,6 @@
                                    Foreground="{StaticResource Brush_Warning}"
                                    Visibility="{Binding IsEngineReady, Converter={StaticResource InverseToVis}}"/>
                     </StackPanel>
-                    <!-- 音量弹出面板（审查 P0-1）：竖向滑块 + 静音切换，点外面自动收起 -->
-                    <Popup x:Name="VolumePopup" PlacementTarget="{Binding ElementName=VolumeButton}"
-                           Placement="Top" StaysOpen="False" AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                        <Border Background="{StaticResource Brush_Surface}"
-                                BorderBrush="{StaticResource Brush_SurfaceAlt}" BorderThickness="1"
-                                CornerRadius="{DynamicResource Radius_LG}" Padding="12,10"
-                                Margin="0,0,0,6">
-                            <StackPanel>
-                                <Slider Minimum="0" Maximum="100" Orientation="Vertical"
-                                        Width="{DynamicResource Slider_VerticalWidth}"
-                                        Height="{DynamicResource Slider_VerticalHeight}"
-                                        HorizontalAlignment="Center"
-                                        Value="{Binding VolumePercent, Mode=TwoWay}"
-                                        IsMoveToPointEnabled="True"
-                                        AutomationProperties.Name="音量大小"/>
-                                <Button Height="24" Padding="8,0" Margin="0,8,0,0"
-                                        Command="{Binding ToggleMuteCommand}"
-                                        AutomationProperties.Name="静音切换">
-                                    <TextBlock Text="{Binding Muted, Mode=OneWay}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="静音"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Muted, Mode=OneWay}" Value="True">
-                                                        <Setter Property="Text" Value="取消静音"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-                    </Popup>
                 </Grid>
                 <Grid Grid.Row="1" Margin="2,4,2,0">
                     <Grid.ColumnDefinitions>

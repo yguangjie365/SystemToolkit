@@ -147,6 +147,9 @@ public partial class MusicManagerViewModel : ObservableObject
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
         SongsView = CollectionViewSource.GetDefaultView(Songs);
         SongsView.Filter = o => o is MusicSong s && MatchesFilter(s);
+        // 图2 对齐（2026-09-09）：歌单详情内搜索——过滤当前歌单曲目（标题/副题/艺人）
+        PlaylistTracksView = CollectionViewSource.GetDefaultView(PlaylistTracks);
+        PlaylistTracksView.Filter = o => o is OnlineResultRowVm r && MatchesPlaylistFilter(r);
         // 🔴 队列服务契约未承诺事件线程（审查 🔴-2 防御性采纳）：与引擎事件同规则——
         // 一律经 RunOnUi 编组后再碰 ObservableCollection / 触发绑定刷新
         _queue.QueueChanged += () => RunOnUi(RebuildUpNext);

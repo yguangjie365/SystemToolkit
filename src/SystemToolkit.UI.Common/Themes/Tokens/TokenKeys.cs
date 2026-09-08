@@ -147,6 +147,7 @@ public static class TokenKeys
         public const string Icon_Stroke = "Icon_Stroke";
         public const string Slider_VerticalWidth = "Slider_VerticalWidth";
         public const string Slider_VerticalHeight = "Slider_VerticalHeight";
+        public const string Slider_HorizontalWidth = "Slider_HorizontalWidth";
     }
 
     public static class Spacing

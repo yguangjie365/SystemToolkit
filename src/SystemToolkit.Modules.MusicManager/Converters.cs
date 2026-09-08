@@ -80,6 +80,16 @@ public sealed class StringEqualsToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>string 为空/null → Visible（输入框水印用，与 StrToVis 相反）。</summary>
+public sealed class EmptyStringToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => string.IsNullOrEmpty(value as string) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>
 /// 集合计数 0（或 null）→ Visible，否则 Collapsed（列表空态提示用，审查 P0-2）。
 /// 直接绑 <c>ItemsSource</c> 的 Count，无需在 VM 额外暴露 IsEmpty 属性。

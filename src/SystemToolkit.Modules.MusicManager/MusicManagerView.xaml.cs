@@ -148,13 +148,15 @@ public partial class MusicManagerView : UserControl
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
 
-    /// <summary>音量按钮：左键弹出音量滑块面板（Popup；图标本身不切静音，静音在面板内）。</summary>
-    private void OnVolumeButtonClick(object sender, RoutedEventArgs e)
+    /// <summary>队列按钮（图3 对齐）：收起全屏播放器并定位到右卡 Up Next 列表。</summary>
+    private void OnQueueButtonClick(object sender, RoutedEventArgs e)
     {
-        if (VolumePopup is not null)
+        if (_vm.IsFullPlayerOpen)
         {
-            VolumePopup.IsOpen = true;
+            _vm.CloseFullPlayerCommand.Execute(null);
         }
+
+        UpNextList?.BringIntoView();
     }
 
     /// <summary>

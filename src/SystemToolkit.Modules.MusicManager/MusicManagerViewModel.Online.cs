@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using SystemToolkit.Core.Music.Models;
 using SystemToolkit.Core.Music.Online;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -389,6 +390,40 @@ public partial class MusicManagerViewModel
 
     public ObservableCollection<OnlineResultRowVm> PlaylistTracks { get; } = [];
 
+    /// <summary>歌单详情的过滤视图（图2 对齐：搜索本歌单；主构造函数里挂 Filter）。</summary>
+    public ICollectionView PlaylistTracksView { get; private set; } = null!;
+
+    private string _playlistFilterText = string.Empty;
+
+    /// <summary>歌单内搜索关键字：只过滤当前打开歌单的显示，不动源集合。</summary>
+    public string PlaylistFilterText
+    {
+        get => _playlistFilterText;
+        set
+        {
+            if (SetProperty(ref _playlistFilterText, value))
+            {
+                PlaylistTracksView.Refresh();
+                OnPropertyChanged(nameof(PlaylistFilterNoMatch));
+            }
+        }
+    }
+
+    /// <summary>有曲目但被搜索字过滤光 → 提示"无匹配"（与"歌单为空"区分）。</summary>
+    public bool PlaylistFilterNoMatch =>
+        PlaylistTracks.Count > 0 && (PlaylistTracksView?.IsEmpty ?? false);
+
+    private bool MatchesPlaylistFilter(OnlineResultRowVm row)
+    {
+        if (string.IsNullOrWhiteSpace(_playlistFilterText))
+        {
+            return true;
+        }
+
+        return (row.Title?.Contains(_playlistFilterText, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (row.Subtitle?.Contains(_playlistFilterText, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
     [RelayCommand]
     private async Task OpenPlaylistAsync(PlaylistRowVm? row)
     {
@@ -399,6 +434,7 @@ public partial class MusicManagerViewModel
 
         OpenPlaylist = row.Playlist;
         OnPropertyChanged(nameof(ViewTitle));
+        PlaylistFilterText = string.Empty; // 换歌单即清空上一次的站内搜索
         List<OnlineTrack> tracks = await _catalog.LoadPlaylistTracksAsync(
             row.Playlist.Provider, row.Playlist.Id);
         PlaylistTracks.Clear();
@@ -408,6 +444,7 @@ public partial class MusicManagerViewModel
         }
 
         BeginCoverLoads(PlaylistTracks);
+        OnPropertyChanged(nameof(PlaylistFilterNoMatch));
         OnlineStatusText = _catalog.CatalogError;
         CurrentView = ContentViewMode.PlaylistDetail;
     }
