@@ -128,6 +128,7 @@
                     <ListBox x:Name="RuleList" Style="{StaticResource ListLog}"
                              AllowDrop="True"
                              ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                              PreviewMouseLeftButtonDown="RuleList_PreviewMouseLeftButtonDown"
                              MouseMove="RuleList_MouseMove"
@@ -208,6 +209,7 @@
                     </Grid>
                     <Grid Grid.Row="1">
                         <ListView ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                                   BorderThickness="0" Background="Transparent"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListView.ItemContainerStyle>
@@ -316,6 +318,7 @@
                 <Grid Grid.Row="0" Margin="0,8,0,6">
                     <StackPanel Orientation="Horizontal">
                         <ToggleButton x:Name="LogToggle" IsChecked="True" Content="▾ 操作日志" FontSize="{DynamicResource Font_SizeBodySm}"
+                                      Checked="OnLogToggleChanged" Unchecked="OnLogToggleChanged"
                                       Foreground="{StaticResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
                         <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0">
                             <Run Text="{Binding LogLines.Count, Mode=OneWay}"/><Run Text=" 行"/>

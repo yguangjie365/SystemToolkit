@@ -117,7 +117,7 @@ public partial class FileBackupViewModel
     {
         try
         {
-            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log);
+            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log, _dispatcher);
             Log($"[备份] ▶ 开始备份：{rule.RuleName}（{rule.Sources().Count} 个源）");
             BackupResult result = await _backup.BackupRuleAsync(rule, reporter, _backupCts!.Token).ConfigureAwait(true);
             Log(result.Success

@@ -100,7 +100,7 @@ public partial class FileBackupViewModel
         try
         {
             var verifier = new SnapshotVerifier(_config.Settings.MaxWorkers, _logger);
-            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log);
+            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log, _dispatcher);
             Log($"[校验] ▶ 开始校验「{SelectedRule.RuleName}」{SelectedSnapshot.DisplayTime}（{info.Files.Count} 个文件）");
             SnapshotVerifyReport report = await verifier.VerifyAsync(info, snapDir, reporter).ConfigureAwait(true);
             Log(report.Success ? $"[校验] ✅ {report.Message}" : $"[校验] ⚠️ {report.Message}");
@@ -208,7 +208,7 @@ public partial class FileBackupViewModel
         RefreshCanExecute();
         try
         {
-            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log);
+            var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log, _dispatcher);
             Log($"[恢复] ▶ 开始恢复「{info.RuleName}」→ {target}");
             RestoreReport report = await _restore.RestoreSnapshotAsync(
                 info, target, policy,
@@ -285,6 +285,12 @@ public partial class FileBackupViewModel
         foreach ((BackupRule rule, SnapshotInfo info) in targets)
         {
             string target = choice.TargetRoot ?? rule.Sources().FirstOrDefault() ?? "";
+            if (choice.TargetRoot is null && rule.Sources().Count() > 1)
+            {
+                // 🟠-4 产品语义现状：未指定目标时仅回首个源（多源原位还原待 BKP-3 收口时定夺）——显式日志不静默
+                Log($"[恢复] ⚠️ 「{rule.RuleName}」为多源规则，当前仅以首个源作为恢复目标：{target}");
+            }
+
             if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target))
             {
                 Log($"[恢复] ⚠️ 跳过「{rule.RuleName}」：恢复目标不存在（{target}）");
@@ -318,8 +324,10 @@ public partial class FileBackupViewModel
         }
 
         SnapshotRowVm target = SelectedSnapshot;
+        // 审查 🟠-3 采纳：只展示该快照自身信息，不展示 SnapRoot（易被误解为要删整棵规则快照树）
         if (ConfirmRequest?.Invoke("删除快照",
-                $"确定删除 {target.DisplayTime} 的快照吗？\n目录：{manager.SnapRoot}\n\n此操作不可撤销。") != true)
+                $"确定删除 {target.DisplayTime} 的快照吗？\n" +
+                $"（{target.FileCount} 个文件，{target.SizeText}）\n\n此操作不可撤销。") != true)
         {
             return;
         }

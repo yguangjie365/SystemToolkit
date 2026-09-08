@@ -80,6 +80,8 @@ public partial class FileBackupViewModel : ObservableObject
     private readonly ILogger _logger;
     private CancellationTokenSource? _backupCts;
 
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
+
     public FileBackupViewModel(
         BackupConfigService config,
         RuleManager rules,
@@ -88,7 +90,8 @@ public partial class FileBackupViewModel : ObservableObject
         IRestorePreviewProvider preview,
         BackupTaskSchedulerService scheduler,
         ElevatedVssClient? vssClient = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         _config = config;
         _rules = rules;
@@ -98,6 +101,7 @@ public partial class FileBackupViewModel : ObservableObject
         _scheduler = scheduler;
         _vssClient = vssClient;
         _logger = logger ?? NullLogger.Instance;
+        _dispatcher = dispatcher;
 
         // 初始化时检测VSS可用性
         CheckVssAvailability();
@@ -121,6 +125,12 @@ public partial class FileBackupViewModel : ObservableObject
 
     /// <summary>恢复选项对话框回调（View 注入；取消返回 null）——参数：摘要文本、原始位置路径。</summary>
     public Func<string, string, RestoreChoice?>? RestoreRequest { get; set; }
+
+    /// <summary>导出保存路径回调（View 注入；取消返回 null）——审查 🔴-3 采纳：VM 不直接弹对话框。</summary>
+    public Func<string?>? PickSavePath { get; set; }
+
+    /// <summary>导入打开路径回调（View 注入；取消返回 null）——审查 🔴-3 采纳。</summary>
+    public Func<string?>? PickOpenPath { get; set; }
 
     public ObservableCollection<RuleRowVm> Rules { get; } = new();
 
@@ -209,7 +219,7 @@ public partial class FileBackupViewModel : ObservableObject
         // ElevatedVssClient 内部会检查 _helperPath，这里通过反射或简单探测
         // 由于无法直接访问私有字段，我们采用保守策略：假设注入即表示可用
         // 实际运行时若 UAC 被拒绝，BackupService 会回退并记录日志
-        VssStatus = "可用（点击备份时将请求 UAC 提权）";
+        VssStatus = "已配置（首次备份时将请求 UAC 提权）";
         VssStatusColor = ThemeBrush.Find("Brush_Success", "#059669");
     }
 
@@ -276,7 +286,8 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        // 选中即载入编辑表单（快照列表随之刷新）
+        // 选中即载入编辑表单（快照列表随之刷新）。
+        // 🟠 注意：主屏已无内嵌表单——这些 Rule*Input/IsEditing 状态仅服务 RuleEditWindow 弹窗
         IsEditing = true;
         EditingRuleId = value.Model.RuleId;
         RuleNameInput = value.Model.RuleName;
@@ -501,20 +512,28 @@ public partial class FileBackupViewModel : ObservableObject
     /// </summary>
     public void MoveRuleByDrag(int oldIndex, int newIndex)
     {
+        // newIndex == Rules.Count 合法——指示线落在最后一条之下即插到末尾（审查 🔴-2 采纳：
+        // 原 >= 校验把末尾插入整个拒掉，指示线会显示但顺序不落库）
         if (oldIndex < 0 || newIndex < 0
-            || oldIndex >= Rules.Count || newIndex >= Rules.Count
+            || oldIndex >= Rules.Count || newIndex > Rules.Count
             || oldIndex == newIndex)
         {
             return;
         }
 
         string movedId = Rules[oldIndex].RuleId;
+        string movedName = Rules[oldIndex].RuleName;
         var ordered = Rules.Select(r => r.RuleId).ToList();
         ordered.RemoveAt(oldIndex);
-        ordered.Insert(newIndex, movedId);
+        if (newIndex > oldIndex)
+        {
+            newIndex--; // 移除后被拖规则右侧的目标索引左移一位（末尾插入 Count → ordered.Count）
+        }
+
+        ordered.Insert(Math.Clamp(newIndex, 0, ordered.Count), movedId);
         _rules.Reorder(ordered);
         _rules.Save();
-        Log($"[备份] 规则顺序已调整：{Rules[oldIndex].RuleName}");
+        Log($"[备份] 规则顺序已调整：{movedName}");
         ReloadRules();
         SelectedRule = Rules.FirstOrDefault(r => r.RuleId == movedId);
     }
@@ -547,22 +566,17 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "导出备份规则",
-            Filter = "JSON 规则文件 (*.json)|*.json",
-            FileName = $"backup-rules_{DateTime.Now:yyyyMMdd_HHmmss}.json",
-        };
-        if (dialog.ShowDialog() != true)
+        string? target = PickSavePath?.Invoke();
+        if (string.IsNullOrEmpty(target))
         {
             return;
         }
 
         try
         {
-            (int count, string target) = _rules.Export(Rules.Select(r => r.RuleId), dialog.FileName);
-            Log($"[备份] ✅ 已导出 {count} 条规则：{target}");
-            _logger.Info($"备份规则导出：{count} 条 → {target}");
+            (int count, string savedTo) = _rules.Export(Rules.Select(r => r.RuleId), target);
+            Log($"[备份] ✅ 已导出 {count} 条规则：{savedTo}");
+            _logger.Info($"备份规则导出：{count} 条 → {savedTo}");
         }
         catch (Exception ex)
         {
@@ -574,12 +588,8 @@ public partial class FileBackupViewModel : ObservableObject
     [RelayCommand]
     private void ImportRules()
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "导入备份规则",
-            Filter = "JSON 规则文件 (*.json)|*.json",
-        };
-        if (dialog.ShowDialog() != true)
+        string? path = PickOpenPath?.Invoke();
+        if (string.IsNullOrEmpty(path))
         {
             return;
         }
@@ -593,7 +603,7 @@ public partial class FileBackupViewModel : ObservableObject
 
         try
         {
-            (int ok, List<string> errors) = _rules.Import(dialog.FileName);
+            (int ok, List<string> errors) = _rules.Import(path);
             foreach (string error in errors)
             {
                 Log("[备份]   ⚠️ " + error);
@@ -789,7 +799,11 @@ public partial class FileBackupViewModel : ObservableObject
     };
 
     /// <summary>IProgressReporter 实现：OnProgress/OnPhase/OnLog 均 UV 封送（服务在后台线程回调）。</summary>
-    private sealed class UiProgressReporter(Action<int, int, string> onProgress, Action<string> onPhase, Action<string> onLog)
+    private sealed class UiProgressReporter(
+        Action<int, int, string> onProgress,
+        Action<string> onPhase,
+        Action<string> onLog,
+        System.Windows.Threading.Dispatcher? dispatcher)
         : IProgressReporter
     {
         public void OnProgress(int done, int total, string phase) => Marshal(() => onProgress(done, total, phase));
@@ -805,17 +819,19 @@ public partial class FileBackupViewModel : ObservableObject
         ///    其它用例创建时，校验命令走到这里直接断掉，日志停在"开始校验"）；
         /// ② 同步 Invoke 在 UI 线程忙碌时会阻塞后台工作线程。
         /// 改为：UI 线程直调；跨线程则 BeginInvoke（不阻塞）；封送失败绝不中断业务，仅降级。
+        /// 🔴 2026-09-08 二修（审查 🔴-1 采纳）：不再抓全局 Application.Current——改为构造注入
+        /// Dispatcher（与 MusicManager 统一）；注入 null（测试宿主）直调，语义与原「app is null」一致。
         /// </summary>
-        private static void Marshal(Action action)
+        private void Marshal(Action action)
         {
-            System.Windows.Application? app = System.Windows.Application.Current;
-            if (app is null)
+            System.Windows.Threading.Dispatcher? d = dispatcher;
+            if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
             {
                 action();
                 return;
             }
 
-            if (app.Dispatcher.CheckAccess())
+            if (d.CheckAccess())
             {
                 action();
                 return;
@@ -823,7 +839,7 @@ public partial class FileBackupViewModel : ObservableObject
 
             try
             {
-                _ = app.Dispatcher.BeginInvoke(action);
+                _ = d.BeginInvoke(action);
             }
             catch (Exception)
             {

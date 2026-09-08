@@ -20,6 +20,7 @@ public partial class FileBackupView : UserControl
     // ── 规则列表拖拽排序状态 ──
     private Point _dragStartPoint;
     private bool _isDragging;
+    private RuleRowVm? _draggedRow;
 
     public FileBackupView(FileBackupViewModel vm)
     {
@@ -58,20 +59,80 @@ public partial class FileBackupView : UserControl
             RestoreDialog.Show(Window.GetWindow(this), summary, originalPath);
         // 规则编辑弹窗（新建/编辑共用；表单已由命令先行填充）
         Vm.EditRuleRequest = () => RuleEditWindow.Show(Window.GetWindow(this), Vm);
+        // 导出保存 / 导入打开路径（审查 🔴-3 采纳：对话框一律 View 注入，VM 不持窗口）
+        Vm.PickSavePath = () =>
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "导出备份规则",
+                Filter = "JSON 规则文件 (*.json)|*.json",
+                FileName = $"backup-rules_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+            };
+            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
+        Vm.PickOpenPath = () =>
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "导入备份规则",
+                Filter = "JSON 规则文件 (*.json)|*.json",
+                CheckFileExists = true,
+            };
+            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
         Vm.Initialize();
     }
 
     // ══════════ 规则列表拖拽排序 ══════════
 
+    /// <summary>操作日志折叠开关（审查 🟠-6 采纳）。⚠️ IsChecked="True" 会在 InitializeComponent
+    /// 解析期触发 Checked——此时 LogHost 尚未赋值，必须判空（XAML 构建期事件坑，2026-09-08）。</summary>
+    private void OnLogToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Primitives.ToggleButton toggle && LogHost is not null)
+        {
+            bool expanded = toggle.IsChecked == true;
+            LogHost.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            toggle.Content = expanded ? "▾ 操作日志" : "▸ 操作日志";
+        }
+    }
+
     private void RuleList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _dragStartPoint = e.GetPosition(null);
         _isDragging = false;
+        // 记录按住的那一行（审查 🟠-5 采纳：不再依赖 SelectedItem——「按住就拖」不至于拖错行）
+        _draggedRow = ResolveRowUnderMouse(e.OriginalSource) as RuleRowVm;
+    }
+
+    /// <summary>沿可视树向上找 ListBoxItem 取行 DataContext（FileTransfer 拖拽同款 helper）。</summary>
+    private static object? ResolveRowUnderMouse(object? source)
+    {
+        if (source is not DependencyObject start)
+        {
+            return null;
+        }
+
+        DependencyObject d = start;
+        while (d is not null)
+        {
+            if (d is ListBoxItem item)
+            {
+                return item.DataContext;
+            }
+
+            d = d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+
+        return null;
     }
 
     private void RuleList_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _isDragging || RuleList.SelectedItem is null)
+        RuleRowVm? dragged = _draggedRow ?? RuleList.SelectedItem as RuleRowVm;
+        if (e.LeftButton != MouseButtonState.Pressed || _isDragging || dragged is null)
         {
             return;
         }
@@ -87,7 +148,7 @@ public partial class FileBackupView : UserControl
         try
         {
             // 自定义格式存对象引用（Serializable 格式会要求 RuleRowVm 可序列化而抛异常）
-            DragDrop.DoDragDrop(RuleList, new DataObject("RuleRow", RuleList.SelectedItem), DragDropEffects.Move);
+            DragDrop.DoDragDrop(RuleList, new DataObject("RuleRow", dragged), DragDropEffects.Move);
         }
         finally
         {

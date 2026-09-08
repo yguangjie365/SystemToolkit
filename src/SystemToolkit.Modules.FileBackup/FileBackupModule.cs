@@ -48,7 +48,18 @@ public sealed class FileBackupModule : ModuleBase
         services.AddSingleton<IRestorePreviewProvider>(sp => sp.GetRequiredService<RestoreService>());
         services.AddSingleton<BackupTaskSchedulerService>();
 
-        services.AddSingleton<FileBackupViewModel>();
+        // 工厂注册：显式传 UI Dispatcher（进度/日志封送，审查 🔴-1 采纳）+ 键控日志器
+        // （原纯类型注册下 ILogger? 可选参数实际拿到 NullLogger，键控 "filebackup" 日志器未被用上）
+        services.AddSingleton(sp => new FileBackupViewModel(
+            sp.GetRequiredService<BackupConfigService>(),
+            sp.GetRequiredService<RuleManager>(),
+            sp.GetRequiredService<IBackupService>(),
+            sp.GetRequiredService<IRestoreService>(),
+            sp.GetRequiredService<IRestorePreviewProvider>(),
+            sp.GetRequiredService<BackupTaskSchedulerService>(),
+            sp.GetRequiredService<ElevatedVssClient>(),
+            sp.GetRequiredKeyedService<ILogger>("filebackup"),
+            System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<FileBackupView>();
     }
 
