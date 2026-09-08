@@ -186,6 +186,11 @@ public partial class NetOptimizeTabViewModel : ObservableObject
         {
             _log("[优化] ⚠️ " + ex.Message);
         }
+        catch (Exception ex)
+        {
+            // 审查 🟠-2：其余异常类型也要用户可见（AsyncRelayCommand 会吞）
+            _log("[优化] ❌ 还原失败：" + ex.Message);
+        }
         finally
         {
             IsBusy = false;
