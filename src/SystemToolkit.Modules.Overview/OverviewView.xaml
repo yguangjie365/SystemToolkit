@@ -350,7 +350,8 @@
             <Border Style="{StaticResource CardBorder}" Padding="0">
                 <!-- 审查 S-4：ListView 置于页面级 ScrollViewer 内会得到无限测量高度，导致虚拟化失效（数百条即卡顿）。
      给 ListView 一个有界视口让其内部 VirtualizingStackPanel 生效；顶部卡片仍在页面 ScrollViewer 中滚动。 -->
-                <ListView ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

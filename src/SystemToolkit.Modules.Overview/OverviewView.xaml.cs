@@ -16,6 +16,20 @@ public partial class OverviewView : UserControl
         InitializeComponent();
         _vm = vm;
         DataContext = _vm;
+        // 导出对话框与用户提示经 View 注入（审查 🔴-1：VM 不直接依赖 SaveFileDialog/MessageBox）
+        _vm.PickSavePath = () =>
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "导出概览报告",
+                FileName = $"SystemToolkit-概览报告-{DateTime.Now:yyyyMMdd-HHmm}",
+                Filter = "Markdown 文档 (*.md)|*.md|所有文件 (*.*)|*.*",
+                DefaultExt = ".md",
+            };
+            return dialog.ShowDialog(System.Windows.Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
+        _vm.NotifyUser = (message, title) => System.Windows.MessageBox.Show(
+            message, title, System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
         Loaded += async (_, _) => await _vm.ActivateAsync();
         Unloaded += (_, _) => _vm.Pause();
     }

@@ -4,7 +4,8 @@ using System.Windows.Data;
 
 namespace SystemToolkit.Modules.Overview;
 
-/// <summary>null → Collapsed（非 null → Visible）：概览卡温度徽章用。</summary>
+/// <summary>null/空白 string → Collapsed，非空 string → Visible：概览卡温度徽章用。
+/// （审查 🟠-1 澄清：实现按字符串空白判定；非 string 类型经 as 转换为 null → Collapsed。）</summary>
 public sealed class NullToCollapsedConverter : IValueConverter
 {
     public static readonly NullToCollapsedConverter Instance = new();

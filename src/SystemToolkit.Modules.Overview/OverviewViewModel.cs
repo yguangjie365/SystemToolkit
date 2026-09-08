@@ -52,6 +52,12 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     /// RefreshFullAsync 内部有 _busy 闸门防重入）。</summary>
     public System.Windows.Input.ICommand RefreshFullCommand { get; }
 
+    /// <summary>导出保存路径回调（View 注入；审查 🔴-1 采纳：VM 不直接弹对话框）。</summary>
+    public Func<string?>? PickSavePath { get; set; }
+
+    /// <summary>用户提示回调（View 注入；参数：message, title）。</summary>
+    public Action<string, string>? NotifyUser { get; set; }
+
     public OverviewViewModel(
         OverviewService overviewService,
         LiveUsageSampler liveSampler,
@@ -65,7 +71,8 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         _snapshotCache = snapshotCache;
         _logger = logger ?? NullLogger.Instance;
         ExportReportCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ExportReport);
-        RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync());
+        // 审查 🟠-2：采集中禁用全量刷新（CommunityToolkit RelayCommand 经 CommandManager 自动重询）
+        RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync(), () => !_busy);
         _installedView = new System.Windows.Data.ListCollectionView(InstalledPrograms)
         {
             Filter = o => o is InstalledProgram p &&
@@ -200,6 +207,8 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         catch (Exception ex)
         {
             _logger.Error("概览全量采集失败：" + ex);
+            // 审查 🔴-2：失败必须用户可见（🔴 不静默）；下次采集成功会被 BuildHeaderSubtitle 覆盖
+            HeaderSubtitle = "⚠️ 全量采集失败：" + ex.Message;
         }
         finally
         {

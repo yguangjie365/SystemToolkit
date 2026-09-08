@@ -11,42 +11,35 @@ public partial class OverviewViewModel
     /// <summary>导出 Markdown 概览报告（危险操作四步之"记录"侧：成功失败均留痕）。</summary>
     private void ExportReport()
     {
-        if (_busy || _data is null)
+        if (_busy)
         {
+            return;
+        }
+
+        if (_data is null)
+        {
+            // 审查 🟠-2：无数据可导出时显式告知，禁止「点了没反应」
+            NotifyUser?.Invoke("暂无数据可导出（请等待首次采集完成）。", "导出概览报告");
             return;
         }
 
         try
         {
-            var dialog = new Microsoft.Win32.SaveFileDialog
-            {
-                Title = "导出概览报告",
-                FileName = $"SystemToolkit-概览报告-{DateTime.Now:yyyyMMdd-HHmm}",
-                Filter = "Markdown 文档 (*.md)|*.md|所有文件 (*.*)|*.*",
-                DefaultExt = ".md",
-            };
-            if (dialog.ShowDialog() != true)
+            string? path = PickSavePath?.Invoke();
+            if (string.IsNullOrEmpty(path))
             {
                 return; // 用户取消：零副作用
             }
 
             string markdown = OverviewReportBuilder.Build(_data, System.Environment.MachineName, DateTimeOffset.Now);
-            System.IO.File.WriteAllText(dialog.FileName, markdown, System.Text.Encoding.UTF8);
-            _logger.Info($"报告已导出：{dialog.FileName}");
-            System.Windows.MessageBox.Show(
-                "报告已导出到：\n" + dialog.FileName,
-                "导出成功",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Information);
+            System.IO.File.WriteAllText(path, markdown, System.Text.Encoding.UTF8);
+            _logger.Info($"报告已导出：{path}");
+            NotifyUser?.Invoke("报告已导出到：\n" + path, "导出成功");
         }
         catch (Exception ex)
         {
             _logger.Error("导出报告失败", ex);
-            System.Windows.MessageBox.Show(
-                "导出失败：" + ex.Message,
-                "导出报告",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Warning);
+            NotifyUser?.Invoke("导出失败：" + ex.Message, "导出报告");
         }
     }
 
