@@ -94,6 +94,7 @@ public partial class AppManagerViewModel
         {
             list.Remove(vm);
             AddLog("已删除软件：" + vm.Name);
+            RecountSelection(); // 审查 O1：被删行的勾选态不会自己触发 PropertyChanged
         }
         else if (result.Item is WingetPackage package)
         {
@@ -104,6 +105,7 @@ public partial class AppManagerViewModel
                 var replacement = new WingetPackageVm(package);
                 HookSelectionCounter(replacement);
                 list[index] = replacement;
+                RecountSelection(); // 审查 O1：旧行若已勾选，替换后必须回算
             }
 
             AddLog("已更新软件：" + package.Name);
@@ -241,7 +243,7 @@ public partial class AppManagerViewModel
                 ? $"✅ 批量安装完成：成功 {ok}/{targets.Count}。"
                 : $"⚠ 批量安装结束：成功 {ok}、失败 {fail}（明细见上方日志）。");
             PersistAll();
-            SelectedCount = 0;
+            RecountSelection(); // 审查 O2：正常完成重算仍为 0；取消路径如实反映残留勾选
         }
         finally
         {
@@ -317,25 +319,20 @@ public partial class AppManagerViewModel
     [RelayCommand]
     private void ExportList()
     {
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "导出软件清单",
-            Filter = "JSON 清单 (*.json)|*.json",
-            FileName = $"systemtoolkit_list_{DateTime.Now:yyyyMMdd_HHmmss}.json",
-        };
-        if (dialog.ShowDialog() != true)
+        string? exportPath = PickSavePath?.Invoke();
+        if (string.IsNullOrEmpty(exportPath))
         {
             return;
         }
 
         try
         {
-            _env.ExportCatalog(dialog.FileName);
-            AddLog("已导出清单：" + dialog.FileName);
+            _env.ExportCatalog(exportPath);
+            AddLog("已导出清单：" + exportPath);
         }
         catch (Exception ex)
         {
-            _logger.Error("导出软件清单失败：" + dialog.FileName, ex);
+            _logger.Error("导出软件清单失败：" + exportPath, ex);
             AddLog("导出失败：" + ex.Message);
         }
     }
@@ -343,12 +340,8 @@ public partial class AppManagerViewModel
     [RelayCommand]
     private void ImportList()
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "导入软件清单",
-            Filter = "JSON 清单 (*.json)|*.json",
-        };
-        if (dialog.ShowDialog() != true)
+        string? importPath = PickOpenPath?.Invoke();
+        if (string.IsNullOrEmpty(importPath))
         {
             return;
         }
@@ -365,7 +358,7 @@ public partial class AppManagerViewModel
             // 备份在 try 内（审查 M5）：备份 IO 异常必须走导入失败路径留痕，
             // 而不是冒泡到全局兜底被吞、导入静默中止
             string? backupPath = _env.BackupCatalog();
-            EnvCatalog? catalog = _env.ImportCatalog(dialog.FileName);
+            EnvCatalog? catalog = _env.ImportCatalog(importPath);
             if (catalog is null)
             {
                 AddLog("导入失败：文件格式不正确或为空（当前清单未改动）");
@@ -389,7 +382,7 @@ public partial class AppManagerViewModel
             }
 
             // 审查 2026-09-04（P2）：导入重灌集合后残留的勾选计数必须清零
-            SelectedCount = 0;
+            RecountSelection(); // 审查 O2：统一走重算（导入后全部未勾选，结果同为 0）
 
             ManualSoftwares.Clear();
             foreach (ManualSoftware item in catalog.Manual)
@@ -409,7 +402,7 @@ public partial class AppManagerViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error("导入软件清单失败：" + dialog.FileName, ex);
+            _logger.Error("导入软件清单失败：" + importPath, ex);
             AddLog("导入失败：" + ex.Message);
         }
     }

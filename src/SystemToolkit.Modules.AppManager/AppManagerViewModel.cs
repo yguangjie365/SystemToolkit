@@ -79,6 +79,15 @@ public partial class AppManagerViewModel : ObservableObject
     /// <summary>软件编辑对话框回调（View 注入；null=新增第三方手动条目）。用户 2026-09-04：列表编辑功能必须有。</summary>
     public Func<object?, SoftwareEditResult?>? SoftwareEditRequest { get; set; }
 
+    /// <summary>信息提示回调（View 注入；审查 O4：VM 不直接依赖 MessageBox）。</summary>
+    public Action<string, string>? InfoRequest { get; set; }
+
+    /// <summary>导出保存路径回调（View 注入；审查 O6：对话框一律注入）。</summary>
+    public Func<string?>? PickSavePath { get; set; }
+
+    /// <summary>导入打开路径回调（View 注入；审查 O6）。</summary>
+    public Func<string?>? PickOpenPath { get; set; }
+
     private bool CanOperate => !IsOperating && !IsRefreshing; // 审查 2026-09-04：刷新中发起写操作会撞 winget 进程互斥锁
 
     // ==================================================================
@@ -154,10 +163,14 @@ public partial class AppManagerViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(WingetPackageVm.IsSelected))
             {
-                SelectedCount = StorePackages.Count(p => p.IsSelected) + ThirdPartyPackages.Count(p => p.IsSelected);
+                RecountSelection();
             }
         };
     }
+
+    /// <summary>重算勾选数（审查 O1：删除/替换行不触发 IsSelected 变化，必须显式回算）。</summary>
+    private void RecountSelection() =>
+        SelectedCount = StorePackages.Count(p => p.IsSelected) + ThirdPartyPackages.Count(p => p.IsSelected);
 
     public Task LoadAsync()
     {

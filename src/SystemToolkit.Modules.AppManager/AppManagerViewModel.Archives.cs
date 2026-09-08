@@ -36,7 +36,7 @@ public partial class AppManagerViewModel
             .ToList();
         if (targets.Count == 0)
         {
-            AddLog($"环境「{archive.Name}」无需恢复：清单内软件均已安装（或状态未知，请先检测状态）。");
+            AddLog($"环境「{archive.Name}」无需恢复：清单内软件均已安装或为最新。"); // 审查 Y1：Unknown 本就纳入安装目标，原文案语义相反
             return;
         }
 
@@ -52,6 +52,10 @@ public partial class AppManagerViewModel
 
         AddLog($"开始恢复环境「{archive.Name}」（待安装 {targets.Count} 项）…");
         int ok = 0, fail = 0;
+        // 审查 O3：与批量安装同款「关窗即停」——CancelBatchInstall 顺带覆盖本流程，
+        // 防止关窗后 winget 子进程孤儿化 + VM 在退出路径继续改集合
+        using CancellationTokenSource restoreCts = new();
+        _batchCts = restoreCts;
         try
         {
             foreach (WingetPackageVm pkg in targets)
@@ -59,7 +63,7 @@ public partial class AppManagerViewModel
                 pkg.IsBusy = true;
                 try
                 {
-                    WingetRunResult result = await _winget.InstallAsync(pkg.Id, pkg.Model.Source);
+                    WingetRunResult result = await _winget.InstallAsync(pkg.Id, pkg.Model.Source, restoreCts.Token);
                     if (result.Success)
                     {
                         ok++;
@@ -71,6 +75,11 @@ public partial class AppManagerViewModel
                         fail++;
                         AddLog($"  ❌ {pkg.Name}（退出码 {result.ExitCode}）{WingetExitHint(result.ExitCode, pkg.Model.IsMsStore)}");
                     }
+                }
+                catch (OperationCanceledException) when (restoreCts.IsCancellationRequested)
+                {
+                    AddLog($"  ⏹ 已取消：{pkg.Name}（剩余项不再执行）");
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -89,6 +98,7 @@ public partial class AppManagerViewModel
         }
         finally
         {
+            _batchCts = null;
             ExitOperation();
         }
     }
@@ -97,11 +107,9 @@ public partial class AppManagerViewModel
     private void NewArchive()
     {
         AddLog("自定义环境档案编辑将在后续迭代提供（当前按软件分类自动生成档案）。");
-        System.Windows.MessageBox.Show(
-            "当前版本的环境档案按软件分类自动生成（见卡片列表）。\n\n自定义档案（自由勾选软件组合）将在后续迭代提供。",
-            "新建环境档案",
-            System.Windows.MessageBoxButton.OK,
-            System.Windows.MessageBoxImage.Information);
+        // 审查 O4：提示经 View 注入回调（VM 不直接依赖 MessageBox）
+        InfoRequest?.Invoke("新建环境档案",
+            "当前版本的环境档案按软件分类自动生成（见卡片列表）。\n\n自定义档案（自由勾选软件组合）将在后续迭代提供。");
     }
 
     // ==================================================================

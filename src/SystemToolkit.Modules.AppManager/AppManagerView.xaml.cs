@@ -10,17 +10,43 @@ namespace SystemToolkit.Modules.AppManager;
 public partial class AppManagerView : UserControl
 {
     private readonly AppManagerViewModel _vm;
+    private readonly ILogger _logger;
     private bool _loaded;
 
     public AppManagerView(AppManagerViewModel vm, ILogger? logger = null)
     {
         InitializeComponent();
         _vm = vm;
+        _logger = logger ?? NullLogger.Instance;
         DataContext = vm;
         // 确认对话框经回调注入（VM 不直接依赖 MessageBox，与旧工程同款模式）
         vm.ConfirmRequest = (title, message)
             => System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Question)
                == MessageBoxResult.OK;
+        // 信息提示回调（审查 O4：NewArchive 的提示不再直调 MessageBox）
+        vm.InfoRequest = (message, title)
+            => System.Windows.MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+        // 导入/导出路径回调（审查 O6：对话框一律 View 注入）
+        vm.PickSavePath = () =>
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "导出软件清单",
+                Filter = "JSON 清单 (*.json)|*.json",
+                FileName = $"systemtoolkit_list_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+            };
+            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
+        vm.PickOpenPath = () =>
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "导入软件清单",
+                Filter = "JSON 清单 (*.json)|*.json",
+                CheckFileExists = true,
+            };
+            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
         // 列表编辑对话框（用户 2026-09-04：编辑功能必须有）
         vm.SoftwareEditRequest = item => SoftwareEditWindow.Show(Window.GetWindow(this), item);
         Loaded += OnViewLoaded;
@@ -37,8 +63,17 @@ public partial class AppManagerView : UserControl
         _loaded = true;
         // 审查 2026-09-04（P2）：兑现批量安装"关闭窗口即停"的承诺
         Window.GetWindow(this)?.Closed += (_, _) => _vm.CancelBatchInstall();
-        await _vm.LoadAsync();
-        _ = _vm.RefreshStatesAsync(); // 用户确认：异步检测，不阻塞
+        try
+        {
+            await _vm.LoadAsync();
+            _ = _vm.RefreshStatesAsync();
+        }
+        catch (Exception ex)
+        {
+            // 审查 O5：async void 无人接异常——降级提示而非打崩进程
+            _logger.Error("软件管理页加载失败", ex);
+            _vm.AddLog("⚠ 页面加载失败：" + ex.Message);
+        } // 用户确认：异步检测，不阻塞
     }
 
     /// <summary>Tab 切换：三视图互斥（环境档案内容绝不出现在软件 Tab）。</summary>
