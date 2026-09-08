@@ -319,7 +319,13 @@ public partial class MusicManagerViewModel : ObservableObject
     /// <summary>解析引擎（可选依赖：DI 未注册时为 null，播放禁用）。每次操作前取，便于热接通。</summary>
     private IMusicPlaybackEngine? ResolveEngine() => _engineProvider?.Invoke();
 
-    private bool _engineWired;
+    /// <summary>
+    /// 引擎事件是否已接线（审查 F-2 加固，2026-09-09）：int 而非 bool——
+    /// 用 <see cref="Interlocked.CompareExchange(ref int, int, int)"/> 原子抢占，
+    /// 避免两个入口同时判定"未接线"而重复订阅引擎事件（重复订阅会让同一事件触发两次、状态双写）。
+    /// 0 = 未接线，1 = 已接线。
+    /// </summary>
+    private int _engineWired;
 
     private string _currentTitle = "未在播放";
     public string CurrentTitle { get => _currentTitle; private set => SetProperty(ref _currentTitle, value); }
@@ -571,7 +577,8 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private void WireEngineOnce()
     {
-        if (_engineWired)
+        // 原子抢占：只有把 0 换成 1 的那个调用方继续执行接线（其余直接返回）
+        if (Interlocked.CompareExchange(ref _engineWired, 1, 0) != 0)
         {
             return;
         }
@@ -579,10 +586,11 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null)
         {
-            return; // 引擎未注册：保持可重试（InitializeAsync / 播放 / 扫描入口都会再尝试接线）
+            // 引擎未注册：归还抢占标记，保持可重试（InitializeAsync / 播放 / 扫描入口都会再尝试接线）
+            Interlocked.Exchange(ref _engineWired, 0);
+            return;
         }
 
-        _engineWired = true;
         OnPropertyChanged(nameof(IsEngineReady));
         // OM-7：EQ 可选能力探测（引擎不支持时 EQ UI 禁用——与引擎可选同一隔离哲学）
         IsEqAvailable = engine is IEqualizerEngine;
@@ -627,7 +635,11 @@ public partial class MusicManagerViewModel : ObservableObject
         _ = NextAsync();
     }
 
-    private bool _seeking;
+    /// <summary>
+    /// 拖动中标记（审查 F-8 加固，2026-09-09）：写端是 Slider 事件、读端是引擎位置回调
+    /// （经 RunOnUi 编组后仍可能与写端不同线程），volatile 保证跨线程读可见性。
+    /// </summary>
+    private volatile bool _seeking;
 
     /// <summary>拖动开始：引擎位置刷新期间暂停回写 Slider（避免拖动与轮询打架）。</summary>
     public void BeginSeek() => _seeking = true;

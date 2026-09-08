@@ -136,7 +136,13 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
                     };
                 }
             }
-            catch { /* 继续尝试下一个音质 */ }
+            catch (Exception e)
+            {
+                // 审查 F-3 采纳（2026-09-09）：原为裸 catch——降级链每档失败都不可见，
+                // 用户只看到"无法获取播放地址"，排查时无从区分网络/解析/接口变更。
+                // 单档失败是预期内的降级，按 Warn 记（不中断后续档位尝试）。
+                _logger.Warn($"[NetEase] 音质 {q} 取址失败，继续降级：{e.Message}");
+            }
         }
 
         if (trialFallback is not null)

@@ -315,6 +315,16 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             await _transfer.StopAsync().ConfigureAwait(true);
             DiscoveredDevices.Clear();
             ActiveTasks.Clear();
+
+            // 审查 F-5 采纳（2026-09-09）：停止时显式停表并置 null——
+            // 原实现靠 Tick 内 All(!IsActive) 自停（空集合确实会停），但路径隐式；
+            // 显式清理让"服务停了、定时器也一定停"成为不变量，避免残留 Tick 触碰已清空集合
+            if (_taskTimer is { } timer)
+            {
+                timer.Stop();
+                _taskTimer = null;
+            }
+
             IsTransferRunning = false;
             _log("[互传] 服务已停止");
         }
