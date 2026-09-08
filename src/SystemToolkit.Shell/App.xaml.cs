@@ -183,6 +183,11 @@ public partial class App : Application
     {
         services.AddSingleton<SystemToolkit.Core.FileTransfer.Services.IFileWebServer,
             SystemToolkit.Infrastructure.FileTransfer.FileWebServer>();
+        // MUSIC-4：音乐播放引擎（Infrastructure 实现，Core 契约；模块经 DI 延迟解析）。
+        // 引擎构造要非 keyed ILogger——工厂直接给音乐引擎专属 FileLogger（走 AppLog 总线）。
+        services.AddSingleton<SystemToolkit.Core.Music.Services.IMusicPlaybackEngine>(_ =>
+            new SystemToolkit.Infrastructure.Music.NAudioMusicPlayerEngine(
+                new SystemToolkit.Core.Contracts.FileLogger("musicplayer")));
         services.AddSingleton<SystemToolkit.Core.Network.Services.ICommandRunner,
             SystemToolkit.Core.Network.Services.CommandRunner>();
 
