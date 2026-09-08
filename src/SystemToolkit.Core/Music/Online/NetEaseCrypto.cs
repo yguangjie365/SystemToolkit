@@ -82,7 +82,7 @@ public static class NetEaseCrypto
     public static string SerializeHeaderMapToJsonString(Dictionary<string, JsonElement> header)
     {
         var buffer = new Dictionary<string, object?>(header.Count);
-        foreach (var kv in header)
+        foreach (KeyValuePair<string, System.Text.Json.JsonElement> kv in header)
         {
             buffer[kv.Key] = kv.Value.ValueKind switch
             {
@@ -133,7 +133,7 @@ public static class NetEaseCrypto
         aes.Mode = CipherMode.ECB;
         aes.Padding = PaddingMode.PKCS7;
         aes.Key = key;
-        using var encryptor = aes.CreateEncryptor();
+        using ICryptoTransform encryptor = aes.CreateEncryptor();
         return encryptor.TransformFinalBlock(input, 0, input.Length);
     }
 
@@ -154,7 +154,7 @@ public static class NetEaseCrypto
         aes.Padding = PaddingMode.PKCS7;
         aes.Key = key;
         aes.IV = iv;
-        using var encryptor = aes.CreateEncryptor();
+        using ICryptoTransform encryptor = aes.CreateEncryptor();
         return encryptor.TransformFinalBlock(input, 0, input.Length);
     }
 
@@ -177,7 +177,10 @@ public static class NetEaseCrypto
 
         byte[] cLe = c.ToByteArray();
         Array.Reverse(cLe); // 转大端
-        if (cLe.Length > 0 && cLe[0] == 0) cLe = cLe[1..]; // 去掉符号补位
+        if (cLe.Length > 0 && cLe[0] == 0)
+        {
+            cLe = cLe[1..]; // 去掉符号补位
+        }
         byte[] result = new byte[128];
         cLe.CopyTo(result, 128 - cLe.Length);
         return Convert.ToHexString(result);
@@ -186,10 +189,16 @@ public static class NetEaseCrypto
     /// <summary>weapi 随机 16 位 secretKey（base62）。fixedSecret 仅供测试注入。</summary>
     private static string WeapiRandomSecretKey(string? fixedSecret = null)
     {
-        if (fixedSecret is not null) return fixedSecret;
+        if (fixedSecret is not null)
+        {
+            return fixedSecret;
+        }
         const string Chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         var sb = new System.Text.StringBuilder(16);
-        for (int i = 0; i < 16; i++) sb.Append(Chars[Random.Shared.Next(Chars.Length)]);
+        for (int i = 0; i < 16; i++)
+        {
+            sb.Append(Chars[Random.Shared.Next(Chars.Length)]);
+        }
         return sb.ToString();
     }
 
