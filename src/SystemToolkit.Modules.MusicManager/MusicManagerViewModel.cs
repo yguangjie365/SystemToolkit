@@ -37,9 +37,7 @@ public partial class MusicManagerViewModel : ObservableObject
     // 不用 IServiceProvider 服务定位器（2026-09-08 审查采纳项）。
     private readonly Func<IMusicPlaybackEngine?>? _engineProvider;
     private readonly IMusicTagReader? _tagReader;
-    private IMusicPlaybackEngine? _engine;
     private CancellationTokenSource? _scanCts;
-    private LyricDocument _lyrics = LyricDocument.None();
 
     /// <summary>扫描根目录缓存（LoadAsync 时刷新，避免扫描时重复读曲库 JSON）。</summary>
     private List<string> _scanRoots = [];
@@ -135,6 +133,8 @@ public partial class MusicManagerViewModel : ObservableObject
     private MusicSong? _selectedSong;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelScanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     private bool _isScanning;
 
     private string _scanStatusText = string.Empty;
@@ -147,7 +147,7 @@ public partial class MusicManagerViewModel : ObservableObject
     /// <summary>View Loaded 时注入的文件夹选择回调（与 FileBackup.RestoreRequest 同款注入模式）。</summary>
     public Func<string?>? PickFolder { get; set; }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartScan))]
     private async Task ScanAsync()
     {
         string? picked = PickFolder?.Invoke();
@@ -213,6 +213,8 @@ public partial class MusicManagerViewModel : ObservableObject
             _scanCts = null;
         }
     }
+
+    private bool CanStartScan() => !IsScanning;
 
     [RelayCommand(CanExecute = nameof(IsScanning))]
     private void CancelScan() => _scanCts?.Cancel();
@@ -421,7 +423,6 @@ public partial class MusicManagerViewModel : ObservableObject
             return; // MUSIC-4 未合入：保持可重试，下次 InitializeAsync 再接
         }
 
-        _engine = engine;
         _engineWired = true;
         OnPropertyChanged(nameof(IsEngineReady));
         // 🔴 全部经 RunOnUi 编组：引擎事件可能在 NAudio 回调/Timer 线程触发，
@@ -567,7 +568,10 @@ public partial class MusicManagerViewModel : ObservableObject
             }
             else
             {
-                MusicTagReadResult? tag = _tagReader?.Read(song.LocalPath);
+                // TagLib 打开文件解析帧是同步 IO——推线程池，避免 UI 线程卡顿（审查 🟠-2 采纳）
+                MusicTagReadResult? tag = _tagReader is null
+                    ? null
+                    : await Task.Run(() => _tagReader.Read(song.LocalPath));
                 string? embedded = tag is { Success: true } ? tag.Tags?.Lyrics : null;
                 doc = LyricParser.Parse(embedded, source: LyricSource.Embedded);
             }
@@ -584,7 +588,6 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private void ApplyLyrics(LyricDocument doc)
     {
-        _lyrics = doc;
         _lyricLineSource = doc.Lines;
         _lyricRows.Clear();
         foreach (LyricLine line in doc.Lines)

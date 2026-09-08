@@ -102,3 +102,48 @@ public class MusicManagerViewModelTests
         }
     }
 }
+
+/// <summary>
+/// 审查报告 🟠-1 实锤：[RelayCommand(CanExecute = nameof(IsScanning))] 引用同类
+/// [ObservableProperty] 生成的属性时，CommunityToolkit 源生成器应自动挂接
+/// PropertyChanged → NotifyCanExecuteChanged（无需手写 [NotifyCanExecuteChangedFor]）。
+/// 本用例验证该自动行为是否存在——不存在则需手写特性。
+/// </summary>
+public class MusicManagerCancelScanTests
+{
+    [Fact]
+    public async Task IsScanningChange_AutoNotifiesCancelScanCommand()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"music-cancel-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var vm = new MusicManagerViewModel(
+                store: new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json")),
+                scanner: new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger())),
+                queue: new PlaybackQueueService(),
+                log: new NoopLogger());
+
+            // 初始：未扫描 → 取消命令不可执行
+            Assert.False(vm.CancelScanCommand.CanExecute(null));
+
+            // 模拟扫描开始（IsScanning=true，不真扫描）
+            typeof(SystemToolkit.Modules.MusicManager.MusicManagerViewModel)
+                .GetProperty("IsScanning")!.SetValue(vm, true);
+
+            Assert.True(vm.CancelScanCommand.CanExecute(null),
+                "IsScanning=true 后取消命令应自动变为可执行（源生成器自动通知）");
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch
+            {
+                // 清理失败不阻塞断言
+            }
+        }
+    }
+}

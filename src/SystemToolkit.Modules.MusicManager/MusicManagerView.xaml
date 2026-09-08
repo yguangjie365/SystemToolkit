@@ -171,7 +171,8 @@
                     <TextBlock Text="{Binding PositionText}" FontSize="{DynamicResource Font_SizeMicro}"
                                Foreground="{StaticResource Brush_TextMuted}"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                            IsEnabled="{Binding IsEngineReady}">
                     <Button Style="{StaticResource RowActionButton}" Height="30" Content="上一首" Margin="0,0,6,0"
                             Command="{Binding PreviousCommand}"/>
                     <Button Height="30" Margin="0,0,6,0" MinWidth="56"
@@ -233,7 +234,8 @@
                 <TextBlock Text="{Binding PositionText}" Margin="0,4,0,0" TextAlignment="Center"
                            FontSize="{DynamicResource Font_SizeCaption}"
                            Foreground="{StaticResource Brush_TextMuted}"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0"
+                            IsEnabled="{Binding IsEngineReady}">
                     <Button Style="{StaticResource RowActionButton}" Height="32" Content="上一首" Margin="0,0,8,0"
                             Command="{Binding PreviousCommand}"/>
                     <Button Height="32" MinWidth="64" Margin="0,0,8,0" Command="{Binding PlayPauseCommand}">
