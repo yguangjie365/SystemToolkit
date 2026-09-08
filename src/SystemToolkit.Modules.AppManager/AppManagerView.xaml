@@ -508,13 +508,17 @@ Background="{StaticResource Brush_Background}">
                 <TextBlock Grid.Column="1" Text="批量安装逐项执行 · 可取消 · 失败项标注原因（关闭窗口即停止后续项）"
                            FontSize="{DynamicResource Font_SizeCaption}" Foreground="{StaticResource Brush_OnDarkMuted}" VerticalAlignment="Center" Margin="14,0,0,0"/>
                 <!-- M-UI-2：新增批量升级/卸载入口（VM 命令占位，逻辑后续 V0.x 补） -->
+                <!-- 审查 02-1 🔴 采纳（2026-09-09）：按钮恒禁用时用户分不清"未实现"还是"坏了"——
+                     保留禁用（9-8 审查 S-7：不做"能点但不响应"的按钮），改用 ToolTip 明示原因 -->
                 <Button Grid.Column="2" Content="批量升级" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
                         Background="Transparent" BorderBrush="{StaticResource Brush_Success}" BorderThickness="1"
                         Foreground="{StaticResource Brush_Success}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        ToolTip="批量升级功能开发中（V0.x 后续版本提供），当前请先逐条升级"
                         Command="{Binding BatchUpgradeSelectedCommand}"/>
                 <Button Grid.Column="3" Content="批量卸载" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
                         Background="Transparent" BorderBrush="{StaticResource Brush_Danger}" BorderThickness="1"
                         Foreground="{StaticResource Brush_Danger}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        ToolTip="批量卸载功能开发中（V0.x 后续版本提供），当前请先逐条卸载"
                         Command="{Binding BatchUninstallSelectedCommand}"/>
                 <Button Grid.Column="4" Style="{StaticResource RowActionButton}" Content="清空选择" Margin="8,0,0,0"
                         Command="{Binding ClearSelectionCommand}" Background="{StaticResource Brush_OnDark}"

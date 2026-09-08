@@ -18,7 +18,13 @@ public partial class AppManagerViewModel
     // 实现完成后把 CanBatchOperate 换成真实条件即可。
     // ==================================================================
 
-    /// <summary>批量升级/卸载尚未实现，故恒为 false；实现后替换为真实可执行条件。</summary>
+    /// <summary>
+    /// 批量升级/卸载尚未实现，故恒为 false（按钮禁用）。
+    /// 2026-09-09：两份审查结论冲突——9-8 审查 S-7 要求"未实现必须禁用（不做能点不响应的按钮）"，
+    /// 9-9 审查 02-1 指出"恒禁用时用户分不清是未实现还是坏了"。
+    /// 取两者交集：**保持禁用 + XAML 侧 ToolTip 明示"功能开发中"**（原因可见，又不制造假可点）。
+    /// 实现 winget 串行流水线后，把此处换成真实条件并移除 ToolTip 即可。
+    /// </summary>
     private bool CanBatchOperate => false;
 
     [RelayCommand(CanExecute = nameof(CanBatchOperate))]

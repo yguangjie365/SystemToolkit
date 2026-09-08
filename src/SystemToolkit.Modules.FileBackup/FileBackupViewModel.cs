@@ -434,8 +434,21 @@ public partial class FileBackupViewModel : ObservableObject
             DailyTime = EnableScheduleInput ? DailyTimeInput.Trim() : "",
             UseVss = UseVssInput,
         };
-        _rules.Add(rule);
-        _rules.Save();
+        // 审查 🟠-3 采纳（2026-09-09）：同步命令——_rules.Save() 的磁盘/权限/序列化异常
+        // 会直冲 UI 线程；就地捕获并以 FormError 呈现（不弹未处理异常对话框）
+        try
+        {
+            _rules.Add(rule);
+            _rules.Save();
+        }
+        catch (Exception ex)
+        {
+            FormError = $"保存失败：{ex.Message}";
+            Log($"[备份] ❌ 规则保存失败：{ex.Message}");
+            _logger.Error($"备份规则保存失败：{name}", ex);
+            return;
+        }
+
         Log($"[备份] ✅ 规则已保存：{name}（{sources.Count} 个源）");
         _logger.Info($"备份规则已保存：{name}({rule.RuleId})");
         ReloadRules();
@@ -499,8 +512,19 @@ public partial class FileBackupViewModel : ObservableObject
             }
         }
 
-        _rules.Remove(target.RuleId);
-        _rules.Save();
+        // 审查 🟠-3 同类带修（2026-09-09）：与 SaveRule 同族——同步命令里的持久化异常必须就地捕获
+        try
+        {
+            _rules.Remove(target.RuleId);
+            _rules.Save();
+        }
+        catch (Exception ex)
+        {
+            Log($"[备份] ❌ 规则删除失败：{ex.Message}");
+            _logger.Error($"备份规则删除失败：{target.RuleName}", ex);
+            return;
+        }
+
         Log($"[备份] 规则已删除：{target.RuleName}" + (alsoDeleteSnapshots ? "（含快照数据）" : "（快照数据保留）"));
         SelectedRule = null;
         ReloadRules();
@@ -645,13 +669,27 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        int exit = await _scheduler.RegisterAsync(SelectedRule.RuleId, DailyTimeInput.Trim(), exe, Log).ConfigureAwait(true);
-        if (exit == 0)
+        // 审查 🔴 采纳（2026-09-09）：任务计划程序服务未启动/权限不足/任务冲突都会抛——
+        // 原实现无 catch，异常被 AsyncRelayCommand 吞掉，用户以为注册成功
+        try
         {
-            // 🔴 2026-09-08（审查 G-4）：异步流程里同步 Execute 命令会绕过 IsBusy 闸门，
-            // 且 SaveRule 会整体重载规则并改选中项；改为只把定时相关字段局部落库。
-            SaveScheduleFieldsOnly();
-            Log($"[定时] ✅ 已注册每日 {DailyTimeInput.Trim()} 的定时任务（错过后自动补做一次）");
+            int exit = await _scheduler.RegisterAsync(SelectedRule.RuleId, DailyTimeInput.Trim(), exe, Log).ConfigureAwait(true);
+            if (exit == 0)
+            {
+                // 🔴 2026-09-08（审查 G-4）：异步流程里同步 Execute 命令会绕过 IsBusy 闸门，
+                // 且 SaveRule 会整体重载规则并改选中项；改为只把定时相关字段局部落库。
+                SaveScheduleFieldsOnly();
+                Log($"[定时] ✅ 已注册每日 {DailyTimeInput.Trim()} 的定时任务（错过后自动补做一次）");
+            }
+            else
+            {
+                Log($"[定时] ❌ 注册失败（退出码 {exit}）：可能是权限不足或任务计划程序服务不可用");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[定时] ❌ 注册异常：{ex.Message}");
+            _logger.Error($"定时任务注册失败（规则 {SelectedRule.RuleId}）", ex);
         }
 
         await RefreshScheduleRegisteredAsync().ConfigureAwait(true);
@@ -680,10 +718,23 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        int exit = await _scheduler.UnregisterAsync(SelectedRule.RuleId, Log).ConfigureAwait(true);
-        if (exit == 0)
+        // 审查 🔴 采纳（2026-09-09）：同注册——注销失败/异常必须可见
+        try
         {
-            Log("[定时] 定时任务已注销");
+            int exit = await _scheduler.UnregisterAsync(SelectedRule.RuleId, Log).ConfigureAwait(true);
+            if (exit == 0)
+            {
+                Log("[定时] 定时任务已注销");
+            }
+            else
+            {
+                Log($"[定时] ❌ 注销失败（退出码 {exit}）");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[定时] ❌ 注销异常：{ex.Message}");
+            _logger.Error($"定时任务注销失败（规则 {SelectedRule.RuleId}）", ex);
         }
 
         await RefreshScheduleRegisteredAsync().ConfigureAwait(true);

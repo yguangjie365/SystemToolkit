@@ -50,6 +50,9 @@ public partial class MusicManagerViewModel : ObservableObject
     private readonly IOnlineCredentialStore? _credentials;
     private CancellationTokenSource? _scanCts;
 
+    /// <summary>扫描进度文本上次刷新时刻（审查 🟠-2：进度回调节流用，避免每首改一次 UI 文本）。</summary>
+    private DateTime _lastScanProgressAt = DateTime.MinValue;
+
     /// <summary>
     /// 播放请求竞态序号：每次 PlayCurrentCoreAsync 递增；异步链每步之后校验，
     /// 过期请求（用户已切走/跳过策略已触发下一次）直接放弃回写——
@@ -223,7 +226,19 @@ public partial class MusicManagerViewModel : ObservableObject
 
             MusicScanResult result = await _scanner.ScanAsync(
                 roots,
-                new Progress<MusicScanProgress>(p => ScanStatusText = $"扫描中… {p.Percent}%（{p.Scanned}/{p.Total}）"),
+                // 审查 🟠-2 采纳（2026-09-09）：扫描数千首时 Progress 每秒可报数十次，
+                // 逐次改文本会拖累 UI——节流到 ~5 次/秒，且 100% 必定上报（收尾态不丢）
+                new Progress<MusicScanProgress>(p =>
+                {
+                    DateTime now = DateTime.Now;
+                    if (p.Percent < 100 && (now - _lastScanProgressAt).TotalMilliseconds < 200)
+                    {
+                        return;
+                    }
+
+                    _lastScanProgressAt = now;
+                    ScanStatusText = $"扫描中… {p.Percent}%（{p.Scanned}/{p.Total}）";
+                }),
                 _scanCts.Token);
 
             // 合并/替换策略（审查 🔴-1 采纳）：

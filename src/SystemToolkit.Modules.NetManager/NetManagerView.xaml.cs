@@ -55,6 +55,18 @@ public partial class NetManagerView : UserControl
         }
     }
 
+    /// <summary>操作日志折叠开关（审查 🔴 采纳，2026-09-09；与 FileBackup 同款）。
+    /// ⚠️ IsChecked="True" 会在 InitializeComponent 解析期触发 Checked——此时 LogHost 尚未赋值，必须判空。</summary>
+    private void OnLogToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Primitives.ToggleButton toggle && LogHost is not null)
+        {
+            bool expanded = toggle.IsChecked == true;
+            LogHost.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            toggle.Content = expanded ? "▾ 操作日志" : "▸ 操作日志";
+        }
+    }
+
     /// <summary>面板可见性切换（仅改 Visibility，不动布局结构）。</summary>
     private void ShowPanel(int index)
     {

@@ -242,16 +242,52 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 RequireKnownPeer = RequireKnownPeer,
                 RequireReceiveConfirmation = RequireReceiveConfirmation,
             };
-            await _transfer.StartAsync(settings).ConfigureAwait(true);
+            // 审查 🟠-3 采纳（2026-09-09）：两步启动分别标注阶段——部分失败时用户能看出
+            // 是传输服务还是设备发现服务没起来（原实现只有一条笼统异常）
+            try
+            {
+                await _transfer.StartAsync(settings).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _log($"[互传] ❌ 传输服务启动失败（TCP 18889 可能被占用）：{ex.Message}");
+                _logger.Error("传输服务启动失败", ex);
+                throw;
+            }
+
             _transferPort = 18889;
             OnPropertyChanged(nameof(TransferPortText));
-            await _discovery.StartAsync(new TransferSettings
+            try
             {
-                DiscoveryPort = 18888,
-                TransferPort = 18889,
-                HeartbeatInterval = TimeSpan.FromSeconds(3),
-                OfflineTimeout = TimeSpan.FromSeconds(10),
-            }).ConfigureAwait(true);
+                var discoverySettings = new TransferSettings
+                {
+                    DiscoveryPort = 18888,
+                    TransferPort = 18889,
+                    HeartbeatInterval = TimeSpan.FromSeconds(3),
+                    OfflineTimeout = TimeSpan.FromSeconds(10),
+                };
+                await _discovery.StartAsync(discoverySettings).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _log($"[互传] ❌ 设备发现服务启动失败（UDP 18888 可能被占用）：{ex.Message}");
+                _logger.Error("设备发现服务启动失败", ex);
+
+                // 传输服务已起来但发现服务没起来：不回滚会留下"停止按钮不可用、服务却在跑"的僵局
+                // （审查 🟠-3 的状态不一致）——这里做清理属于防御，不是新功能
+                try
+                {
+                    await _transfer.StopAsync().ConfigureAwait(true);
+                    _log("[互传] 已回滚停止传输服务（设备发现启动失败）");
+                }
+                catch (Exception stopEx)
+                {
+                    _logger.Warn($"[互传] 回滚停止传输服务失败：{stopEx.Message}");
+                }
+
+                throw;
+            }
+
             IsTransferRunning = true;
             _log("[互传] ✅ 传输与设备发现服务已启动（TCP 18889 / UDP 18888）");
             _logger.Info("互传服务启动");
@@ -602,7 +638,17 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             return;
         }
 
-        await _transfer.CancelAsync(target.Model.Id).ConfigureAwait(true);
+        // 审查 🔴 采纳（2026-09-09）：任务不存在/网络错误会抛——原实现无 catch，
+        // 异常被 AsyncRelayCommand 吞掉，用户点了取消却看不到任何结果
+        try
+        {
+            await _transfer.CancelAsync(target.Model.Id).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ❌ 取消任务失败：{ex.Message}");
+            _logger.Error($"取消传输任务失败（{target.Model.Id}）", ex);
+        }
     }
 
     // ── 接收确认门 ──
@@ -616,7 +662,18 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 "接收文件请求",
                 $"{e.PeerEndpoint} 想向你发送文件：\n\n「{e.FileName}」（{e.FileSize:N0} 字节）\n\n接受吗？"
                 + "\n\n（不做任何响应则自动超时拒绝）") == true;
-            _ = _transfer.RespondTransferAsync(e.TaskId, accept);
+            // 审查 🟠-2 采纳（2026-09-09）：fire-and-forget 的响应失败原本完全无痕——
+            // 断网时用户点了「接受」但对面毫无反应，排查无从下手；补日志落地
+            _ = _transfer.RespondTransferAsync(e.TaskId, accept)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        string reason = t.Exception?.InnerException?.Message ?? "未知原因";
+                        _log($"[互传] ⚠️ 发送接收响应失败：{reason}");
+                        _logger.Warn($"[互传] 接收响应发送失败（task={e.TaskId}）：{reason}");
+                    }
+                }, TaskScheduler.Default);
         });
     }
 

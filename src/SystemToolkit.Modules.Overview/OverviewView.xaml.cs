@@ -30,7 +30,22 @@ public partial class OverviewView : UserControl
         };
         _vm.NotifyUser = (message, title) => System.Windows.MessageBox.Show(
             message, title, System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-        Loaded += async (_, _) => await _vm.ActivateAsync();
+        // 审查 🟠-1 采纳（2026-09-09）：async void 事件必须兜底——ActivateAsync 内部虽已全覆盖，
+        // 但 VM 构造/依赖解析等边界异常会在此处逃逸成未处理异常（进程级崩溃）
+        Loaded += async (_, _) =>
+        {
+            try
+            {
+                await _vm.ActivateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Overview] 激活失败：{ex.Message}");
+                System.Windows.MessageBox.Show(
+                    $"概览页启动失败：{ex.Message}", "本机概览",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            }
+        };
         Unloaded += (_, _) => _vm.Pause();
     }
 }

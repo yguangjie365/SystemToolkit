@@ -33,9 +33,23 @@ public sealed partial class DriverBackupWindow : Window
 
     private void OnOkClick(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(DestBox.Text))
+        string dest = DestBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(dest))
         {
             _ = MessageBox.Show(this, "目标目录不能为空。", "备份", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // 审查 🟠-5 采纳（2026-09-09）：仅查非空时，非法字符/过长路径会拖到备份开始后才失败；
+        // 在此用 GetFullPath 前置校验（非法字符/格式错误会抛），提前给出可读提示
+        try
+        {
+            _ = System.IO.Path.GetFullPath(dest);
+        }
+        catch (Exception ex)
+        {
+            _ = MessageBox.Show(this, $"目标目录路径无效：{ex.Message}\n请改用合法路径（例如 D:\\DriverBackup）。",
+                "备份", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 

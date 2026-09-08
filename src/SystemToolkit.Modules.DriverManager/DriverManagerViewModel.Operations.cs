@@ -193,6 +193,13 @@ public partial class DriverManagerViewModel
 
             await ScanAsync().ConfigureAwait(true);
         }
+        catch (Exception ex)
+        {
+            // 审查 🔴 采纳（2026-09-09）：AddDriverAsync/AddManyAsync/ScanAsync 抛异常时同样被吞
+            AddLog($"❌ {actionName}异常：{ex.Message}");
+            StatusText = $"{actionName}异常：{ex.Message}";
+            _logger.Error($"驱动{actionName}异常：{ex.Message}", ex);
+        }
         finally
         {
             IsOperating = false;
@@ -245,6 +252,16 @@ public partial class DriverManagerViewModel
                 StatusText = $"{actionName}失败（退出码 {result.ExitCode}），明细见日志";
                 _logger.Warn($"驱动{actionName}失败：退出码 {result.ExitCode}，失败段 {failedSegments.Count} 个");
             }
+        }
+        catch (Exception ex)
+        {
+            // 审查 🔴 采纳（2026-09-09）：原实现只有 try/finally，无 catch——
+            // DeleteManyAsync/ScanAsync 抛异常时被 AsyncRelayCommand 吞掉，用户零反馈。
+            // 注：报告称"IsOperating 永久为 true/按钮卡死"不成立（finally 会复位），
+            // 但"异常被吞 + 无提示"成立——修正论据后补 catch。
+            AddLog($"❌ {actionName}异常：{ex.Message}");
+            StatusText = $"{actionName}异常：{ex.Message}";
+            _logger.Error($"驱动{actionName}异常：{ex.Message}", ex);
         }
         finally
         {

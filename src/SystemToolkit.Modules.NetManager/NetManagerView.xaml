@@ -638,7 +638,9 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="0,8,0,6">
                     <StackPanel Orientation="Horizontal">
+                        <!-- 审查 🔴 采纳（2026-09-09）：原无事件绑定，点了不折叠——与 FileBackup 同款实现 -->
                         <ToggleButton x:Name="LogToggle" IsChecked="True" Content="▾ 操作日志" FontSize="{DynamicResource Font_SizeBodySm}"
+                                      Checked="OnLogToggleChanged" Unchecked="OnLogToggleChanged"
                                       Foreground="{StaticResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
                         <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
                                    VerticalAlignment="Center" Margin="10,0,0,0"><Run Text="{Binding LogLines.Count, Mode=OneWay}"/><Run Text=" 行"/></TextBlock>

@@ -354,6 +354,9 @@ public partial class GameManagerViewModel : ObservableObject
                 _ = Task.Run(async () =>
                 {
                     var gate = new System.Threading.SemaphoreSlim(3);
+                    // 审查 🟠-6 采纳：单张静默改为计数 + 收尾汇总一条日志——
+                    // 逐张记日志会在断网时刷出上百条，汇总既留痕又不淹没日志
+                    int failed = 0;
                     await Task.WhenAll(coverless.Select(async vm =>
                     {
                         try
@@ -371,11 +374,17 @@ public partial class GameManagerViewModel : ObservableObject
                                 gate.Release();
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            // 单张失败静默（无网/超时），保留占位
+                            System.Threading.Interlocked.Increment(ref failed);
+                            System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
                         }
                     })).ConfigureAwait(false);
+
+                    if (failed > 0)
+                    {
+                        _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
+                    }
                 });
             }
             GamesView.Refresh();
@@ -410,6 +419,25 @@ public partial class GameManagerViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// 同步命令统一兜底（审查 🔴 采纳，2026-09-09）：steam:// 协议调用 / 进程启动会因协议未注册、
+    /// 路径失效抛 Win32Exception 等——同步命令没有 AsyncRelayCommand 的兜底层，异常会直冲 UI 线程
+    /// 触发未处理异常（崩溃风险）。统一在此捕获：状态栏可见 + 日志留痕（🔴 不静默）。
+    /// </summary>
+    private void Guard(string action, Action run)
+    {
+        try
+        {
+            run();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"{action}异常：{ex.Message}";
+            StatusLevel = 2;
+            _logger.Error($"[游戏] {action}异常：{ex.Message}", ex);
+        }
+    }
+
     [RelayCommand]
     private void LaunchGame(GameCardVm? vm)
     {
@@ -418,10 +446,13 @@ public partial class GameManagerViewModel : ObservableObject
             return;
         }
 
-        bool ok = _steam.LaunchGame(vm.AppId);
-        StatusText = ok ? $"已请求启动：{vm.Name}" : $"启动失败：{vm.Name}（steam:// 协议调用失败）";
-        StatusLevel = ok ? 1 : 2;
-        _logger.Info($"启动游戏 {vm.Name}({vm.AppId})：{ok}");
+        Guard($"启动《{vm.Name}》", () =>
+        {
+            bool ok = _steam.LaunchGame(vm.AppId);
+            StatusText = ok ? $"已请求启动：{vm.Name}" : $"启动失败：{vm.Name}（steam:// 协议调用失败）";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"启动游戏 {vm.Name}({vm.AppId})：{ok}");
+        });
     }
 
     [RelayCommand]
@@ -432,10 +463,13 @@ public partial class GameManagerViewModel : ObservableObject
             return;
         }
 
-        bool ok = _steam.OpenStorePage(vm.AppId);
-        StatusText = ok ? $"已打开商店页：{vm.Name}" : $"打开商店页失败：{vm.Name}";
-        StatusLevel = ok ? 1 : 2;
-        _logger.Info($"打开商店页 {vm.Name}：{ok}");
+        Guard($"打开商店页《{vm.Name}》", () =>
+        {
+            bool ok = _steam.OpenStorePage(vm.AppId);
+            StatusText = ok ? $"已打开商店页：{vm.Name}" : $"打开商店页失败：{vm.Name}";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"打开商店页 {vm.Name}：{ok}");
+        });
     }
 
     [RelayCommand]
@@ -446,10 +480,13 @@ public partial class GameManagerViewModel : ObservableObject
             return;
         }
 
-        bool ok = _steam.OpenGameFolder(vm.Model.LibraryPath, vm.Model.InstallDir);
-        StatusText = ok ? $"已打开安装目录：{vm.Name}" : $"安装目录不存在：{vm.Name}（可能库离线）";
-        StatusLevel = ok ? 1 : 2;
-        _logger.Info($"打开安装目录 {vm.Name}：{ok}");
+        Guard($"打开安装目录《{vm.Name}》", () =>
+        {
+            bool ok = _steam.OpenGameFolder(vm.Model.LibraryPath, vm.Model.InstallDir);
+            StatusText = ok ? $"已打开安装目录：{vm.Name}" : $"安装目录不存在：{vm.Name}（可能库离线）";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"打开安装目录 {vm.Name}：{ok}");
+        });
     }
 
     /// <summary>卸载引导：steam://uninstall 协议拉起 Steam 自身卸载流程（不直接删文件，设计 §6）。</summary>
@@ -470,18 +507,24 @@ public partial class GameManagerViewModel : ObservableObject
             return;
         }
 
-        bool ok = _steam.UninstallGame(vm.AppId);
-        StatusText = ok ? $"已提交卸载请求：{vm.Name}（请在 Steam 窗口中确认）" : $"卸载请求失败：{vm.Name}";
-        StatusLevel = ok ? 1 : 2;
-        _logger.Info($"卸载游戏 {vm.Name}：{ok}");
+        Guard($"卸载《{vm.Name}》", () =>
+        {
+            bool ok = _steam.UninstallGame(vm.AppId);
+            StatusText = ok ? $"已提交卸载请求：{vm.Name}（请在 Steam 窗口中确认）" : $"卸载请求失败：{vm.Name}";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"卸载游戏 {vm.Name}：{ok}");
+        });
     }
 
     [RelayCommand]
     private void LaunchClient()
     {
-        bool ok = _steam.LaunchClient();
-        StatusText = ok ? "已请求启动 Steam" : "启动 Steam 失败（未找到 steam.exe）";
-        StatusLevel = ok ? 1 : 2;
-        _logger.Info($"启动 Steam 客户端：{ok}");
+        Guard("启动 Steam 客户端", () =>
+        {
+            bool ok = _steam.LaunchClient();
+            StatusText = ok ? "已请求启动 Steam" : "启动 Steam 失败（未找到 steam.exe）";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"启动 Steam 客户端：{ok}");
+        });
     }
 }
