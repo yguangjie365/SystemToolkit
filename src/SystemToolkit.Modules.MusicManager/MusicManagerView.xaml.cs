@@ -190,11 +190,14 @@ public partial class MusicManagerView : UserControl
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
         {
-            // OM-5：歌词流收敛到完整播放器（主页面右栏改为推荐+队列——用户批准示意）
+            // OM-6：三风格各持一个歌词列表——只滚动当前可见的那个
             MusicManagerViewModel.LyricRowVm row = _vm.LyricRows[_vm.ActiveLyricIndex];
-            if (FullLyricsList.IsVisible)
+            ListBox? activeList = _vm.IsVinylStyle ? FullLyricsList
+                : _vm.IsImmersionStyle ? ImmersionLyricsList
+                : ModernLyricsList;
+            if (activeList is { IsVisible: true })
             {
-                FullLyricsList.ScrollIntoView(row);
+                activeList.ScrollIntoView(row);
             }
         }
     }

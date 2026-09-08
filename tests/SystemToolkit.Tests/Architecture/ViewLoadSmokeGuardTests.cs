@@ -551,6 +551,71 @@ public class ViewLoadSmokeGuardTests
             State = state,
         });
 
+    /// <summary>
+    /// 全屏播放器三风格模板冒烟（OM-6，2026-09-08）：切换 彩胶/沉浸/现代 三模板，
+    /// 每风格 Measure/Arrange 触发模板求值——防 XAML 绑定/图片刷绑定错误上线即崩。
+    /// （单例 View 上 vm 状态切换即换可见模板；无引擎/无封面路径一并覆盖。）
+    /// </summary>
+    [Fact]
+    public void MusicManagerView_ThreePlayerStyles_AllMeasureWithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+        string dir = Path.Combine(Path.GetTempPath(), $"music-style-smoke-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct services + VM + View";
+                ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+                var store = new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json"));
+                var scanner = new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger()));
+                var vm = new MusicManagerViewModel(
+                    store,
+                    scanner,
+                    new PlaybackQueueService(),
+                    new NoopLogger(),
+                    engineProvider: null,
+                    tagReader: new TagLibMusicTagReader(new NoopLogger()),
+                    dispatcher: null);
+                vm.LyricRows.Add(new MusicManagerViewModel.LyricRowVm("第一行", false));
+                vm.LyricRows.Add(new MusicManagerViewModel.LyricRowVm("第二行", true));
+                var view = new MusicManagerView(vm);
+
+                stage = "vinyl default";
+                view.Measure(new Size(1600, 900));
+                view.Arrange(new Rect(0, 0, 1600, 900));
+                view.UpdateLayout();
+
+                foreach (string style in new[] { "Immersion", "Modern", "Vinyl" })
+                {
+                    stage = "style switch: " + style;
+                    vm.SwitchPlayerStyleCommand.Execute(style);
+                    view.Measure(new Size(1600, 900));
+                    view.Arrange(new Rect(0, 0, 1600, 900));
+                    view.UpdateLayout();
+                }
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"音乐管理三风格模板加载抛异常（阶段：{stage}）：\n{captured}");
+    }
+
     private static IEnumerable<string> EnumerateModuleXamls()
         => Directory.EnumerateFiles(Path.Combine(RepoRoot(), "src"), "*.xaml", SearchOption.AllDirectories)
             .Where(p => !p.Contains("/obj/", StringComparison.Ordinal) && !p.Contains("/bin/", StringComparison.Ordinal));
