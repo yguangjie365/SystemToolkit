@@ -45,14 +45,17 @@ public partial class MusicManagerViewModel : ObservableObject
     /// 所有引擎事件必须经 <see cref="RunOnUi"/> 编组。
     /// 测试宿主无 Application → Dispatcher 为 null → 直接执行（绑定未激活，安全）。
     /// </summary>
-    private readonly System.Windows.Threading.Dispatcher? _dispatcher =
-        System.Windows.Application.Current?.Dispatcher;
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
 
-    /// <summary>UI 线程编组：无 Dispatcher（测试宿主）直接执行；同线程直接执行；否则 BeginInvoke。</summary>
+    /// <summary>
+    /// UI 线程编组：Dispatcher 缺失、已停机或其所属线程已退出时直接执行
+    /// （测试宿主里 Application.Current 可能是已退出的冒烟 STA——BeginInvoke 会永不执行）；
+    /// 同线程直接执行；否则 BeginInvoke。
+    /// </summary>
     private void RunOnUi(Action action)
     {
         System.Windows.Threading.Dispatcher? d = _dispatcher;
-        if (d is null)
+        if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
         {
             action();
         }
@@ -72,8 +75,13 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicLibraryStore store,
         LocalMusicScanner scanner,
         IPlaybackQueueService queue,
-        ILogger log)
+        ILogger log,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
+        // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
+        // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
+        // 测试宿主的 Application.Current 可能指向已退出的冒烟 STA，BeginInvoke 永不执行）
+        _dispatcher = dispatcher;
         _services = services;
         _store = store;
         _scanner = scanner;
@@ -408,6 +416,7 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private void OnEngineStateChanged(PlayState state, MusicSong? song)
     {
+        Console.WriteLine($"[diag] OnEngineStateChanged entered: state={state}");
         IsPlaying = state == PlayState.Playing;
         if (state == PlayState.Playing && song is not null)
         {
@@ -424,8 +433,31 @@ public partial class MusicManagerViewModel : ObservableObject
         _ = NextAsync();
     }
 
+    private bool _seeking;
+
+    /// <summary>拖动进度条开始：引擎位置刷新期间暂停回写 Slider（避免拖动与轮询打架）。</summary>
+    public void BeginSeek() => _seeking = true;
+
+    /// <summary>拖动结束：按百分比 Seek 到目标位置并恢复位置回写。</summary>
+    public void EndSeek(double percent)
+    {
+        IMusicPlaybackEngine? engine = ResolveEngine();
+        if (engine is not null && engine.Duration > TimeSpan.Zero)
+        {
+            engine.Seek(TimeSpan.FromMilliseconds(engine.Duration.TotalMilliseconds * Math.Clamp(percent, 0, 100) / 100));
+        }
+
+        _seeking = false;
+    }
+
     private void OnEnginePositionChanged(TimeSpan position, TimeSpan duration)
     {
+        Console.WriteLine($"[diag] OnEnginePositionChanged entered: seeking={_seeking} pos={position}");
+        if (_seeking)
+        {
+            return; // 拖动中：不回写进度，避免 Slider 与引擎轮询互相拉扯
+        }
+
         PositionText = $"{FormatTime(position)} / {FormatTime(duration)}";
         ProgressValue = duration.TotalMilliseconds <= 0
             ? 0
@@ -469,6 +501,17 @@ public partial class MusicManagerViewModel : ObservableObject
                 : $"{_queue.Current.Artist} — {_queue.Current.Album}";
         }
     }
+
+    // ════════ 完整播放器（点击底部播放条展开，2026-09-08 用户拍板布局） ════════
+
+    [ObservableProperty]
+    private bool _isFullPlayerOpen;
+
+    [RelayCommand]
+    private void OpenFullPlayer() => IsFullPlayerOpen = true;
+
+    [RelayCommand]
+    private void CloseFullPlayer() => IsFullPlayerOpen = false;
 
     /// <summary>View 层上报初始化失败（状态行显示，🔴 不静默）。</summary>
     public void ReportInitError(string message)

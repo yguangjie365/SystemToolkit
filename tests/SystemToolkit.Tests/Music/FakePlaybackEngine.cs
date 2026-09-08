@@ -34,7 +34,17 @@ public sealed class FakePlaybackEngine : IMusicPlaybackEngine
 
     private void RaiseOnWorkerThread(Action trigger)
     {
-        var thread = new Thread(() => trigger());
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                trigger();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[diag] worker handler threw: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+            }
+        });
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
         thread.Join();
@@ -43,7 +53,12 @@ public sealed class FakePlaybackEngine : IMusicPlaybackEngine
     /// <summary>模拟引擎在后台线程（Timer 回调）触发进度事件。</summary>
     public void RaisePositionFromWorkerThread(TimeSpan position)
     {
-        RaiseOnWorkerThread(() => PositionChanged?.Invoke(position, Duration));
+        Console.WriteLine($"[diag] RaisePosition: PositionChanged has subscriber = {PositionChanged is not null}");
+        RaiseOnWorkerThread(() =>
+        {
+            Console.WriteLine($"[diag] worker invoking PositionChanged, subscribers={PositionChanged is not null}");
+            PositionChanged?.Invoke(position, Duration);
+        });
     }
 
     /// <summary>模拟引擎在后台线程触发「开始播放」状态变化（→ VM 会加载歌词、改集合）。</summary>

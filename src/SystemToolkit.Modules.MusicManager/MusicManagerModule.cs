@@ -56,7 +56,8 @@ public sealed class MusicManagerModule : ModuleBase
             sp.GetRequiredService<IMusicLibraryStore>(),
             sp.GetRequiredService<LocalMusicScanner>(),
             sp.GetRequiredService<IPlaybackQueueService>(),
-            sp.GetRequiredKeyedService<ILogger>("musicmanager")));
+            sp.GetRequiredKeyedService<ILogger>("musicmanager"),
+            System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<MusicManagerView>();
     }
 }
