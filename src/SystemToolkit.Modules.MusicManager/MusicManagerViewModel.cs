@@ -585,6 +585,7 @@ public partial class MusicManagerViewModel : ObservableObject
             _consecutiveOnlineFailures = 0; // 真正起播 = 连续失败链归零（OnlineSkipPolicy 语义）
             _queue.ReportPlaybackStarted(song);
             _ = LoadLyricsAsync(song); // IO 在后台；结果经 RunOnUi 回 UI
+            _ = LoadCoverAsync(song); // OM-6：封面 + 主色管线（同样后台 IO + RunOnUi 回写）
         }
     }
 

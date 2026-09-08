@@ -33,6 +33,10 @@ public class CsBrushLiteralGuardTests
     private static readonly string[] AllowedFiles =
     {
         "ThemeBrush.cs",
+
+        // 封面主色工厂（OM-6）：运行时色——每首封面主色不同，无法用静态设计令牌表达；
+        // 全仓唯一的 Color.FromRgb 字面量收敛点（见文件头注释）。
+        "CoverColorFactory.cs",
     };
 
     [Fact]
