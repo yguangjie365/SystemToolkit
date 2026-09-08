@@ -47,6 +47,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     private SemaphoreSlim? _sendGate;
     private int _chunkSize = 2 * 1024 * 1024;
     private int _maxConcurrentReceives = 8;
+    // 审查 F-01：接收并发槽计数（Interlocked 原子抢占，取代"先 Count 再判断"的 TOCTOU 模式）
+    private int _activeReceives;
+    private readonly HashSet<string> _releasedReceiveSlots = new();
+    private readonly object _receiveSlotLock = new();
     // volatile：SetRequireKnownPeer 可在 UI 线程运行时修改，握手校验在 TCP 回调线程读取
     private volatile bool _requireKnownPeer = true;
     private bool _requireReceiveConfirmation;
@@ -94,6 +98,11 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         _chunkSize = Math.Max(1024, settings.ChunkSize);
         _maxConcurrentReceives = Math.Max(1, settings.MaxConcurrentReceives);
+        Interlocked.Exchange(ref _activeReceives, 0); // 重启即重置并发槽（审查 F-01）
+        lock (_receiveSlotLock)
+        {
+            _releasedReceiveSlots.Clear();
+        }
         _requireKnownPeer = settings.RequireKnownPeer;
         _requireReceiveConfirmation = settings.RequireReceiveConfirmation;
         _requirePairing = settings.RequirePairing;
@@ -166,6 +175,11 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         _logger.Info("文件传输服务已停止。");
         _tasks.Clear();
+        Interlocked.Exchange(ref _activeReceives, 0); // 停止即清空接收槽（迟到的释放只是减到负数，无副作用）
+        lock (_receiveSlotLock)
+        {
+            _releasedReceiveSlots.Clear();
+        }
     }
 
     /// <inheritdoc/>
@@ -223,6 +237,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             RaiseUpdated(task);
             RaiseCompleted(task);
             _tasks.TryRemove(taskId, out _);
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             if (_pendingConfirms.TryRemove(taskId, out PendingConfirm? pending))
                 pending.Cancel(); // 确认等待方立即退出
 
@@ -315,9 +330,13 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     {
         WatsonTcpClient? client = null;
         bool gateAcquired = false;
+        // 审查 F-03：捕获到局部——Stop→Start 会替换 _sendGate 字段，旧任务 finally 若按字段
+        // 释放会把许可还给"新"信号量（Wait(A)/Release(B)），新服务的并发上限因此失真
+        SemaphoreSlim gate = _sendGate
+            ?? throw new InvalidOperationException("传输服务未启动，无法发送。");
         try
         {
-            await _sendGate!.WaitAsync(ct).ConfigureAwait(false);
+            await gate.WaitAsync(ct).ConfigureAwait(false);
             gateAcquired = true;
 
             task.Status = TransferStatus.Negotiating;
@@ -485,7 +504,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             // 每步独立 try/catch：单项异常不阻止其余清理（StopAsync 竞态 / 网络异常等）
             try
-            { if (gateAcquired) _sendGate?.Release(); }
+            { if (gateAcquired) gate.Release(); } // 释放当初 Wait 的那一个（审查 F-03）
             catch (ObjectDisposedException) { /* StopAsync 竞态 */ }
             try
             { if (_sendCts.TryRemove(task.Id, out CancellationTokenSource? cts)) cts.Dispose(); }
@@ -570,6 +589,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = "对端断开连接。";
             task.FinishedAt = DateTimeOffset.UtcNow;
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             RaiseUpdated(task);
             RaiseCompleted(task);
             _tasks.TryRemove(task.Id, out _);
@@ -623,6 +643,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             TransferTask oldTask = ctx.Task;
             oldTask.Status = TransferStatus.Cancelled;
+            ReleaseReceiveSlot(oldTask); // 审查 F-01：被替换的旧任务归还接收并发槽
             oldTask.ErrorMessage = "对端发起新握手，旧任务已被替换。";
             oldTask.FinishedAt = DateTimeOffset.UtcNow;
             RaiseUpdated(oldTask);
@@ -635,11 +656,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         ctx.Hash = null;
         ctx.CloseStream();
 
-        // 安全边界二：并发接收上限（防止反复握手填充磁盘）
-        int activeReceives = _receiveContexts.Values.Count(c =>
-            c.Task is not null && c.Task.Status is TransferStatus.Negotiating or TransferStatus.Transferring);
-        if (activeReceives >= _maxConcurrentReceives)
+        // 安全边界二：并发接收上限（审查 F-01：Interlocked 原子抢占——
+        // 原"先 Count 再 if"的观察→决策两步可被并发握手同时通过而突破上限）
+        int nowActive = Interlocked.Increment(ref _activeReceives);
+        if (nowActive > _maxConcurrentReceives)
         {
+            Interlocked.Decrement(ref _activeReceives); // 抢占失败即归还
             _logger.Warn($"拒绝传输握手：并发接收已达上限 {_maxConcurrentReceives}（来源 {ipPort}）。");
             _ = SendControlAsync(guid, new TransferMessage
             {
@@ -746,6 +768,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = reason;
             task.FinishedAt = DateTimeOffset.UtcNow;
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             RaiseUpdated(task);
             RaiseCompleted(task);
             _tasks.TryRemove(task.Id, out _);
@@ -958,6 +981,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             task.TransferredBytes = task.FileSize;
             task.FileHash = expectedHash;
             task.FilePath = finalPath;
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             task.FinishedAt = DateTimeOffset.UtcNow;
             RaiseUpdated(task);
             RaiseCompleted(task);
@@ -972,6 +996,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = "文件 SHA-256 校验失败。";
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             task.FinishedAt = DateTimeOffset.UtcNow;
             RaiseUpdated(task);
             RaiseCompleted(task);
@@ -1007,6 +1032,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return;
         task.Status = TransferStatus.Cancelled;
         task.FinishedAt = DateTimeOffset.UtcNow;
+        ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
         RaiseUpdated(task);
         RaiseCompleted(task);
         _tasks.TryRemove(task.Id, out _);
@@ -1023,6 +1049,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return;
         task.Status = TransferStatus.Failed;
         task.ErrorMessage = error ?? "对端报告错误。";
+        ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
         task.FinishedAt = DateTimeOffset.UtcNow;
         RaiseUpdated(task);
         RaiseCompleted(task);
@@ -1119,6 +1146,36 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     }
 
     // ===================== 工具方法 =====================
+
+    /// <summary>
+    /// 接收任务到达终态后归还并发槽（审查 F-01 配套）。
+    /// 幂等：以 <see cref="_releasedReceiveSlots"/> 记账，重复调用只减一次；
+    /// 只认"已置终态且仍登记在 _receiveContexts 的任务"——发送任务/未登记任务不占槽。
+    /// 漏调的后果是槽位偏保守（拒绝新握手），不会超限——宁保守勿失守。
+    /// </summary>
+    private void ReleaseReceiveSlot(TransferTask task)
+    {
+        if (task.Status is TransferStatus.Negotiating or TransferStatus.Transferring)
+        {
+            return; // 防御：调用点必须已置终态
+        }
+
+        if (!_receiveContexts.Values.Any(c => c.Task == task))
+        {
+            return; // 非接收任务（发送任务另有 _sendGate 管控）
+        }
+
+        bool firstRelease;
+        lock (_receiveSlotLock)
+        {
+            firstRelease = _releasedReceiveSlots.Add(task.Id);
+        }
+
+        if (firstRelease)
+        {
+            Interlocked.Decrement(ref _activeReceives);
+        }
+    }
 
     private void RaiseUpdated(TransferTask task) => TaskUpdated?.Invoke(this, task);
 

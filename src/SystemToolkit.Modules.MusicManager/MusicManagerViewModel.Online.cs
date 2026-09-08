@@ -85,8 +85,17 @@ public partial class MusicManagerViewModel
     private async Task SelectPlatformAsync(string? platform)
     {
         SelectedPlatform = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
-        await LoadPlaylistsAsync(); // 歌单面板跟随平台（双平台用户歌单均已接线）
-        await RefreshLoginStateAsync();
+        // 审查 F-02：网络命令异常必须落用户可见状态（🔴 不静默——否则表现为"点击没反应"）
+        try
+        {
+            await LoadPlaylistsAsync(); // 歌单面板跟随平台（双平台用户歌单均已接线）
+            await RefreshLoginStateAsync();
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"切换平台失败：{ex.Message}";
+            _log.Error($"[Music] 切换平台失败（{SelectedPlatform}）", ex);
+        }
     }
 
     // ════════ 在线搜索 ════════
@@ -447,18 +456,27 @@ public partial class MusicManagerViewModel
         OpenPlaylist = row.Playlist;
         OnPropertyChanged(nameof(ViewTitle));
         PlaylistFilterText = string.Empty; // 换歌单即清空上一次的站内搜索
-        List<OnlineTrack> tracks = await _catalog.LoadPlaylistTracksAsync(
-            row.Playlist.Provider, row.Playlist.Id);
-        PlaylistTracks.Clear();
-        foreach (OnlineTrack track in tracks)
+        // 审查 F-02：取曲目失败要可见（登录过期/网络/接口变更），不能 Task Faulted 静默
+        try
         {
-            PlaylistTracks.Add(new OnlineResultRowVm(track));
-        }
+            List<OnlineTrack> tracks = await _catalog.LoadPlaylistTracksAsync(
+                row.Playlist.Provider, row.Playlist.Id);
+            PlaylistTracks.Clear();
+            foreach (OnlineTrack track in tracks)
+            {
+                PlaylistTracks.Add(new OnlineResultRowVm(track));
+            }
 
-        BeginCoverLoads(PlaylistTracks);
-        OnPropertyChanged(nameof(PlaylistFilterNoMatch));
-        OnlineStatusText = _catalog.CatalogError;
-        CurrentView = ContentViewMode.PlaylistDetail;
+            BeginCoverLoads(PlaylistTracks);
+            OnPropertyChanged(nameof(PlaylistFilterNoMatch));
+            OnlineStatusText = _catalog.CatalogError;
+            CurrentView = ContentViewMode.PlaylistDetail;
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"加载歌单失败：{ex.Message}";
+            _log.Error($"[Music] 加载歌单失败（{row.Playlist.Name}）", ex);
+        }
     }
 
     /// <summary>歌单详情：从第一首起播整个歌单（首屏已加载的曲目为队列）。</summary>
@@ -472,7 +490,16 @@ public partial class MusicManagerViewModel
         }
 
         var tracks = PlaylistTracks.Select(r => r.Track).ToList();
-        await PlayOnlineTracksAsync(tracks, tracks[0]);
+        // 审查 F-02：播放失败落状态行
+        try
+        {
+            await PlayOnlineTracksAsync(tracks, tracks[0]);
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"播放歌单失败：{ex.Message}";
+            _log.Error("[Music] 从头播放歌单失败", ex);
+        }
     }
 
     /// <summary>歌单详情：双击单曲 = 以整个歌单为队列起播该曲。</summary>
@@ -485,7 +512,16 @@ public partial class MusicManagerViewModel
         }
 
         var tracks = PlaylistTracks.Select(r => r.Track).ToList();
-        await PlayOnlineTracksAsync(tracks, row.Track);
+        // 审查 F-02：播放失败落状态行
+        try
+        {
+            await PlayOnlineTracksAsync(tracks, row.Track);
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"播放失败：{ex.Message}";
+            _log.Error($"[Music] 从歌单播放「{row.Title}」失败", ex);
+        }
     }
 
     /// <summary>从歌单详情返回（回到上一内容态；简化为回本地曲库）。</summary>
@@ -534,6 +570,12 @@ public partial class MusicManagerViewModel
             // 空态原因可见：未登录 / QQ 不支持 / 网络失败（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
         }
+        catch (Exception ex)
+        {
+            // 审查 F-02：原只有 finally，异常被吞——用户只看到"加载中"消失
+            OnlineStatusText = $"加载推荐失败：{ex.Message}";
+            _log.Error("[Music] 加载每日推荐/推荐歌单失败", ex);
+        }
         finally
         {
             IsLoadingRecommendations = false;
@@ -550,7 +592,16 @@ public partial class MusicManagerViewModel
         }
 
         var tracks = DailyRecommend.Select(r => r.Track).ToList();
-        await PlayOnlineTracksAsync(tracks, row.Track);
+        // 审查 F-02：播放失败落状态行
+        try
+        {
+            await PlayOnlineTracksAsync(tracks, row.Track);
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"播放失败：{ex.Message}";
+            _log.Error($"[Music] 从每日推荐播放「{row.Title}」失败", ex);
+        }
     }
 
     // ════════ 登录态 ════════
