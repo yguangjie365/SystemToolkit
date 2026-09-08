@@ -24,8 +24,11 @@ public partial class MusicManagerViewModel
     /// <summary>中部内容区状态。</summary>
     public enum ContentViewMode
     {
-        /// <summary>本地曲库（扫描/过滤/双击播放，现有能力）。</summary>
+        /// <summary>主页：本地音乐卡头 + 本地条目 + 我的歌单垂直列表（图1 对齐，2026-09-09）。</summary>
         LocalLibrary,
+
+        /// <summary>本地曲目列表（主页点「本地导入的歌单」进入；搜索/过滤/双击播放）。</summary>
+        LocalTracks,
 
         /// <summary>在线搜索结果。</summary>
         OnlineSearch,
@@ -36,13 +39,17 @@ public partial class MusicManagerViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLocalLibraryView))]
+    [NotifyPropertyChangedFor(nameof(IsLocalTracksView))]
     [NotifyPropertyChangedFor(nameof(IsOnlineSearchView))]
     [NotifyPropertyChangedFor(nameof(IsPlaylistDetailView))]
     [NotifyPropertyChangedFor(nameof(ViewTitle))]
     private ContentViewMode _currentView = ContentViewMode.LocalLibrary;
 
-    /// <summary>当前是否为本地曲库视图（XAML 三态可见性绑定）。</summary>
+    /// <summary>主页（歌单列表，图1）。</summary>
     public bool IsLocalLibraryView => CurrentView == ContentViewMode.LocalLibrary;
+
+    /// <summary>本地曲目列表视图。</summary>
+    public bool IsLocalTracksView => CurrentView == ContentViewMode.LocalTracks;
 
     /// <summary>当前是否为在线搜索视图。</summary>
     public bool IsOnlineSearchView => CurrentView == ContentViewMode.OnlineSearch;
@@ -55,8 +62,13 @@ public partial class MusicManagerViewModel
     {
         ContentViewMode.OnlineSearch => $"搜索结果 · {SelectedPlatformText}",
         ContentViewMode.PlaylistDetail => OpenPlaylist?.Name ?? "歌单详情",
-        _ => "本地曲库",
+        ContentViewMode.LocalTracks => "本地音乐",
+        _ => "我的歌单",
     };
+
+    /// <summary>主页 → 本地曲目列表（图1 的「本地导入的歌单」条目点击）。</summary>
+    [RelayCommand]
+    private void ShowLocalTracks() => CurrentView = ContentViewMode.LocalTracks;
 
     // ════════ 平台切换 ════════
 

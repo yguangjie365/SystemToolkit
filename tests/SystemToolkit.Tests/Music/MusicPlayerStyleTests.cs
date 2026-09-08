@@ -229,7 +229,9 @@ public class MusicPlayerStyleTests
 
         await vm.PlayFromLibraryCommand.ExecuteAsync(null);
 
-        bool loaded = await WaitUntilAsync(() => vm.CurrentCoverImage is not null);
+        // 时序加固（2026-09-09）：封面装载走异步管线，全量并行时 STA 线程繁忙可能超 3s——
+        // 本测试已两次在全量跑中超时（单测/复跑均过），上限提到 10s 消除脆弱
+        bool loaded = await WaitUntilAsync(() => vm.CurrentCoverImage is not null, timeoutMs: 10000);
         Assert.True(loaded, "封面应在起播后装载");
         Assert.True(vm.HasCover);
         // 红封面 → 主色偏红（R 明显高），且非中性回退
@@ -275,7 +277,7 @@ public class MusicPlayerStyleTests
         tagReader.CoverBytes = RedPng;
 
         await vm.PlayFromLibraryCommand.ExecuteAsync(null); // 播 a（封面歌）
-        await WaitUntilAsync(() => vm.HasCover);
+        await WaitUntilAsync(() => vm.HasCover, timeoutMs: 10000); // 同上：并行负载时序加固
 
         tagReader.CoverBytes = null; // b 无封面
         await vm.NextCommand.ExecuteAsync(null);
