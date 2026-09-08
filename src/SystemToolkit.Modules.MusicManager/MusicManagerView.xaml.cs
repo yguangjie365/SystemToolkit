@@ -7,7 +7,7 @@ using SystemToolkit.Core.Utilities;
 namespace SystemToolkit.Modules.MusicManager;
 
 /// <summary>
-/// 音乐管理视图（MUSIC-6）：三 Tab（曲库/播放/歌词）。
+/// 音乐管理视图（2026-09-08 用户拍板单屏布局）：左曲库 / 右歌词 / 底部播放条 / 完整播放器覆盖层。
 /// Loaded 注入文件夹选择回调并初始化曲库（幂等）。
 /// </summary>
 public partial class MusicManagerView : UserControl

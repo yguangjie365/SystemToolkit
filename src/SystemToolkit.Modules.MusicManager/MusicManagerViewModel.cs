@@ -209,6 +209,8 @@ public partial class MusicManagerViewModel : ObservableObject
         finally
         {
             IsScanning = false;
+            _scanCts?.Dispose();
+            _scanCts = null;
         }
     }
 
@@ -254,6 +256,8 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicPlaybackEngine? engine = ResolveEngine();
         if (engine is null || SelectedSong is null)
         {
+            // 引擎未就绪时底部条有常驻提示；这里补状态行让双击也有可见反馈（🔴 不静默）
+            ScanStatusText = engine is null ? "播放引擎未就绪，无法播放" : "请先选中一首曲目";
             return;
         }
 
@@ -436,7 +440,6 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private void OnEngineStateChanged(PlayState state, MusicSong? song)
     {
-        Console.WriteLine($"[diag] OnEngineStateChanged entered: state={state}");
         IsPlaying = state == PlayState.Playing;
         if (state == PlayState.Playing && song is not null)
         {
@@ -472,7 +475,6 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private void OnEnginePositionChanged(TimeSpan position, TimeSpan duration)
     {
-        Console.WriteLine($"[diag] OnEnginePositionChanged entered: seeking={_seeking} pos={position}");
         if (_seeking)
         {
             return; // 拖动中：不回写进度，避免 Slider 与引擎轮询互相拉扯

@@ -16,6 +16,7 @@
     <Grid Margin="16,12,16,12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -31,7 +32,7 @@
                            Foreground="{StaticResource Brush_TextMuted}"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=OneWayToSource}"
+                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                          Width="220" Padding="8,5" VerticalContentAlignment="Center"/>
                 <Button Height="32" Content="扫描曲库" Margin="8,0,0,0" Command="{Binding ScanCommand}">
                     <Button.Style>
@@ -50,15 +51,21 @@
             </StackPanel>
         </Grid>
 
-        <!-- 状态行：扫描状态 / 曲库降级警告 -->
-        <StackPanel Grid.Row="0" VerticalAlignment="Bottom" Margin="0,0,180,2">
+        <!-- 状态行 + 曲库降级警告（🔴 不静默：缓存损坏/剔除文件必须可见） -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,6">
+            <Border Background="{StaticResource Brush_WarningSoft}" CornerRadius="{DynamicResource Radius_MD}"
+                    Padding="10,6"
+                    Visibility="{Binding LibraryWarning, Converter={StaticResource StrToVis}}">
+                <TextBlock Text="{Binding LibraryWarning}" FontSize="{DynamicResource Font_SizeCaption}"
+                           Foreground="{StaticResource Brush_Warning}"/>
+            </Border>
             <TextBlock Text="{Binding ScanStatusText}" FontSize="{DynamicResource Font_SizeCaption}"
                        Foreground="{StaticResource Brush_TextMuted}"
                        Visibility="{Binding ScanStatusText, Converter={StaticResource StrToVis}}"/>
         </StackPanel>
 
         <!-- 主区：左曲库 / 右歌词 -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -138,7 +145,7 @@
         </Grid>
 
         <!-- 底部常驻播放条（点击空白区展开完整播放器） -->
-        <Border Grid.Row="2" Margin="0,8,0,0" Padding="12,8"
+        <Border Grid.Row="3" Margin="0,8,0,0" Padding="12,8"
                 Background="{StaticResource Brush_SurfaceAlt}"
                 CornerRadius="{DynamicResource Radius_LG}"
                 MouseLeftButtonDown="OnBottomBarTap">
@@ -199,7 +206,7 @@
         </Border>
 
         <!-- 完整播放器覆盖层（点底部条展开；大封面 + 控制 + 队列） -->
-        <Grid Grid.Row="0" Grid.RowSpan="3"
+        <Grid Grid.Row="0" Grid.RowSpan="4"
               Background="{StaticResource Brush_Background}"
               Visibility="{Binding IsFullPlayerOpen, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
