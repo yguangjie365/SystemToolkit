@@ -3,6 +3,7 @@ using SystemToolkit.Core.Music.Models;
 using SystemToolkit.Core.Music.Online;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows.Media.Imaging;
 
 namespace SystemToolkit.Modules.MusicManager;
 
@@ -80,9 +81,13 @@ public partial class MusicManagerViewModel
     [ObservableProperty]
     private string _onlineSearchText = string.Empty;
 
-    /// <summary>在线搜索结果行（<see cref="ToQueueSong"/> 可直接转队列曲）。</summary>
-    public sealed record OnlineResultRowVm(OnlineTrack Track)
+    /// <summary>在线搜索结果行（<see cref="ToQueueSong"/> 可直接转队列曲；带封面缩略图懒加载）。</summary>
+    public sealed class OnlineResultRowVm : ObservableObject
     {
+        public OnlineResultRowVm(OnlineTrack track) => Track = track;
+
+        public OnlineTrack Track { get; }
+
         /// <summary>标题。</summary>
         public string Title => Track.Name;
 
@@ -98,6 +103,50 @@ public partial class MusicManagerViewModel
             : TimeSpan.FromMilliseconds(Track.DurationMs) is var ts
                 ? $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}"
                 : "—";
+
+        private BitmapSource? _coverImage;
+
+        /// <summary>封面缩略图（异步装载；null 时模板显示音符占位）。</summary>
+        public BitmapSource? CoverImage
+        {
+            get => _coverImage;
+            private set
+            {
+                if (SetProperty(ref _coverImage, value))
+                {
+                    OnPropertyChanged(nameof(HasCover));
+                }
+            }
+        }
+
+        /// <summary>是否已有封面（占位图标 ↔ 图片切换用）。</summary>
+        public bool HasCover => _coverImage is not null;
+
+        private bool _coverAttempted;
+
+        /// <summary>
+        /// 懒装载封面缩略图（loader = VM 注入的代理下载 + 缓存链；失败降级占位不中断列表）。
+        /// 每行只尝试一次，防滚动重入反复请求。
+        /// </summary>
+        public async Task LoadCoverAsync(Func<string, Task<BitmapSource?>> loader)
+        {
+            if (_coverAttempted)
+            {
+                return;
+            }
+
+            _coverAttempted = true;
+            if (string.IsNullOrWhiteSpace(Track.Cover))
+            {
+                return;
+            }
+
+            BitmapSource? image = await loader(Track.Cover).ConfigureAwait(true);
+            if (image is not null)
+            {
+                CoverImage = image;
+            }
+        }
     }
 
     public ObservableCollection<OnlineResultRowVm> SearchResults { get; } = [];
@@ -133,6 +182,7 @@ public partial class MusicManagerViewModel
                 SearchResults.Add(new OnlineResultRowVm(track));
             }
 
+            BeginCoverLoads(SearchResults);
             OnlineStatusText = _catalog.CatalogError; // 空结果/失败原因可见（🔴 不静默）
             CurrentView = ContentViewMode.OnlineSearch;
         }
@@ -179,14 +229,59 @@ public partial class MusicManagerViewModel
 
     // ════════ 歌单面板 ════════
 
-    /// <summary>歌单行（左栏列表与推荐歌单共用）。</summary>
-    public sealed record PlaylistRowVm(OnlinePlaylist Playlist)
+    /// <summary>歌单行（我的歌单胶囊与推荐歌单列表共用；带封面缩略图懒加载）。</summary>
+    public sealed class PlaylistRowVm : ObservableObject
     {
+        public PlaylistRowVm(OnlinePlaylist playlist) => Playlist = playlist;
+
+        public OnlinePlaylist Playlist { get; }
+
         /// <summary>歌单名。</summary>
         public string Title => Playlist.Name;
 
         /// <summary>曲目数展示。</summary>
         public string CountText => Playlist.TrackCount == 0 ? string.Empty : $"{Playlist.TrackCount} 首";
+
+        private BitmapSource? _coverImage;
+
+        /// <summary>封面缩略图（异步装载；null 时模板显示色块占位）。</summary>
+        public BitmapSource? CoverImage
+        {
+            get => _coverImage;
+            private set
+            {
+                if (SetProperty(ref _coverImage, value))
+                {
+                    OnPropertyChanged(nameof(HasCover));
+                }
+            }
+        }
+
+        /// <summary>是否已有封面。</summary>
+        public bool HasCover => _coverImage is not null;
+
+        private bool _coverAttempted;
+
+        /// <summary>懒装载封面（同 OnlineResultRowVm，每行只尝试一次）。</summary>
+        public async Task LoadCoverAsync(Func<string, Task<BitmapSource?>> loader)
+        {
+            if (_coverAttempted)
+            {
+                return;
+            }
+
+            _coverAttempted = true;
+            if (string.IsNullOrWhiteSpace(Playlist.Cover))
+            {
+                return;
+            }
+
+            BitmapSource? image = await loader(Playlist.Cover).ConfigureAwait(true);
+            if (image is not null)
+            {
+                CoverImage = image;
+            }
+        }
     }
 
     public ObservableCollection<PlaylistRowVm> UserPlaylists { get; } = [];
@@ -216,12 +311,70 @@ public partial class MusicManagerViewModel
                 UserPlaylists.Add(new PlaylistRowVm(playlist));
             }
 
+            BeginPlaylistCoverLoads(UserPlaylists);
+
             // QQ 无此能力等场景：错误说明透传（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
         }
         finally
         {
             IsLoadingPlaylists = false;
+        }
+    }
+
+    /// <summary>行缩略图加载器（代理下载 + URL 键控缓存；audioProxy 缺席 → null，行显示占位）。</summary>
+    public Func<string, Task<BitmapSource?>>? OnlineCoverLoader =>
+        _audioProxy is null ? null : LoadThumbCoreAsync;
+
+    private async Task<BitmapSource?> LoadThumbCoreAsync(string rawUrl)
+    {
+        if (CoverThumbCache.TryGet(rawUrl, out BitmapSource? cached))
+        {
+            return cached;
+        }
+
+        try
+        {
+            string proxy = await _audioProxy!.GetProxiedCoverUrlAsync(rawUrl).ConfigureAwait(true);
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            byte[] bytes = await client.GetByteArrayAsync(proxy).ConfigureAwait(true);
+            BitmapSource? image = Decode(bytes); // Player 分部的私有解码（Frozen BitmapImage）
+            CoverThumbCache.Store(rawUrl, image);
+            return image;
+        }
+        catch (Exception ex)
+        {
+            // 缩略图失败只降级占位（列表主功能不受影响），但日志可见（🔴 不静默）
+            _log.Warn($"[Music] 缩略图加载失败：{ex.Message}");
+            return null;
+        }
+    }
+
+    private void BeginCoverLoads(System.Collections.Generic.IEnumerable<OnlineResultRowVm> rows)
+    {
+        Func<string, Task<BitmapSource?>>? loader = OnlineCoverLoader;
+        if (loader is null)
+        {
+            return;
+        }
+
+        foreach (OnlineResultRowVm row in rows)
+        {
+            _ = row.LoadCoverAsync(loader);
+        }
+    }
+
+    private void BeginPlaylistCoverLoads(System.Collections.Generic.IEnumerable<PlaylistRowVm> rows)
+    {
+        Func<string, Task<BitmapSource?>>? loader = OnlineCoverLoader;
+        if (loader is null)
+        {
+            return;
+        }
+
+        foreach (PlaylistRowVm row in rows)
+        {
+            _ = row.LoadCoverAsync(loader);
         }
     }
 
@@ -254,6 +407,7 @@ public partial class MusicManagerViewModel
             PlaylistTracks.Add(new OnlineResultRowVm(track));
         }
 
+        BeginCoverLoads(PlaylistTracks);
         OnlineStatusText = _catalog.CatalogError;
         CurrentView = ContentViewMode.PlaylistDetail;
     }

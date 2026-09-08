@@ -104,6 +104,21 @@ public partial class MusicManagerView : UserControl
     private void OnPlaylistListDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
 
+    /// <summary>我的歌单胶囊单击即打开（2026-09-09 横向胶囊化；选中态不保持，防重复触发看这条判断）。</summary>
+    private void OnPlaylistListSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (RowOf<MusicManagerViewModel.PlaylistRowVm>(sender) is not { } row)
+        {
+            return;
+        }
+
+        _vm.OpenPlaylistCommand.Execute(row);
+        if (sender is ListBox listBox)
+        {
+            listBox.SelectedItem = null; // 胶囊不保持选中态（再次单击同一歌单仍可刷新打开）
+        }
+    }
+
     private void OnPlaylistTrackDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.PlayFromPlaylistCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
 

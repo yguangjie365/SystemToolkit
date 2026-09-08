@@ -149,6 +149,9 @@
     <CornerRadius x:Key="Radius_LG">8</CornerRadius>
     <CornerRadius x:Key="Radius_XL">10</CornerRadius>
     <CornerRadius x:Key="Radius_XLLg">12</CornerRadius>
+    <!-- 全圆角胶囊（2026-09-09 音乐页胶囊芯片/滑条轨道；棘轮守卫禁数字 CornerRadius，全圆角必须走令牌） -->
+    <CornerRadius x:Key="Radius_Pill">999</CornerRadius>
+    <CornerRadius x:Key="Radius_Track">2</CornerRadius>
 
     <!-- ===== 间距（04 规范 4px 栅格） ===== -->
     <Thickness x:Key="Space_XXS">4</Thickness>

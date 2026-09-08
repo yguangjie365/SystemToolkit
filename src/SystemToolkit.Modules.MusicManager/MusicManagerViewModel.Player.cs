@@ -365,6 +365,7 @@ public partial class MusicManagerViewModel
                 double clamped = Math.Clamp(value, -EqProfile.MaxGainDb, EqProfile.MaxGainDb);
                 if (SetProperty(ref _gain, clamped))
                 {
+                    OnPropertyChanged(nameof(GainText));
                     _owner.Eq[Index] = clamped;
                     _owner.ClearPresetHighlight();
                     _owner.ApplyEqToEngine();
@@ -372,8 +373,17 @@ public partial class MusicManagerViewModel
             }
         }
 
+        /// <summary>滑条下方 dB 值读数（+n / -n / 0）。</summary>
+        public string GainText => _gain == 0 ? "0" : _gain > 0 ? $"+{_gain:0.#}" : $"{_gain:0.#}";
+
         /// <summary>重置显示值（预设应用/重置后同步滑条）。</summary>
-        internal void RefreshFrom(double gain) => SetProperty(ref _gain, gain);
+        internal void RefreshFrom(double gain)
+        {
+            if (SetProperty(ref _gain, gain))
+            {
+                OnPropertyChanged(nameof(GainText));
+            }
+        }
     }
 
     private readonly ObservableCollection<EqBandVm> _eqBands = [];

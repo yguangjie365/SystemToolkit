@@ -133,6 +133,8 @@ public static class TokenKeys
         public const string Radius_LG = "Radius_LG";
         public const string Radius_XL = "Radius_XL";
         public const string Radius_XLLg = "Radius_XLLg";
+        public const string Radius_Pill = "Radius_Pill";
+        public const string Radius_Track = "Radius_Track";
     }
 
     public static class Spacing

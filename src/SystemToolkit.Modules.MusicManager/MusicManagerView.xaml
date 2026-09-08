@@ -12,6 +12,18 @@
         <local:InverseBoolConverter x:Key="Inverse"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseToVis"/>
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
+        <!-- 图标库（2026-09-09 全量图标化：Path 几何集中声明，按钮经 {StaticResource} 引用） -->
+        <Geometry x:Key="IconBack">M14,6 L8,12 L14,18</Geometry>
+        <Geometry x:Key="IconPlaySolid">M8,5 L19,12 L8,19 Z</Geometry>
+        <Geometry x:Key="IconPauseBars">M7,5 H10 V19 H7 Z M14,5 H17 V19 H14 Z</Geometry>
+        <Geometry x:Key="IconPrev">M6,6 H8 V18 H6 Z M20,6 L9,12 L20,18 Z</Geometry>
+        <Geometry x:Key="IconNext">M18,6 H16 V18 H18 Z M4,6 L15,12 L4,18 Z</Geometry>
+        <Geometry x:Key="IconLoop">M17,2 L21,6 L17,10 M21,6 H8 A5,5 0 0 0 3,11 M7,22 L3,18 L7,14 M3,18 H16 A5,5 0 0 0 21,13</Geometry>
+        <Geometry x:Key="IconRefresh">M21,12 A9,9 0 1 1 18.36,5.64 M21,3 V9 H15</Geometry>
+        <Geometry x:Key="IconNote">M9,3 V13.55 A4,4 0 1 0 11,17 V7 H17 V3 Z</Geometry>
+        <Geometry x:Key="IconExpandUp">M7,14 L12,9 L17,14</Geometry>
+        <Geometry x:Key="IconFolderScan">M3,7 V19 A2,2 0 0 0 5,21 H19 A2,2 0 0 0 21,19 V9 A2,2 0 0 0 19,7 H12 L10,5 H5 A2,2 0 0 0 3,7 Z</Geometry>
+        <Geometry x:Key="IconEqSliders">M5,8 H19 M5,16 H19 M9,5.5 A2.5,2.5 0 1 1 9,10.5 A2.5,2.5 0 1 1 9,5.5 M15,13.5 A2.5,2.5 0 1 1 15,18.5 A2.5,2.5 0 1 1 15,13.5</Geometry>
         <!-- 2026-09-09 修复"进度条被底色吞掉"：默认 Slider 轨道为主题底色，压在播放器染色背景上隐形（只剩滑块）。
              自绘模板：剩余轨道半透明灰 + 已播段强调色 + 白色圆形滑块——浅底/彩胶/沉浸/现代四背景通用 -->
         <Style x:Key="SeekSliderStyle" TargetType="Slider">
@@ -21,7 +33,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid Background="Transparent" VerticalAlignment="Center" Height="14">
-                            <Border Height="4" CornerRadius="2" Background="#26808080"
+                            <Border Height="4" CornerRadius="{DynamicResource Radius_Track}" Background="#26808080"
                                     VerticalAlignment="Center"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
@@ -29,7 +41,7 @@
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
                                                 <Grid Background="Transparent">
-                                                    <Border Height="4" CornerRadius="2"
+                                                    <Border Height="4" CornerRadius="{DynamicResource Radius_Track}"
                                                             Background="{StaticResource Brush_Accent}"
                                                             VerticalAlignment="Center" HorizontalAlignment="Left"/>
                                                 </Grid>
@@ -136,103 +148,147 @@
                        Visibility="{Binding ScanStatusText, Converter={StaticResource StrToVis}}"/>
         </StackPanel>
 
-        <!-- 主区：左歌单面板 / 中内容区三态（OM-5，2026-09-08 用户批准示意） / 右推荐+队列 -->
+        <!-- 主区：左卡（我的歌单胶囊+内容三态） / 右卡（每日推荐+推荐歌单+Up Next）
+             2026-09-09 对照 NexBox 重排（用户批准示意）：卡片化 + 图标化 + 封面缩略图 -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="190"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="230"/>
+                <ColumnDefinition Width="1.55*"/>
+                <ColumnDefinition Width="1*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 左：歌单面板（歌单列表 + 底部登录态芯片） -->
-            <DockPanel Grid.Column="0">
-                <TextBlock DockPanel.Dock="Top" Text="歌单" FontSize="{DynamicResource Font_SizeBody}"
-                           Foreground="{StaticResource Brush_TextSecondary}" Margin="2,0,0,6"/>
-                <Button DockPanel.Dock="Top" Style="{StaticResource RowActionButton}" Height="28" Margin="0,0,0,6"
-                        Content="本地曲库" HorizontalAlignment="Stretch"
-                        Command="{Binding ClosePlaylistCommand}"/>
-                <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding SelectedPlatformText, Mode=OneWay}"
-                               FontSize="{DynamicResource Font_SizeBodySm}"
-                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Height="24" Padding="8,0" Content="刷新"
-                            Command="{Binding LoadPlaylistsCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsLoadingPlaylists, Mode=OneWay}" Value="True">
-                                        <Setter Property="IsEnabled" Value="False"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </Grid>
-                <StackPanel DockPanel.Dock="Bottom">
-                    <Grid Margin="2,4,2,2">
+            <!-- 左卡：卡头（返回+标题+全部播放） / 我的歌单胶囊+登录芯片 / 内容三态 -->
+            <Border Grid.Column="0" Margin="0,0,8,0"
+                    Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_LG}"
+                    Padding="14,10,10,8">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Width="28" Height="28" Padding="0" Margin="0,0,8,0"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding ClosePlaylistCommand}" ToolTip="返回上一层"
+                                Visibility="{Binding IsLocalLibraryView, Converter={StaticResource InverseToVis}}">
+                            <Path Data="{StaticResource IconBack}" StrokeLineJoin="Round"
+                                  Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"/>
+                        </Button>
+                        <TextBlock Grid.Column="1" Text="{Binding ViewTitle, Mode=OneWay}"
+                                   FontSize="{DynamicResource Font_SizeTitleLg}"
+                                   Foreground="{StaticResource Brush_TextPrimary}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="2" Height="28" Padding="10,0" Content="全部播放" Margin="8,0,0,0"
+                                Command="{Binding PlayPlaylistFromStartCommand}"
+                                Visibility="{Binding IsPlaylistDetailView, Converter={StaticResource BoolToVis}}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}"/>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <!-- 我的歌单胶囊行 + 登录芯片（原左栏列表横向化，2026-09-09 用户批准示意） -->
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding NetEaseLoginText, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Height="20" Padding="6,0"
-                                Content="登录" Command="{Binding RequestLoginCommand}" CommandParameter="NetEase"/>
+                        <ListBox Grid.Column="0" x:Name="PlaylistList" ItemsSource="{Binding UserPlaylists}"
+                                 SelectionChanged="OnPlaylistListSelection"
+                                 Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Pill" Margin="0,0,6,0" Padding="10,4"
+                                                        CornerRadius="{DynamicResource Radius_Pill}"
+                                                        Background="{StaticResource Brush_SurfaceAlt}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Pill" Property="Background"
+                                                                Value="{StaticResource Brush_AccentSoft}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Title, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextPrimary}"/>
+                                        <TextBlock Text="{Binding CountText, Mode=OneWay}" Margin="6,0,0,0"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextMuted}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <Button Width="24" Height="24" Padding="0" Margin="0,0,8,0"
+                                    Background="Transparent" BorderThickness="0"
+                                    Command="{Binding LoadPlaylistsCommand}" ToolTip="刷新歌单">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLoadingPlaylists, Mode=OneWay}" Value="True">
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Path Data="{StaticResource IconRefresh}" StrokeLineJoin="Round"
+                                      Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.8"
+                                      Width="14" Height="14" Stretch="Uniform"/>
+                            </Button>
+                            <Border Margin="0,0,6,0" Padding="8,3" CornerRadius="{DynamicResource Radius_Pill}"
+                                    Background="{StaticResource Brush_SurfaceAlt}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding NetEaseLoginText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                    <Button Content="登录" Height="20" Padding="6,0" Margin="6,0,0,0"
+                                            Command="{Binding RequestLoginCommand}" CommandParameter="NetEase">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                            <Border Padding="8,3" CornerRadius="{DynamicResource Radius_Pill}" Background="{StaticResource Brush_SurfaceAlt}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding QqLoginText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                    <Button Content="登录" Height="20" Padding="6,0" Margin="6,0,0,0"
+                                            Command="{Binding RequestLoginCommand}" CommandParameter="QQMusic">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </Grid>
-                    <Grid Margin="2,2,2,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding QqLoginText, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Height="20" Padding="6,0"
-                                Content="登录" Command="{Binding RequestLoginCommand}" CommandParameter="QQMusic"/>
-                    </Grid>
-                </StackPanel>
-                <ListBox x:Name="PlaylistList" ItemsSource="{Binding UserPlaylists}"
-                         MouseDoubleClick="OnPlaylistListDoubleClick"
-                         Background="Transparent" BorderThickness="0"
-                         HorizontalContentAlignment="Stretch"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         VirtualizingPanel.IsVirtualizing="True"
-                         VirtualizingPanel.VirtualizationMode="Recycling"
-                         VirtualizingPanel.ScrollUnit="Pixel">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
-                                           FontSize="{DynamicResource Font_SizeBodySm}"
-                                           Foreground="{StaticResource Brush_TextPrimary}"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Grid.Column="1" Text="{Binding CountText, Mode=OneWay}"
-                                           FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_TextMuted}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
 
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="Transparent"/>
-
-            <!-- 中：内容区三态（视图状态机） -->
-            <Grid Grid.Column="2">
+                    <!-- 内容三态（视图状态机沿用，宿主由中栏改为左卡剩余区） -->
+                    <Grid>
                 <!-- 态① 本地曲库 -->
                 <DockPanel Visibility="{Binding IsLocalLibraryView, Converter={StaticResource BoolToVis}}">
                     <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
@@ -269,23 +325,32 @@
                              VirtualizingPanel.ScrollUnit="Pixel">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="4">
+                                <Grid Margin="4,3">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="150"/>
-                                        <ColumnDefinition Width="56"/>
+                                        <ColumnDefinition Width="52"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Name, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBody}"
-                                               Foreground="{StaticResource Brush_TextPrimary}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Artist, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"
-                                               TextTrimming="CharacterEllipsis"/>
+                                    <!-- 本地曲：音符占位（内嵌封面逐行解析开销大，缩略图仅在线行装载） -->
+                                    <Border Grid.Column="0" Width="38" Height="38"
+                                            CornerRadius="{DynamicResource Radius_MD}"
+                                            Background="{StaticResource Brush_AccentSoft}">
+                                        <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                              Width="15" Height="15" Stretch="Uniform"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeBody}"
+                                                   Foreground="{StaticResource Brush_TextPrimary}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Artist, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextMuted}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{Binding DurationText, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -308,58 +373,59 @@
                              VirtualizingPanel.ScrollUnit="Pixel">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="4">
+                                <Grid Margin="4,3">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="170"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="44"/>
+                                        <ColumnDefinition Width="48"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBody}"
-                                               Foreground="{StaticResource Brush_TextPrimary}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Subtitle, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Border Grid.Column="2" Background="{StaticResource Brush_AccentSoft}"
-                                            CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="0,0,8,0"
-                                            Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
-                                        <TextBlock Text="{Binding Badge, Mode=OneWay}"
-                                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                                   Foreground="{StaticResource Brush_Accent}"/>
+                                    <Border Grid.Column="0" Width="38" Height="38"
+                                            CornerRadius="{DynamicResource Radius_MD}"
+                                            Background="{StaticResource Brush_AccentSoft}">
+                                        <Grid>
+                                            <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                                  Width="15" Height="15" Stretch="Uniform"
+                                                  Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                                   Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                                        </Grid>
                                     </Border>
+                                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title, Mode=OneWay}"
+                                                       FontSize="{DynamicResource Font_SizeBody}"
+                                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <Border Background="{StaticResource Brush_AccentSoft}"
+                                                    CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
+                                                <TextBlock Text="{Binding Badge, Mode=OneWay}"
+                                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                                           Foreground="{StaticResource Brush_Accent}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Subtitle, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextMuted}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
                                     <TextBlock Grid.Column="3" Text="{Binding DurationText, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                                    <Path Grid.Column="4" Data="{StaticResource IconPlaySolid}"
+                                          Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
+                                          Stretch="Uniform" VerticalAlignment="Center" Margin="2,0,6,0"
+                                          ToolTip="双击播放"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </DockPanel>
 
-                <!-- 态③ 歌单详情 -->
+                <!-- 态③ 歌单详情（标题/全部播放/返回已上移左卡卡头） -->
                 <DockPanel Visibility="{Binding IsPlaylistDetailView, Converter={StaticResource BoolToVis}}">
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding ViewTitle, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeTitle}"
-                                   Foreground="{StaticResource Brush_TextPrimary}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <Button Grid.Column="1" Height="30" Content="全部播放" Margin="0,0,6,0"
-                                Command="{Binding PlayPlaylistFromStartCommand}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}"/>
-                            </Button.Style>
-                        </Button>
-                        <Button Grid.Column="2" Style="{StaticResource RowActionButton}" Height="30" Content="返回"
-                                Command="{Binding ClosePlaylistCommand}"/>
-                    </Grid>
                     <ListBox x:Name="PlaylistTrackList" ItemsSource="{Binding PlaylistTracks}"
                              MouseDoubleClick="OnPlaylistTrackDoubleClick"
                              Background="Transparent" BorderThickness="0"
@@ -370,31 +436,51 @@
                              VirtualizingPanel.ScrollUnit="Pixel">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="4">
+                                <Grid Margin="4,3">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="170"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="44"/>
+                                        <ColumnDefinition Width="48"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBody}"
-                                               Foreground="{StaticResource Brush_TextPrimary}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Subtitle, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Border Grid.Column="2" Background="{StaticResource Brush_AccentSoft}"
-                                            CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="0,0,8,0"
-                                            Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
-                                        <TextBlock Text="{Binding Badge, Mode=OneWay}"
-                                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                                   Foreground="{StaticResource Brush_Accent}"/>
+                                    <Border Grid.Column="0" Width="38" Height="38"
+                                            CornerRadius="{DynamicResource Radius_MD}"
+                                            Background="{StaticResource Brush_AccentSoft}">
+                                        <Grid>
+                                            <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                                  Width="15" Height="15" Stretch="Uniform"
+                                                  Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                                   Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                                        </Grid>
                                     </Border>
+                                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title, Mode=OneWay}"
+                                                       FontSize="{DynamicResource Font_SizeBody}"
+                                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <Border Background="{StaticResource Brush_AccentSoft}"
+                                                    CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
+                                                <TextBlock Text="{Binding Badge, Mode=OneWay}"
+                                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                                           Foreground="{StaticResource Brush_Accent}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Subtitle, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextMuted}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
                                     <TextBlock Grid.Column="3" Text="{Binding DurationText, Mode=OneWay}"
-                                               FontSize="{DynamicResource Font_SizeBodySm}"
-                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                                    <Path Grid.Column="4" Data="{StaticResource IconPlaySolid}"
+                                          Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
+                                          Stretch="Uniform" VerticalAlignment="Center" Margin="2,0,6,0"
+                                          ToolTip="双击播放"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -402,11 +488,14 @@
                 </DockPanel>
             </Grid>
 
-            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="Transparent"/>
+            </DockPanel>
+            </Border>
 
-            <!-- 右：推荐 + 播放队列 -->
-            <Grid Grid.Column="4">
+            <!-- 右卡：每日推荐 + 推荐歌单 + Up Next -->
+            <Border Grid.Column="1"
+                    Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_LG}"
+                    Padding="14,10,14,8">
+                <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -424,8 +513,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="每日推荐" FontSize="{DynamicResource Font_SizeBodySm}"
                                Foreground="{StaticResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Height="22" Padding="8,0"
-                            Content="刷新" Command="{Binding LoadRecommendationsCommand}">
+                    <Button Grid.Column="1" Width="22" Height="22" Padding="0"
+                            Command="{Binding LoadRecommendationsCommand}" ToolTip="刷新推荐">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                 <Style.Triggers>
@@ -435,6 +524,9 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
+                        <Path Data="{StaticResource IconRefresh}" StrokeLineJoin="Round"
+                              Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.8"
+                              Width="12" Height="12" Stretch="Uniform"/>
                     </Button>
                 </Grid>
                 <ListBox Grid.Row="2" x:Name="DailyRecommendList" ItemsSource="{Binding DailyRecommend}"
@@ -447,10 +539,37 @@
                          VirtualizingPanel.ScrollUnit="Pixel">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Margin="2" Text="{Binding Title, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextPrimary}"
-                                       TextTrimming="CharacterEllipsis"/>
+                            <Grid Margin="2,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="34" Height="34"
+                                        CornerRadius="{DynamicResource Radius_MD}"
+                                        Background="{StaticResource Brush_AccentSoft}">
+                                    <Grid>
+                                        <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                              Width="13" Height="13" Stretch="Uniform"
+                                              Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                                        <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                               Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextPrimary}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Subtitle, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding DurationText, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                            </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -467,10 +586,33 @@
                          VirtualizingPanel.ScrollUnit="Pixel">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Margin="2" Text="{Binding Title, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextPrimary}"
-                                       TextTrimming="CharacterEllipsis"/>
+                            <Grid Margin="2,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="44"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="40" Height="40"
+                                        CornerRadius="{DynamicResource Radius_MD}"
+                                        Background="{StaticResource Brush_AccentSoft}">
+                                    <Grid>
+                                        <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                              Width="14" Height="14" Stretch="Uniform"
+                                              Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                                        <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                               Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="10,0,4,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextPrimary}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding CountText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -486,81 +628,131 @@
                          VirtualizingPanel.ScrollUnit="Pixel">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Margin="2" Text="{Binding Name, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextPrimary}"
-                                       TextTrimming="CharacterEllipsis"/>
+                            <StackPanel Margin="2,3">
+                                <TextBlock Text="{Binding Name, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextPrimary}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Artist, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextMuted}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-            </Grid>
+                </Grid>
+            </Border>
         </Grid>
 
-        <!-- 底部常驻播放条（点击空白区展开完整播放器） -->
-        <Border Grid.Row="3" Margin="0,8,0,0" Padding="12,8"
-                Background="{StaticResource Brush_SurfaceAlt}"
+        <!-- 底部常驻播放条（2026-09-09 NexBox 风格重做：封面+曲名/艺人+中央圆形播放钮+右侧图标组+下缘进度；点击空白区展开完整播放器） -->
+        <Border Grid.Row="3" Margin="0,8,0,0" Padding="14,8,14,6"
+                Background="{StaticResource Brush_Surface}"
                 CornerRadius="{DynamicResource Radius_LG}"
                 MouseLeftButtonDown="OnBottomBarTap">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Width="52" Height="52"
-                        Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_MD}"/>
-                <StackPanel Grid.Column="1" Margin="14,0,14,0">
-                    <TextBlock Text="{Binding CurrentTitle}" FontSize="{DynamicResource Font_SizeBody}"
-                               Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding CurrentSub}" FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_TextMuted}" TextTrimming="CharacterEllipsis"/>
-                    <Slider x:Name="SeekSlider" Maximum="100" Style="{StaticResource SeekSliderStyle}"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- 封面（在线曲异步加载/本地曲内嵌；无封面音符占位） -->
+                    <Border Grid.Column="0" Width="46" Height="46"
+                            Background="{StaticResource Brush_AccentSoft}" CornerRadius="{DynamicResource Radius_MD}">
+                        <Grid>
+                            <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                  Width="16" Height="16" Stretch="Uniform"
+                                  Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                            <Image Source="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                   Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentTitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBody}"
+                                   Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding CurrentSub, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{StaticResource Brush_TextMuted}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                IsEnabled="{Binding IsEngineReady}">
+                        <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding PreviousCommand}" ToolTip="上一首">
+                            <Path Data="{StaticResource IconPrev}" Fill="{StaticResource Brush_TextPrimary}"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
+                        <Button Width="36" Height="36" Padding="0" Margin="0,0,16,0"
+                                Background="{StaticResource Brush_Accent}" BorderThickness="0"
+                                Command="{Binding PlayPauseCommand}" ToolTip="播放 / 暂停">
+                            <Grid>
+                                <Path Data="{StaticResource IconPlaySolid}" Fill="{StaticResource Brush_Background}"
+                                      Width="15" Height="15" Stretch="Uniform"
+                                      Visibility="{Binding IsPlaying, Converter={StaticResource InverseToVis}}"/>
+                                <Path Data="{StaticResource IconPauseBars}" Fill="{StaticResource Brush_Background}"
+                                      Width="15" Height="15" Stretch="Uniform"
+                                      Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}"/>
+                            </Grid>
+                        </Button>
+                        <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding NextCommand}" ToolTip="下一首">
+                            <Path Data="{StaticResource IconNext}" Fill="{StaticResource Brush_TextPrimary}"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
+                        <Button Width="32" Height="32" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding ToggleModeCommand}" ToolTip="{Binding ModeText, Mode=OneWay}">
+                            <Path Data="{StaticResource IconLoop}" StrokeLineJoin="Round"
+                                  Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
+                                  Width="15" Height="15" Stretch="Uniform"/>
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Margin="0,0,10,0" Padding="7,2" CornerRadius="{DynamicResource Radius_MD}"
+                                Background="{StaticResource Brush_SurfaceAlt}" VerticalAlignment="Center"
+                                ToolTip="当前音质（完整播放器内可切换）">
+                            <TextBlock Text="{Binding SelectedQualityText, Mode=OneWay}"
+                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                       Foreground="{StaticResource Brush_TextSecondary}"/>
+                        </Border>
+                        <Button Width="28" Height="28" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding OpenFullPlayerCommand}" ToolTip="展开完整播放器">
+                            <Path Data="{StaticResource IconExpandUp}" StrokeLineJoin="Round"
+                                  Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"
+                                  Width="14" Height="14" Stretch="Uniform"/>
+                        </Button>
+                        <TextBlock Text="播放引擎未就绪" Margin="8,0,0,0" VerticalAlignment="Center"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{StaticResource Brush_Warning}"
+                                   Visibility="{Binding IsEngineReady, Converter={StaticResource InverseToVis}}"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="1" Margin="2,4,2,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeMicro}"
+                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                    <Slider Grid.Column="1" x:Name="SeekSlider" Maximum="100" Style="{StaticResource SeekSliderStyle}"
+                            Margin="8,0"
                             Value="{Binding ProgressValue, Mode=OneWay}"
-                            Margin="0,4,0,0"
                             Thumb.DragStarted="OnSeekDragStarted"
                             Thumb.DragCompleted="OnSeekDragCompleted"/>
-                    <Grid>
-                        <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeMicro}"
-                                   Foreground="{StaticResource Brush_TextMuted}"/>
-                        <TextBlock Grid.Column="0" Text="{Binding PositionDurationText, Mode=OneWay}"
-                                   HorizontalAlignment="Right"
-                                   FontSize="{DynamicResource Font_SizeMicro}"
-                                   Foreground="{StaticResource Brush_TextMuted}"/>
-                    </Grid>
-                </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                            IsEnabled="{Binding IsEngineReady}">
-                    <Button Style="{StaticResource RowActionButton}" Height="30" Content="上一首" Margin="0,0,6,0"
-                            Command="{Binding PreviousCommand}"/>
-                    <Button Height="30" Margin="0,0,6,0" MinWidth="56"
-                            Command="{Binding PlayPauseCommand}">
-                        <TextBlock>
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="播放"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                            <Setter Property="Text" Value="暂停"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Button>
-                    <Button Style="{StaticResource RowActionButton}" Height="30" Content="下一首" Margin="0,0,6,0"
-                            Command="{Binding NextCommand}"/>
-                    <Button Style="{StaticResource RowActionButton}" Height="30" Margin="0,0,6,0"
-                            Command="{Binding ToggleModeCommand}">
-                        <TextBlock Text="{Binding ModeText, Mode=OneWay}"/>
-                    </Button>
-                    <Button Style="{StaticResource RowActionButton}" Height="30" Content="展开"
-                            Command="{Binding OpenFullPlayerCommand}"/>
-                    <TextBlock Text="播放引擎未就绪" Margin="10,0,0,0" VerticalAlignment="Center"
-                               FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_Warning}"
-                               Visibility="{Binding IsEngineReady, Converter={StaticResource InverseToVis}}"/>
-                </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{Binding PositionDurationText, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeMicro}"
+                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                </Grid>
             </Grid>
         </Border>
 
@@ -632,8 +824,8 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button Height="30" Padding="10,0" Content="EQ" Margin="8,0,0,0"
-                            Command="{Binding ToggleEqPanelCommand}">
+                    <Button Height="30" Width="40" Padding="0" Margin="8,0,0,0"
+                            Command="{Binding ToggleEqPanelCommand}" ToolTip="均衡器">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                 <Style.Triggers>
@@ -643,6 +835,9 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
+                        <Path Data="{StaticResource IconEqSliders}" StrokeLineJoin="Round"
+                              Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.8"
+                              Width="16" Height="16" Stretch="Uniform"/>
                     </Button>
                     <!-- 2026-09-09 修复：ContextMenu 只响应右键——左键经 Click 代码后置弹出（OnQualityMenuButtonClick） -->
                     <Button Height="30" Padding="10,0" Content="音质" Margin="8,0,0,0"
@@ -862,9 +1057,10 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
-                <!-- OM-7 EQ 面板浮层（Row1 内底部对齐；顶栏 EQ 钮弹出/收起；深色卡片 = 内容展示容器语义） -->
+                <!-- OM-7 EQ 面板浮层（2026-09-09 浅色化融入主题：主题卡+预设填充胶囊高亮+dB 读数；顶栏 EQ 钮弹出/收起） -->
                 <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"
-                        Background="{StaticResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_LG}"
+                        Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_SurfaceAlt}"
+                        BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}"
                         Padding="16,10" Visibility="{Binding IsEqPanelOpen, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -874,7 +1070,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding EqStateText, Mode=OneWay}" Value="均衡器 · 开">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -886,7 +1083,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="流行">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -898,7 +1096,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="摇滚">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -910,7 +1109,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="电子">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -922,7 +1122,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="古典">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -934,7 +1135,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="人声">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -946,7 +1148,8 @@
                                     <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="重低音">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -961,13 +1164,13 @@
                             <!-- 前置增益 -->
                             <StackPanel Margin="4,0" Width="44">
                                 <TextBlock Text="前置" FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_OnDarkMuted}"
+                                           Foreground="{StaticResource Brush_TextSecondary}"
                                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                                 <Slider Minimum="-12" Maximum="12" Value="{Binding PreampDb, Mode=TwoWay}"
                                         Orientation="Vertical" Height="120" HorizontalAlignment="Center"
                                         IsMoveToPointEnabled="True"/>
                                 <TextBlock Text="dB" FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_OnDarkMuted}"
+                                           Foreground="{StaticResource Brush_TextMuted}"
                                            HorizontalAlignment="Center" Margin="0,4,0,0"/>
                             </StackPanel>
                             <!-- 10 段 -->
@@ -981,14 +1184,17 @@
                                     <DataTemplate>
                                         <StackPanel Margin="4,0" Width="44">
                                             <TextBlock Text="{Binding Label, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
-                                                       Foreground="{StaticResource Brush_OnDarkMuted}"
+                                                       Foreground="{StaticResource Brush_TextSecondary}"
                                                        HorizontalAlignment="Center" Margin="0,0,0,4"/>
                                             <Slider Minimum="-12" Maximum="12" Value="{Binding Gain, Mode=TwoWay}"
                                                     Orientation="Vertical" Height="120" HorizontalAlignment="Center"
                                                     IsMoveToPointEnabled="True"/>
-                                            <TextBlock Text="{Binding Frequency, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
-                                                       Foreground="{StaticResource Brush_OnDarkMuted}"
+                                            <TextBlock Text="{Binding GainText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{StaticResource Brush_Accent}"
                                                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding Frequency, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{StaticResource Brush_TextMuted}"
+                                                       HorizontalAlignment="Center" Margin="0,1,0,0"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -1005,25 +1211,30 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Width="44" Height="40" Margin="0,0,28,0" Content="上一首"
+                    <Button Width="44" Height="40" Margin="0,0,28,0" Padding="0"
                             Style="{StaticResource RowActionButton}"
-                            Command="{Binding PreviousCommand}"/>
+                            Command="{Binding PreviousCommand}" ToolTip="上一首">
+                        <Path Data="{StaticResource IconPrev}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
+                              Width="18" Height="18" Stretch="Uniform"/>
+                    </Button>
                     <Button Width="56" Height="56" Padding="0"
                             Background="{StaticResource Brush_Accent}" BorderThickness="0"
                             Command="{Binding PlayPauseCommand}" ToolTip="播放 / 暂停">
                         <Grid>
-                            <Path Fill="{StaticResource Brush_Background}" Data="M9,6 L21,13 L9,20 Z"
+                            <Path Fill="{StaticResource Brush_Background}" Data="{StaticResource IconPlaySolid}"
+                                  Width="20" Height="20" Stretch="Uniform"
                                   Visibility="{Binding IsPlaying, Converter={StaticResource InverseToVis}}"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
-                                <Rectangle Width="5" Height="20" Fill="{StaticResource Brush_Background}" RadiusX="1.5" RadiusY="1.5"/>
-                                <Rectangle Width="5" Height="20" Fill="{StaticResource Brush_Background}" RadiusX="1.5" RadiusY="1.5" Margin="6,0,0,0"/>
-                            </StackPanel>
+                            <Path Fill="{StaticResource Brush_Background}" Data="{StaticResource IconPauseBars}"
+                                  Width="20" Height="20" Stretch="Uniform"
+                                  Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}"/>
                         </Grid>
                     </Button>
-                    <Button Width="44" Height="40" Margin="28,0,0,0" Content="下一首"
+                    <Button Width="44" Height="40" Margin="28,0,0,0" Padding="0"
                             Style="{StaticResource RowActionButton}"
-                            Command="{Binding NextCommand}"/>
+                            Command="{Binding NextCommand}" ToolTip="下一首">
+                        <Path Data="{StaticResource IconNext}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
+                              Width="18" Height="18" Stretch="Uniform"/>
+                    </Button>
                 </StackPanel>
                 <Grid Grid.Row="1" Margin="40,16,40,0">
                     <Grid.ColumnDefinitions>
