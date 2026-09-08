@@ -46,6 +46,22 @@ public enum PlayMode
 /// </remarks>
 public sealed record MusicSong
 {
+    private const string LocalIdPrefix = "local:";
+
+    /// <summary>
+    /// 由绝对路径生成跨进程稳定的曲目 ID（<see cref="Id"/> 的唯一合法来源）：
+    /// Windows 下路径大写归一 → SHA-256 前 8 字节十六进制。
+    /// 从 LocalMusicScanner 提升到模型（MUSIC-5）：Id 格式是模型语义的一部分，
+    /// 测试与持久化层也需要同一实现，避免双份逻辑漂移。
+    /// </summary>
+    public static string BuildIdFor(string fullPath)
+    {
+        string normalized = OperatingSystem.IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(normalized));
+        return LocalIdPrefix + Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
+    }
+
     /// <summary>
     /// 曲目唯一 ID，形如 <c>local:&lt;绝对路径 SHA-256 前 16 位十六进制&gt;</c>。
     /// </summary>

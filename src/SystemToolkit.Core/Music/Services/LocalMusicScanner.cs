@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Text;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Music.Models;
 
@@ -210,12 +208,8 @@ public sealed class LocalMusicScanner
     /// <para>Windows 文件系统大小写不敏感，故先统一大写再哈希，避免
     /// <c>C:\Music</c> 与 <c>c:\music</c> 生成两个 ID。</para>
     /// </remarks>
-    private static string BuildSongId(string fullPath)
-    {
-        string normalized = OperatingSystem.IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        return LocalIdPrefix + Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
-    }
+    // MUSIC-5：Id 生成提升到 MusicSong.BuildIdFor（模型语义，测试/持久化共用单点真相）
+    private static string BuildSongId(string fullPath) => MusicSong.BuildIdFor(fullPath);
 
     /// <summary>
     /// 手写栈式递归遍历：逐个目录枚举，单个目录失败只跳过它自己并记入不可达清单。
