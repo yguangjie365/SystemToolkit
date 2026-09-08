@@ -36,6 +36,35 @@ public partial class MusicManagerViewModel : ObservableObject
     private IMusicPlaybackEngine? _engine;
     private CancellationTokenSource? _scanCts;
     private LyricDocument _lyrics = LyricDocument.None();
+
+    /// <summary>
+    /// UI 线程 Dispatcher（构造时捕获——VM 由 View 在 UI 线程构造，Application 已就绪）。
+    /// 🔴 引擎契约允许 StateChanged/PositionChanged 在非 UI 线程触发（NAudio Timer/回调线程），
+    /// 而本 VM 的事件处理器会改 LyricRows/UpNext（ObservableCollection）——
+    /// 绑定激活时跨线程改集合直接抛异常闪退（2026-09-08 真机 0xE0434352 实证）。
+    /// 所有引擎事件必须经 <see cref="RunOnUi"/> 编组。
+    /// 测试宿主无 Application → Dispatcher 为 null → 直接执行（绑定未激活，安全）。
+    /// </summary>
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher =
+        System.Windows.Application.Current?.Dispatcher;
+
+    /// <summary>UI 线程编组：无 Dispatcher（测试宿主）直接执行；同线程直接执行；否则 BeginInvoke。</summary>
+    private void RunOnUi(Action action)
+    {
+        System.Windows.Threading.Dispatcher? d = _dispatcher;
+        if (d is null)
+        {
+            action();
+        }
+        else if (d.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            d.BeginInvoke(action);
+        }
+    }
     private List<LyricLine> _lyricLineSource = [];
 
     public MusicManagerViewModel(
@@ -363,15 +392,17 @@ public partial class MusicManagerViewModel : ObservableObject
         _engine = engine;
         _engineWired = true;
         OnPropertyChanged(nameof(IsEngineReady));
-        engine.StateChanged += OnEngineStateChanged;
-        engine.PositionChanged += OnEnginePositionChanged;
-        engine.TrackEnded += OnTrackEnded;
-        engine.PlaybackFailed += msg =>
+        // 🔴 全部经 RunOnUi 编组：引擎事件可能在 NAudio 回调/Timer 线程触发，
+        // 处理器会改 ObservableCollection（LyricRows/UpNext）与触发绑定刷新
+        engine.StateChanged += (state, song) => RunOnUi(() => OnEngineStateChanged(state, song));
+        engine.PositionChanged += (position, duration) => RunOnUi(() => OnEnginePositionChanged(position, duration));
+        engine.TrackEnded += song => RunOnUi(() => OnTrackEnded(song));
+        engine.PlaybackFailed += msg => RunOnUi(() =>
         {
             // 🔴 播放失败显式可见，不静默跳曲
             ScanStatusText = $"播放失败：{msg}";
             _log.Warn($"[Music] 播放失败：{msg}");
-        };
+        });
         _log.Info("[Music] 播放引擎已接通");
     }
 

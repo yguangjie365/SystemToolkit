@@ -101,7 +101,7 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
             ct.ThrowIfCancellationRequested();
             _reader = new MediaFoundationReader(filePath);
             _output = new WaveOutEvent();
-            _output.Volume = _muted ? 0f : 0f; // 起步 0 音量，淡入补到目标，避免首帧硬响
+            _output.Volume = 0f; // 起步 0 音量，随后淡入补到目标，避免首帧硬响（静音态下淡入到 0）
             _output.Init(_reader);
             _output.PlaybackStopped += OnPlaybackStopped;
             _stopRequested = false; // 新链建立完成，恢复自然结束检测
