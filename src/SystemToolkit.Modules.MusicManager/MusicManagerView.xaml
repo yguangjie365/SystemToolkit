@@ -584,6 +584,18 @@
                             </Style>
                         </Button.Style>
                     </Button>
+                    <Button Height="30" Padding="10,0" Content="EQ" Margin="8,0,0,0"
+                            Command="{Binding ToggleEqPanelCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEqPanelOpen, Mode=OneWay}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button Height="30" Padding="10,0" Content="音质" Margin="8,0,0,0">
                         <Button.ContextMenu>
                             <!-- ContextMenu 独立可视树：命令/数据经 PlacementTarget 回主树（GameManager 同款套路） -->
@@ -723,8 +735,7 @@
                 </Grid>
 
                 <!-- 模板③ 现代：中调主色底（背景层承担）+ 左上歌曲信息卡 + 右侧歌词列表（对照截图） -->
-                <Grid Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">
-                    <Grid.ColumnDefinitions>
+                <Grid Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">                    <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="340"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
@@ -801,6 +812,140 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
+                <!-- OM-7 EQ 面板浮层（Row1 内底部对齐；顶栏 EQ 钮弹出/收起；深色卡片 = 内容展示容器语义） -->
+                <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"
+                        Background="{StaticResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_LG}"
+                        Padding="16,10" Visibility="{Binding IsEqPanelOpen, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Height="24" Padding="10,0" Content="{Binding EqStateText, Mode=OneWay}"
+                                    Command="{Binding ToggleEqCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EqStateText, Mode=OneWay}" Value="均衡器 · 开">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="流行" Margin="10,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="流行">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="流行">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="摇滚" Margin="6,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="摇滚">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="摇滚">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="电子" Margin="6,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="电子">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="电子">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="古典" Margin="6,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="古典">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="古典">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="人声" Margin="6,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="人声">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="人声">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="重低音" Margin="6,0,0,0"
+                                    Command="{Binding ApplyEqPresetCommand}" CommandParameter="重低音">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentPresetName, Mode=OneWay}" Value="重低音">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Height="24" Padding="10,0" Content="归零" Margin="12,0,0,0"
+                                    Style="{StaticResource RowActionButton}"
+                                    Command="{Binding ResetEqCommand}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <!-- 前置增益 -->
+                            <StackPanel Margin="4,0" Width="44">
+                                <TextBlock Text="前置" FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_OnDarkMuted}"
+                                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                <Slider Minimum="-12" Maximum="12" Value="{Binding PreampDb, Mode=TwoWay}"
+                                        Orientation="Vertical" Height="120" HorizontalAlignment="Center"
+                                        IsMoveToPointEnabled="True"/>
+                                <TextBlock Text="dB" FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_OnDarkMuted}"
+                                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <!-- 10 段 -->
+                            <ItemsControl ItemsSource="{Binding EqBands}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="4,0" Width="44">
+                                            <TextBlock Text="{Binding Label, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{StaticResource Brush_OnDarkMuted}"
+                                                       HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                            <Slider Minimum="-12" Maximum="12" Value="{Binding Gain, Mode=TwoWay}"
+                                                    Orientation="Vertical" Height="120" HorizontalAlignment="Center"
+                                                    IsMoveToPointEnabled="True"/>
+                                            <TextBlock Text="{Binding Frequency, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{StaticResource Brush_OnDarkMuted}"
+                                                       HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </Grid>
 
             <!-- ③ 底控制栏：模式 + 传输 + 分列进度（引擎未就绪整组禁用） -->

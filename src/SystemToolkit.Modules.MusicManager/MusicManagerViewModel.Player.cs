@@ -285,6 +285,57 @@ public partial class MusicManagerViewModel
         private set => SetProperty(ref _isEqAvailable, value);
     }
 
+    private bool _isEqPanelOpen;
+
+    /// <summary>EQ 面板是否展开（完整播放器内弹出卡片）。</summary>
+    public bool IsEqPanelOpen
+    {
+        get => _isEqPanelOpen;
+        private set => SetProperty(ref _isEqPanelOpen, value);
+    }
+
+    /// <summary>顶栏「EQ」钮：弹出/收起面板。</summary>
+    [RelayCommand]
+    private void ToggleEqPanel() => IsEqPanelOpen = !IsEqPanelOpen;
+
+    private string _currentPresetName = string.Empty;
+
+    /// <summary>当前命中的预设名（手动拖滑条后清空 = 自定义态；按钮高亮据此）。</summary>
+    public string CurrentPresetName
+    {
+        get => _currentPresetName;
+        private set => SetProperty(ref _currentPresetName, value);
+    }
+
+    private string _eqStateText = "均衡器 · 关";
+
+    /// <summary>开关钮文案（随 Eq.Enabled 同步）。</summary>
+    public string EqStateText
+    {
+        get => _eqStateText;
+        private set => SetProperty(ref _eqStateText, value);
+    }
+
+    /// <summary>前置增益（dB，UI 双向；变更即热更）。</summary>
+    public double PreampDb
+    {
+        get => Eq.PreampDb;
+        set
+        {
+            double clamped = Math.Clamp(value, -EqProfile.MaxGainDb, EqProfile.MaxGainDb);
+            if (Eq.PreampDb != clamped)
+            {
+                Eq.PreampDb = clamped;
+                OnPropertyChanged();
+                ClearPresetHighlight();
+                ApplyEqToEngine();
+            }
+        }
+    }
+
+    /// <summary>手动调滑条 → 预设高亮清除（自定义态）。</summary>
+    private void ClearPresetHighlight() => CurrentPresetName = string.Empty;
+
     /// <summary>EQ 滑条行（10 段；Gain 双向绑滑条，变更即热更引擎）。</summary>
     public sealed class EqBandVm : ObservableObject
     {
@@ -315,6 +366,7 @@ public partial class MusicManagerViewModel
                 if (SetProperty(ref _gain, clamped))
                 {
                     _owner.Eq[Index] = clamped;
+                    _owner.ClearPresetHighlight();
                     _owner.ApplyEqToEngine();
                 }
             }
@@ -365,6 +417,7 @@ public partial class MusicManagerViewModel
     private void ToggleEq()
     {
         Eq.Enabled = !Eq.Enabled;
+        EqStateText = Eq.Enabled ? "均衡器 · 开" : "均衡器 · 关";
         ApplyEqToEngine();
         ScanStatusText = Eq.Enabled ? "均衡器已开启" : "均衡器已关闭";
     }
@@ -387,6 +440,8 @@ public partial class MusicManagerViewModel
             EqBands[i].RefreshFrom(Eq[i]); // 同步滑条显示
         }
 
+        CurrentPresetName = preset.Name;
+        OnPropertyChanged(nameof(PreampDb)); // 滑条同步
         ApplyEqToEngine();
         ScanStatusText = $"已应用预设：{preset.Name}";
     }
@@ -402,6 +457,8 @@ public partial class MusicManagerViewModel
             EqBands[i].RefreshFrom(0);
         }
 
+        ClearPresetHighlight();
+        OnPropertyChanged(nameof(PreampDb));
         ApplyEqToEngine();
         ScanStatusText = "均衡器已归零";
     }
