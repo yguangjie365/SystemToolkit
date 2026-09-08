@@ -232,8 +232,13 @@ public partial class MusicManagerViewModel : ObservableObject
     private string _currentSub = string.Empty;
     public string CurrentSub { get => _currentSub; private set => SetProperty(ref _currentSub, value); }
 
-    private string _positionText = "--:-- / --:--";
-    public string PositionText { get => _positionText; private set => SetProperty(ref _positionText, value); }
+    private string _positionCurrentText = "--:--";
+    /// <summary>当前播放时间（分列显示——完整播放器与主屏底栏统一用分列）。</summary>
+    public string PositionCurrentText { get => _positionCurrentText; private set => SetProperty(ref _positionCurrentText, value); }
+
+    private string _positionDurationText = "--:--";
+    /// <summary>总时长文本。</summary>
+    public string PositionDurationText { get => _positionDurationText; private set => SetProperty(ref _positionDurationText, value); }
 
     private double _progressValue;
     public double ProgressValue { get => _progressValue; private set => SetProperty(ref _progressValue, value); }
@@ -481,7 +486,8 @@ public partial class MusicManagerViewModel : ObservableObject
             return; // 拖动中：不回写进度，避免 Slider 与引擎轮询互相拉扯
         }
 
-        PositionText = $"{FormatTime(position)} / {FormatTime(duration)}";
+        PositionCurrentText = FormatTime(position);
+        PositionDurationText = FormatTime(duration);
         ProgressValue = duration.TotalMilliseconds <= 0
             ? 0
             : Math.Min(100, position.TotalMilliseconds / duration.TotalMilliseconds * 100);

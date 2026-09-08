@@ -104,11 +104,11 @@
     "stroke": 0
   },
   "src/SystemToolkit.Modules.MusicManager/MusicManagerView.xaml": {
-    "margin": 27,
-    "padding": 4,
-    "width": 7,
-    "height": 16,
-    "border": 4,
-    "stroke": 0
+    "margin": 32,
+    "padding": 6,
+    "width": 14,
+    "height": 17,
+    "border": 5,
+    "stroke": 5
   }
 }

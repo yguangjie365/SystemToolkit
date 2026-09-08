@@ -38,6 +38,12 @@ public static class TokenKeys
         public const string Color_Danger = "Color_Danger";
         public const string Color_SegmentWarn = "Color_SegmentWarn";
         public const string Color_DarkSurface = "Color_DarkSurface";
+
+        // ── 音乐完整播放器（MUSIC-7 视觉，2026-09-08 参考网易云全屏播放器）──
+        public const string Color_PlayerBgFrom = "Color_PlayerBgFrom";
+        public const string Color_PlayerBgTo = "Color_PlayerBgTo";
+        public const string Color_DiscGroove = "Color_DiscGroove";
+        public const string Brush_DiscGroove = "Brush_DiscGroove";
         public const string Color_OnDark = "Color_OnDark";
         // ── 状态语义（2026-09-08 阶段 2 补齐）：与 Success/Warning/Danger 同级，
         //    均遵循 M-UI-2「语义色走 700 档」决策（白底对比度 ≥4.5）
@@ -83,6 +89,10 @@ public static class TokenKeys
         public const string Brush_Disabled = "Brush_Disabled";
         public const string Brush_Focus = "Brush_Focus";
         public const string Brush_Selection = "Brush_Selection";
+
+        // ── 音乐完整播放器 ──
+        public const string Brush_PlayerVinyl = "Brush_PlayerVinyl";
+        public const string Brush_PlayerLabel = "Brush_PlayerLabel";
     }
 
     public static class Fonts

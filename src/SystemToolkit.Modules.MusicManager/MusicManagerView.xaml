@@ -168,8 +168,15 @@
                             IsMoveToPointEnabled="True"
                             Thumb.DragStarted="OnSeekDragStarted"
                             Thumb.DragCompleted="OnSeekDragCompleted"/>
-                    <TextBlock Text="{Binding PositionText}" FontSize="{DynamicResource Font_SizeMicro}"
-                               Foreground="{StaticResource Brush_TextMuted}"/>
+                    <Grid>
+                        <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}"
+                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                   Foreground="{StaticResource Brush_TextMuted}"/>
+                        <TextBlock Grid.Column="0" Text="{Binding PositionDurationText, Mode=OneWay}"
+                                   HorizontalAlignment="Right"
+                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                   Foreground="{StaticResource Brush_TextMuted}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
                             IsEnabled="{Binding IsEngineReady}">
@@ -206,82 +213,189 @@
             </Grid>
         </Border>
 
-        <!-- 完整播放器覆盖层（点底部条展开；大封面 + 控制 + 队列） -->
-        <Grid Grid.Row="0" Grid.RowSpan="4"
-              Background="{StaticResource Brush_Background}"
+        <!-- ═══ 完整播放器覆盖层（2026-09-08 参考网易云全屏播放器重设计；不显示队列——用户裁定） ═══ -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" ClipToBounds="True"
               Visibility="{Binding IsFullPlayerOpen, Converter={StaticResource BoolToVis}}">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.85">
+                    <GradientStop Color="{DynamicResource Color_PlayerBgFrom}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource Color_PlayerBgTo}" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <Button Grid.Row="0" Style="{StaticResource RowActionButton}" Height="30" Content="收起" Margin="16,12,16,0"
-                    HorizontalAlignment="Left" Command="{Binding CloseFullPlayerCommand}"/>
-            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border Width="180" Height="180" Background="{StaticResource Brush_SurfaceAlt}"
-                        CornerRadius="{DynamicResource Radius_LG}" HorizontalAlignment="Center"/>
-                <TextBlock Text="{Binding CurrentTitle}" Margin="0,16,0,0" TextAlignment="Center"
-                           FontSize="{DynamicResource Font_SizeTitleLg}"
-                           Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Text="{Binding CurrentSub}" Margin="0,6,0,0" TextAlignment="Center"
-                           FontSize="{DynamicResource Font_SizeBody}"
-                           Foreground="{StaticResource Brush_TextMuted}"/>
-                <Slider x:Name="FullSeekSlider" Maximum="100" Width="420" Margin="0,14,0,0"
-                        Value="{Binding ProgressValue, Mode=OneWay}"
-                        IsMoveToPointEnabled="True"
-                        Thumb.DragStarted="OnSeekDragStarted"
-                        Thumb.DragCompleted="OnFullSeekDragCompleted"/>
-                <TextBlock Text="{Binding PositionText}" Margin="0,4,0,0" TextAlignment="Center"
-                           FontSize="{DynamicResource Font_SizeCaption}"
-                           Foreground="{StaticResource Brush_TextMuted}"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0"
-                            IsEnabled="{Binding IsEngineReady}">
-                    <Button Style="{StaticResource RowActionButton}" Height="32" Content="上一首" Margin="0,0,8,0"
+
+            <!-- ① 顶栏：收起（左上） -->
+            <Button Grid.Row="0" HorizontalAlignment="Left" Margin="20,14,0,0"
+                    Width="40" Height="40" Padding="0"
+                    Background="Transparent" BorderThickness="0"
+                    Command="{Binding CloseFullPlayerCommand}" ToolTip="收起播放器">
+                <Path Data="M7,10 L13,16 L19,10" StrokeLineJoin="Round"
+                      Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"/>
+            </Button>
+
+            <!-- ② 主视觉：左标题+歌词流 / 右黑胶（右缘出血裁切） -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- 左：标题 / 艺术家 / 歌词流 -->
+                <Grid Grid.Column="0" Margin="72,8,48,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="{Binding CurrentTitle, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeTitleLg}"
+                               Foreground="{StaticResource Brush_TextPrimary}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Row="1" Text="{Binding CurrentSub, Mode=OneWay}"
+                               Margin="0,8,0,20"
+                               FontSize="{DynamicResource Font_SizeBody}"
+                               Foreground="{StaticResource Brush_TextMuted}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <ListBox Grid.Row="2" x:Name="FullLyricsList"
+                             ItemsSource="{Binding LyricRows}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Focusable" Value="False"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter Margin="0,12"/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           FontSize="{DynamicResource Font_SizeBodyLg}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center"
+                               Text="{Binding LyricsHint, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeBodySm}"
+                               Foreground="{StaticResource Brush_TextMuted}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding LyricsHint, Converter={StaticResource StrToVis}}"/>
+                </Grid>
+
+                <!-- 右：黑胶唱片（右缘出血；播放时旋转，暂停保持角度——纯 XAML Storyboard） -->
+                <Grid Grid.Column="1" Width="540" Height="540"
+                      Margin="0,-100,-170,-100" RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <RotateTransform x:Name="DiscRotation"/>
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard x:Name="DiscSpinStoryboard">
+                                <Storyboard>
+                                    <DoubleAnimation Duration="0:0:24" RepeatBehavior="Forever"
+                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                     From="0" To="360"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <ResumeStoryboard BeginStoryboardName="DiscSpinStoryboard"/>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <PauseStoryboard BeginStoryboardName="DiscSpinStoryboard"/>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Ellipse Fill="{StaticResource Brush_PlayerVinyl}"/>
+                    <Ellipse Margin="26" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.35"/>
+                    <Ellipse Margin="52" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.28"/>
+                    <Ellipse Margin="78" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.22"/>
+                    <Ellipse Margin="104" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.16"/>
+                    <Ellipse Margin="168" Fill="{StaticResource Brush_PlayerLabel}"/>
+                    <Path Data="M12,4 L24,2 L24,16 A3.2,2.8 0 1,1 20.8,13 L20.8,6 L15.2,7 L15.2,18 A3.2,2.8 0 1,1 12,15 Z"
+                          Fill="{StaticResource Brush_Background}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
+
+            <!-- ③ 底控制栏：模式 + 传输 + 分列进度（引擎未就绪整组禁用） -->
+            <Grid Grid.Row="2" Margin="72,0,72,26" IsEnabled="{Binding IsEngineReady}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Width="44" Height="40" Margin="0,0,28,0" Content="上一首"
+                            Style="{StaticResource RowActionButton}"
                             Command="{Binding PreviousCommand}"/>
-                    <Button Height="32" MinWidth="64" Margin="0,0,8,0" Command="{Binding PlayPauseCommand}">
-                        <TextBlock>
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="播放"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                            <Setter Property="Text" Value="暂停"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Button>
-                    <Button Style="{StaticResource RowActionButton}" Height="32" Content="下一首" Margin="0,0,8,0"
-                            Command="{Binding NextCommand}"/>
-                    <Button Style="{StaticResource RowActionButton}" Height="32" Command="{Binding ToggleModeCommand}">
-                        <TextBlock Text="{Binding ModeText, Mode=OneWay}"/>
-                    </Button>
-                </StackPanel>
-            </StackPanel>
-            <ListBox Grid.Row="2" ItemsSource="{Binding UpNext}" MaxHeight="180" Margin="24,8,24,12"
-                     Background="Transparent" BorderThickness="0"
-                     VirtualizingPanel.IsVirtualizing="True">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                                <Run Text="{Binding Name, Mode=OneWay}"/>
-                                <Run Text=" — "/>
-                                <Run Text="{Binding Artist, Mode=OneWay}"/>
-                            </TextBlock>
-                            <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Content="移除" Height="24"
-                                    Command="{Binding DataContext.RemoveFromQueueCommand,
-                                        RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                    CommandParameter="{Binding Id}"/>
+                    <Button Width="56" Height="56" Padding="0"
+                            Background="{StaticResource Brush_Accent}" BorderThickness="0"
+                            Command="{Binding PlayPauseCommand}" ToolTip="播放 / 暂停">
+                        <Grid>
+                            <Path Fill="{StaticResource Brush_Background}" Data="M9,6 L21,13 L9,20 Z"
+                                  Visibility="{Binding IsPlaying, Converter={StaticResource InverseToVis}}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
+                                <Rectangle Width="5" Height="20" Fill="{StaticResource Brush_Background}" RadiusX="1.5" RadiusY="1.5"/>
+                                <Rectangle Width="5" Height="20" Fill="{StaticResource Brush_Background}" RadiusX="1.5" RadiusY="1.5" Margin="6,0,0,0"/>
+                            </StackPanel>
                         </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                    </Button>
+                    <Button Width="44" Height="40" Margin="28,0,0,0" Content="下一首"
+                            Style="{StaticResource RowActionButton}"
+                            Command="{Binding NextCommand}"/>
+                </StackPanel>
+                <Grid Grid.Row="1" Margin="40,16,40,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="48"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="48"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    <Slider Grid.Column="1" x:Name="FullSeekSlider" Margin="16,0" Maximum="100" Height="6"
+                            Value="{Binding ProgressValue, Mode=OneWay}"
+                            IsMoveToPointEnabled="True"
+                            Thumb.DragStarted="OnSeekDragStarted"
+                            Thumb.DragCompleted="OnFullSeekDragCompleted"
+                            VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="{Binding PositionDurationText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}"
+                               HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

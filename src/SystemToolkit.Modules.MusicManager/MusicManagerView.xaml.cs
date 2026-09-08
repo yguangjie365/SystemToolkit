@@ -71,7 +71,16 @@ public partial class MusicManagerView : UserControl
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
         {
-            LyricsList.ScrollIntoView(_vm.LyricRows[_vm.ActiveLyricIndex]);
+            MusicManagerViewModel.LyricRowVm row = _vm.LyricRows[_vm.ActiveLyricIndex];
+            if (LyricsList.IsVisible)
+            {
+                LyricsList.ScrollIntoView(row);
+            }
+
+            if (FullLyricsList.IsVisible)
+            {
+                FullLyricsList.ScrollIntoView(row);
+            }
         }
     }
 

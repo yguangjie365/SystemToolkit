@@ -35,6 +35,11 @@
     <!-- M-UI-2：分段条警戒段亮橙纳入 Color_ 契约（原 Brush 硬编码，审查指认契约缺口） -->
     <Color x:Key="Color_SegmentWarn">#FB923C</Color>
     <Color x:Key="Color_DarkSurface">#1F2937</Color>
+    <!-- 音乐完整播放器（2026-09-08）：Claude 暖调延伸——盘面紫灰对照参考图黑胶 -->
+    <Color x:Key="Color_PlayerBgFrom">#EFEAF2</Color>
+    <Color x:Key="Color_PlayerBgTo">#DFD8E4</Color>
+    <Color x:Key="Color_DiscGroove">#6E5F73</Color>
+    <SolidColorBrush x:Key="Brush_DiscGroove" Color="{StaticResource Color_DiscGroove}"/>
     <Color x:Key="Color_OnDark">#F9FAFB</Color>
     <!-- 状态语义（2026-09-08 阶段 2）：延续 M-UI-2「语义色 700 档」决策；
          Info=blue-700 / Disabled=gray-400（WCAG 对 disabled 元素豁免对比度）/
@@ -91,6 +96,12 @@
     <SolidColorBrush x:Key="Brush_Info" Color="{StaticResource Color_Info}"/>
     <SolidColorBrush x:Key="Brush_Disabled" Color="{StaticResource Color_Disabled}"/>
     <SolidColorBrush x:Key="Brush_Focus" Color="{StaticResource Color_Focus}"/>
+    <RadialGradientBrush x:Key="Brush_PlayerVinyl" GradientOrigin="0.4,0.35" Center="0.5,0.5">
+        <GradientStop Color="#B9A8BC" Offset="0"/>
+        <GradientStop Color="#9C8AA0" Offset="0.55"/>
+        <GradientStop Color="#8A7890" Offset="1"/>
+    </RadialGradientBrush>
+    <SolidColorBrush x:Key="Brush_PlayerLabel" Color="#7E6C84"/>
     <SolidColorBrush x:Key="Brush_Selection" Color="{StaticResource Color_Selection}"/>
 
     <!-- ===== 字体族（五款打包字体按 NOTICE.md §五加载；西文在前中文在后按字符回退） ===== -->
