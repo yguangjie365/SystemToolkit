@@ -7,8 +7,13 @@ namespace SystemToolkit.Shell;
 /// <summary>导航条目基类（区分组头与模块项，UI 审计采纳：导航分组）。</summary>
 public abstract record NavEntry(bool IsHeader);
 
-/// <summary>导航条目：模块 + 展示图标。</summary>
-public sealed record NavItem(string Glyph, IModule Module) : NavEntry(false)
+/// <summary>
+/// 导航条目：模块 + 展示图标。
+/// 2026-09-09：图标改为**矢量优先**（<see cref="Geometry"/>），字形仅作回退——
+/// 矢量不依赖系统字体（Segoe Fluent/MDL2 在精简系统可能缺字形变豆腐块）。
+/// 两者都取不到时 <see cref="IconData"/> 为 null，模板退化为显示字形。
+/// </summary>
+public sealed record NavItem(string Glyph, IModule Module, System.Windows.Media.Geometry? IconData = null) : NavEntry(false)
 {
     public string DisplayName => Module.DisplayName;
 }
@@ -30,7 +35,25 @@ public partial class MainWindow : Window
     /// </summary>
     private IPausableViewModel? _pausable;
 
-    /// <summary>模块图标映射（Segoe MDL2 码位；新增模块须登记）。</summary>
+    /// <summary>
+    /// 模块矢量图标映射（Icons.xaml 中的资源 key；新增模块须登记）。
+    /// 找不到对应 Geometry 时回退到 <see cref="ModuleGlyphs"/> 的字形。
+    /// </summary>
+    private static readonly Dictionary<string, string> ModuleIconKeys = new()
+    {
+        ["overview"] = "Icon_Nav_Overview",
+        ["appmanager"] = "Icon_Nav_AppManager",
+        ["drivermanager"] = "Icon_Nav_DriverManager",
+        ["filebackup"] = "Icon_Nav_FileBackup",
+        ["filetransfer"] = "Icon_Nav_FileTransfer",
+        ["netmanager"] = "Icon_Nav_NetManager",
+        ["recoverymanager"] = "Icon_Nav_RecoveryManager",
+        ["gamemanager"] = "Icon_Nav_GameManager",
+        ["musicmanager"] = "Icon_Nav_MusicManager",
+        ["settings"] = "Icon_Nav_Settings",
+    };
+
+    /// <summary>模块字形映射（Segoe MDL2 码位；矢量图标缺失时的回退，新增模块须登记）。</summary>
     private static readonly Dictionary<string, string> ModuleGlyphs = new()
     {
         ["overview"] = "\uE9D9",
@@ -81,7 +104,7 @@ public partial class MainWindow : Window
                     firstItemIndex = entries.Count;
                 }
 
-                entries.Add(new NavItem(ModuleGlyphs.GetValueOrDefault(id, "\uE7C3"), module));
+                entries.Add(new NavItem(ModuleGlyphs.GetValueOrDefault(id, "\uE7C3"), module, ResolveIcon(id)));
             }
         }
 
@@ -98,6 +121,20 @@ public partial class MainWindow : Window
                 _ = _pausable.ActivateAsync();
             }
         };
+    }
+
+    /// <summary>
+    /// 按模块 id 取矢量图标（来自 Icons.xaml 合并进 App 资源字典的 Geometry）。
+    /// 取不到返回 null → 模板自动回退到字形，不会变成空白。
+    /// </summary>
+    private static System.Windows.Media.Geometry? ResolveIcon(string moduleId)
+    {
+        if (!ModuleIconKeys.TryGetValue(moduleId, out string? key))
+        {
+            return null;
+        }
+
+        return Application.Current?.TryFindResource(key) as System.Windows.Media.Geometry;
     }
 
     private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -56,8 +56,40 @@
                         <DataTemplate DataType="{x:Type local:NavItem}">
                             <StackPanel Orientation="Horizontal" Height="34"
                                         HorizontalAlignment="Center">
+                                <!-- 矢量图标优先（Icons.xaml）：不依赖系统字体；缺失时回退字形。
+                                     ⚠️ 默认可见性必须写在 Style 的 Setter 里——
+                                     直接写属性（本地值）优先级高于触发器，触发器会失效 -->
+                                <Path Data="{Binding IconData, Mode=OneWay}"
+                                      Width="{DynamicResource Icon_SizeNav}" Height="{DynamicResource Icon_SizeNav}"
+                                      Stretch="Uniform"
+                                      Stroke="{DynamicResource Brush_TextPrimary}"
+                                      StrokeThickness="{DynamicResource Icon_Stroke}"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      VerticalAlignment="Center">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IconData}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
                                 <TextBlock Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                           FontSize="{DynamicResource Font_SizeTitleLg}" VerticalAlignment="Center"/>
+                                           FontSize="{DynamicResource Font_SizeTitleLg}" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IconData}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                                 <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource Font_SizeTitle}"
                                            VerticalAlignment="Center" Margin="7,0,0,0"/>
                             </StackPanel>

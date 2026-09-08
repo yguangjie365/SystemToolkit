@@ -153,6 +153,13 @@
     <CornerRadius x:Key="Radius_Pill">999</CornerRadius>
     <CornerRadius x:Key="Radius_Track">2</CornerRadius>
 
+    <!-- ===== 图标（2026-09-09 建立：配合 Themes/Icons.xaml，避免图标尺寸/描边裸值） ===== -->
+    <sys:Double x:Key="Icon_SizeSm">16</sys:Double>
+    <sys:Double x:Key="Icon_SizeNav">17</sys:Double>
+    <sys:Double x:Key="Icon_SizeMd">20</sys:Double>
+    <sys:Double x:Key="Icon_SizeLg">24</sys:Double>
+    <sys:Double x:Key="Icon_Stroke">1.5</sys:Double>
+
     <!-- ===== 间距（04 规范 4px 栅格） ===== -->
     <Thickness x:Key="Space_XXS">4</Thickness>
     <Thickness x:Key="Space_XS">8</Thickness>

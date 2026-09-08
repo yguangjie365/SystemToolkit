@@ -137,6 +137,16 @@ public static class TokenKeys
         public const string Radius_Track = "Radius_Track";
     }
 
+    /// <summary>图标尺寸与描边（2026-09-09 建立，配合 Themes/Icons.xaml 图标体系）。</summary>
+    public static class Icons
+    {
+        public const string Icon_SizeNav = "Icon_SizeNav";
+        public const string Icon_SizeSm = "Icon_SizeSm";
+        public const string Icon_SizeMd = "Icon_SizeMd";
+        public const string Icon_SizeLg = "Icon_SizeLg";
+        public const string Icon_Stroke = "Icon_Stroke";
+    }
+
     public static class Spacing
     {
         public const string Space_XXS = "Space_XXS";

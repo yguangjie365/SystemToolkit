@@ -7,6 +7,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <!-- Claude 主题令牌（单 Light，ADR-003） -->
                 <ResourceDictionary Source="pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Packs/Claude/Claude.Light.xaml"/>
+                <!-- 图标几何（24 格线性 1.5；规范见 Docs/08-图标规范与清单.md） -->
+                <ResourceDictionary Source="pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Icons.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
