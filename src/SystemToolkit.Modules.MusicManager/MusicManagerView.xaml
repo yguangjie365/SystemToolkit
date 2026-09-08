@@ -525,33 +525,13 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- 背景层（OM-6 三风格，Visibility 显隐；控制条/顶栏浮于其上） -->
+            <!-- 背景层（OM-6 三风格：主色派生三档——浅染/深染/中调；控制条/顶栏浮于其上） -->
             <Grid Grid.RowSpan="3">
-                <Border Visibility="{Binding IsVinylStyle, Converter={StaticResource BoolToVis}}">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.85">
-                            <GradientStop Color="{DynamicResource Color_PlayerBgFrom}" Offset="0"/>
-                            <GradientStop Color="{DynamicResource Color_PlayerBgTo}" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
-                <Grid Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}">
-                    <Border>
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.85">
-                                <GradientStop Color="{DynamicResource Color_PlayerBgFrom}" Offset="0"/>
-                                <GradientStop Color="{DynamicResource Color_PlayerBgTo}" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
-                    <Border Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}">
-                        <Border.Background>
-                            <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
-                        </Border.Background>
-                    </Border>
-                    <Border Background="{StaticResource Brush_CoverOverlay}"/>
-                </Grid>
-                <Border Background="{StaticResource Brush_Background}"
+                <Border Background="{Binding VinylBackgroundBrush, Mode=OneWay}"
+                        Visibility="{Binding IsVinylStyle, Converter={StaticResource BoolToVis}}"/>
+                <Border Background="{Binding ImmersionBackgroundBrush, Mode=OneWay}"
+                        Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}"/>
+                <Border Background="{Binding ModernBackgroundBrush, Mode=OneWay}"
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
             </Grid>
 
@@ -562,12 +542,12 @@
                         Background="Transparent" BorderThickness="0"
                         Command="{Binding CloseFullPlayerCommand}" ToolTip="收起播放器">
                     <Path Data="M7,10 L13,16 L19,10" StrokeLineJoin="Round"
-                          Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"/>
+                          Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="2"/>
                 </Button>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,20,0">
                     <TextBlock Text="{Binding SelectedQualityText, Mode=OneWay}" VerticalAlignment="Center"
                                FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_TextMuted}" Margin="0,0,10,0"/>
+                               Foreground="{Binding PlayerMutedBrush, Mode=OneWay}" Margin="0,0,10,0"/>
                     <Button Height="30" Padding="10,0" Content="彩胶" Margin="0,0,6,0"
                             Command="{Binding SwitchPlayerStyleCommand}" CommandParameter="Vinyl">
                         <Button.Style>
@@ -698,163 +678,128 @@
                                Visibility="{Binding LyricsHint, Converter={StaticResource StrToVis}}"/>
                 </Grid>
 
-                <!-- 右：黑胶唱片（右缘出血；播放时旋转，暂停保持角度——纯 XAML Storyboard） -->
+                <!-- 右：彩胶圆盘（右缘出血；主色环 + 封面圆心；播放时旋转——code-behind 控制） -->
                 <Grid Grid.Column="1" x:Name="DiscHost" Width="540" Height="540"
-                      Margin="0,-100,-170,-100" RenderTransformOrigin="0.5,0.5">
+                      Margin="0,-60,-170,-60" RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform>
                         <RotateTransform x:Name="DiscRotation"/>
                     </Grid.RenderTransform>
                     <!-- 旋转控制经 code-behind（🔴 Style 的 DataTrigger 无法引用元素树 NameScope
                          中的 BeginStoryboardName——跨 NameScope 必抛 InvalidOperationException，
                          2026-09-08 真机实证） -->
-                    <Ellipse Fill="{StaticResource Brush_PlayerVinyl}"/>
+                    <Ellipse Fill="{Binding CurrentAccentBrush, Mode=OneWay}"/>
                     <Ellipse Margin="26" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.35"/>
                     <Ellipse Margin="52" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.28"/>
-                    <Ellipse Margin="78" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.22"/>
-                    <Ellipse Margin="104" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.16"/>
-                    <Ellipse Margin="168" Fill="{StaticResource Brush_PlayerLabel}"/>
-                    <Path Data="M12,4 L24,2 L24,16 A3.2,2.8 0 1,1 20.8,13 L20.8,6 L15.2,7 L15.2,18 A3.2,2.8 0 1,1 12,15 Z"
-                          Fill="{StaticResource Brush_Background}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Ellipse Margin="78" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.4"/>
+                    <Ellipse Margin="80" Fill="{StaticResource Brush_Surface}"/>
+                    <Ellipse Margin="86">
+                        <Ellipse.Fill>
+                            <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Ellipse Margin="86" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.5"/>
                 </Grid>
                 </Grid>
 
-                <!-- 模板② 沉浸：封面出血背景已由背景层承担；内容 = 居左大歌词流（随曲滚动） -->
+                <!-- 模板② 沉浸：深主色底（背景层承担）；仅中央当前句大字随曲滚动（对照截图） -->
                 <Grid Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}">
-                    <Grid Margin="120,24,200,16">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Text="{Binding CurrentTitle, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeTitleLg}"
-                                   Foreground="{StaticResource Brush_TextPrimary}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Row="1" Text="{Binding CurrentSub, Mode=OneWay}"
-                                   Margin="0,8,0,18"
-                                   FontSize="{DynamicResource Font_SizeBody}"
-                                   Foreground="{StaticResource Brush_TextMuted}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <ListBox Grid.Row="2" x:Name="ImmersionLyricsList"
-                                 ItemsSource="{Binding LyricRows}"
-                                 Background="Transparent" BorderThickness="0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 VirtualizingPanel.IsVirtualizing="True"
-                                 VirtualizingPanel.ScrollUnit="Pixel"
-                                 VirtualizingPanel.VirtualizationMode="Recycling">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Focusable" Value="False"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="ListBoxItem">
-                                                <ContentPresenter Margin="0,14"/>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Text, Mode=OneWay}"
-                                               TextWrapping="Wrap"
-                                               FontSize="{DynamicResource Font_SizeBodyLg}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
-                                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
+                    <TextBlock Text="{Binding CurrentLyricText, Mode=OneWay}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="720"
+                               FontSize="{DynamicResource Font_SizeTitleLg}"
+                               Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentLyricText, Mode=OneWay}" Value="">
+                                        <Setter Property="Text" Value="♪"/>
+                                        <Setter Property="Opacity" Value="0.5"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
 
-                <!-- 模板③ 现代：白净表面（背景层承担）+ 左侧封面卡 + 右侧标题/歌词列 -->
+                <!-- 模板③ 现代：中调主色底（背景层承担）+ 左上歌曲信息卡 + 右侧歌词列表（对照截图） -->
                 <Grid Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="340"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Width="240" Height="240"
-                            Margin="0,0,0,0" CornerRadius="{DynamicResource Radius_LG}"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}">
-                        <Border.Background>
-                            <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
-                        </Border.Background>
+
+                    <!-- 左：歌曲信息卡（白卡：封面方图 + 歌名 + 艺术家 + 专辑） -->
+                    <Border Grid.Column="0" Width="250" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="56,24,0,0" CornerRadius="{DynamicResource Radius_LG}"
+                            Background="{StaticResource Brush_Surface}" Padding="14">
+                        <StackPanel>
+                            <Border Height="220" CornerRadius="{DynamicResource Radius_MD}"
+                                    Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <Border Height="220" CornerRadius="{DynamicResource Radius_MD}"
+                                    Background="{StaticResource Brush_SurfaceAlt}"
+                                    Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}">
+                                <TextBlock Text="无封面" FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextMuted}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{Binding CurrentTitle, Mode=OneWay}" Margin="0,12,0,0"
+                                       FontSize="{DynamicResource Font_SizeTitle}"
+                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding CurrentSub, Mode=OneWay}" Margin="0,6,0,0"
+                                       FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextMuted}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
                     </Border>
-                    <Border Grid.Column="0" Width="240" Height="240"
-                            CornerRadius="{DynamicResource Radius_LG}"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Background="{StaticResource Brush_Surface}"
-                            Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}">
-                        <TextBlock Text="无封面" FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{StaticResource Brush_TextMuted}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <Grid Grid.Column="1" Margin="8,40,120,16">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Text="{Binding CurrentTitle, Mode=OneWay}"
-                                   FontSize="{DynamicResource Font_SizeTitleLg}"
-                                   Foreground="{StaticResource Brush_TextPrimary}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Row="1" Text="{Binding CurrentSub, Mode=OneWay}"
-                                   Margin="0,8,0,18"
-                                   FontSize="{DynamicResource Font_SizeBody}"
-                                   Foreground="{StaticResource Brush_TextMuted}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <ListBox Grid.Row="2" x:Name="ModernLyricsList"
-                                 ItemsSource="{Binding LyricRows}"
-                                 Background="Transparent" BorderThickness="0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 VirtualizingPanel.IsVirtualizing="True"
-                                 VirtualizingPanel.ScrollUnit="Pixel"
-                                 VirtualizingPanel.VirtualizationMode="Recycling">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Focusable" Value="False"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="ListBoxItem">
-                                                <ContentPresenter Margin="0,10"/>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Text, Mode=OneWay}"
-                                               TextWrapping="Wrap"
-                                               FontSize="{DynamicResource Font_SizeBody}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush_TextPrimary}"/>
-                                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
+
+                    <!-- 右：歌词列表（当前行主色高亮） -->
+                    <ListBox Grid.Column="1" x:Name="ModernLyricsList"
+                             Margin="8,60,64,16"
+                             ItemsSource="{Binding LyricRows}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Focusable" Value="False"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter Margin="0,10"/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeBodyLg}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </Grid>
 
@@ -892,7 +837,7 @@
                         <ColumnDefinition Width="48"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding PositionCurrentText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_TextMuted}"
+                               Foreground="{Binding PlayerMutedBrush, Mode=OneWay}"
                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
                     <Slider Grid.Column="1" x:Name="FullSeekSlider" Margin="16,0" Maximum="100" Height="6"
                             Value="{Binding ProgressValue, Mode=OneWay}"
@@ -901,7 +846,7 @@
                             Thumb.DragCompleted="OnFullSeekDragCompleted"
                             VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="2" Text="{Binding PositionDurationText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_TextMuted}"
+                               Foreground="{Binding PlayerMutedBrush, Mode=OneWay}"
                                HorizontalAlignment="Left" VerticalAlignment="Center"/>
                 </Grid>
             </Grid>

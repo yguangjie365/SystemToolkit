@@ -190,11 +190,9 @@ public partial class MusicManagerView : UserControl
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
         {
-            // OM-6：三风格各持一个歌词列表——只滚动当前可见的那个
+            // OM-6：沉浸=中央单行大字（属性驱动无需滚动）；彩胶/现代各持列表——只滚可见的
             MusicManagerViewModel.LyricRowVm row = _vm.LyricRows[_vm.ActiveLyricIndex];
-            ListBox? activeList = _vm.IsVinylStyle ? FullLyricsList
-                : _vm.IsImmersionStyle ? ImmersionLyricsList
-                : ModernLyricsList;
+            ListBox? activeList = _vm.IsModernStyle ? ModernLyricsList : FullLyricsList;
             if (activeList is { IsVisible: true })
             {
                 activeList.ScrollIntoView(row);

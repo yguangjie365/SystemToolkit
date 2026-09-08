@@ -17,6 +17,36 @@ public static class CoverColorFactory
     /// <summary>无封面时的中性深灰主色（视觉与主题深海军蓝表面一致）。</summary>
     public static readonly SolidColorBrush Neutral = Create(0x44, 0x44, 0x41);
 
+    /// <summary>
+    /// 彩胶风格浅背景：主色高亮度、低饱和的近白染色（对照 NexBox 透明彩胶的浅底微染）。
+    /// </summary>
+    public static SolidColorBrush LightTint(SolidColorBrush accent)
+    {
+        PaletteMath.Hsl hsl = PaletteMath.RgbToHsl(accent.Color.R, accent.Color.G, accent.Color.B);
+        PaletteMath.Rgb rgb = PaletteMath.HslToRgb(hsl.H, 0.18, 0.92);
+        return Create(rgb.R, rgb.G, rgb.B);
+    }
+
+    /// <summary>
+    /// 沉浸风格深背景：主色压暗加深（对照 NexBox 沉浸的深色主色渐变底）。
+    /// </summary>
+    public static SolidColorBrush DarkImmersive(SolidColorBrush accent)
+    {
+        PaletteMath.Hsl hsl = PaletteMath.RgbToHsl(accent.Color.R, accent.Color.G, accent.Color.B);
+        PaletteMath.Rgb rgb = PaletteMath.HslToRgb(hsl.H, Math.Max(hsl.S, 0.40), 0.30);
+        return Create(rgb.R, rgb.G, rgb.B);
+    }
+
+    /// <summary>
+    /// 现代风格中调背景：主色中亮度中饱和（对照 NexBox 现代的灰紫中调底）。
+    /// </summary>
+    public static SolidColorBrush MidTone(SolidColorBrush accent)
+    {
+        PaletteMath.Hsl hsl = PaletteMath.RgbToHsl(accent.Color.R, accent.Color.G, accent.Color.B);
+        PaletteMath.Rgb rgb = PaletteMath.HslToRgb(hsl.H, Math.Min(Math.Max(hsl.S, 0.15), 0.30), 0.74);
+        return Create(rgb.R, rgb.G, rgb.B);
+    }
+
     /// <summary>位图 → 主色刷（下采样像素后走 <see cref="PaletteMath"/>；冻结以便多线程安全）。</summary>
     public static SolidColorBrush FromBitmap(BitmapSource source)
     {

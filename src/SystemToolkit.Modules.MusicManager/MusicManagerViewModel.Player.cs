@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using SystemToolkit.Core.Music.Models;
 using SystemToolkit.Core.Music.Online;
 using SystemToolkit.Core.Music.Services;
+using SystemToolkit.UI.Common;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -73,6 +74,7 @@ public partial class MusicManagerViewModel
             "Modern" => PlayerStyleKind.Modern,
             _ => PlayerStyleKind.Vinyl,
         };
+        RefreshPlayerChromeBrushes();
     }
 
     // ════════ 封面 + 主色 ════════
@@ -105,6 +107,62 @@ public partial class MusicManagerViewModel
     }
 
     private long _coverSeq;
+
+    private SolidColorBrush _vinylBackgroundBrush = CoverColorFactory.LightTint(CoverColorFactory.Neutral);
+
+    /// <summary>彩胶浅背景（主色高亮低饱和近白染色；对照 NexBox 透明彩胶）。</summary>
+    public SolidColorBrush VinylBackgroundBrush
+    {
+        get => _vinylBackgroundBrush;
+        private set => SetProperty(ref _vinylBackgroundBrush, value);
+    }
+
+    private SolidColorBrush _immersionBackgroundBrush = CoverColorFactory.DarkImmersive(CoverColorFactory.Neutral);
+
+    /// <summary>沉浸深背景（主色压暗；对照 NexBox 沉浸）。</summary>
+    public SolidColorBrush ImmersionBackgroundBrush
+    {
+        get => _immersionBackgroundBrush;
+        private set => SetProperty(ref _immersionBackgroundBrush, value);
+    }
+
+    private SolidColorBrush _modernBackgroundBrush = CoverColorFactory.MidTone(CoverColorFactory.Neutral);
+
+    /// <summary>现代中调背景（主色中亮度中饱和；对照 NexBox 现代）。</summary>
+    public SolidColorBrush ModernBackgroundBrush
+    {
+        get => _modernBackgroundBrush;
+        private set => SetProperty(ref _modernBackgroundBrush, value);
+    }
+
+    private Brush _playerForegroundBrush = ThemeBrush.Find("Brush_TextPrimary", "#1F1F1F");
+
+    /// <summary>控制条/顶栏主前景（沉浸深底用 OnDark 浅字，其余浅底用主题深字）。</summary>
+    public Brush PlayerForegroundBrush
+    {
+        get => _playerForegroundBrush;
+        private set => SetProperty(ref _playerForegroundBrush, value);
+    }
+
+    private Brush _playerMutedBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
+
+    /// <summary>控制条/顶栏次要前景（随风格深浅切换）。</summary>
+    public Brush PlayerMutedBrush
+    {
+        get => _playerMutedBrush;
+        private set => SetProperty(ref _playerMutedBrush, value);
+    }
+
+    private void RefreshPlayerChromeBrushes()
+    {
+        bool dark = PlayerStyle == PlayerStyleKind.Immersion;
+        PlayerForegroundBrush = dark
+            ? ThemeBrush.Find("Brush_OnDark", "#F5F5F4")
+            : ThemeBrush.Find("Brush_TextPrimary", "#1F1F1F");
+        PlayerMutedBrush = dark
+            ? ThemeBrush.Find("Brush_OnDarkMuted", "#A8A29E")
+            : ThemeBrush.Find("Brush_TextMuted", "#6B7280");
+    }
 
     /// <summary>起播/切歌后装载封面与主色（后台 IO；结果经 RunOnUi 回 UI）。</summary>
     private async Task LoadCoverAsync(MusicSong song)
@@ -140,7 +198,11 @@ public partial class MusicManagerViewModel
         RunOnUi(() =>
         {
             CurrentCoverImage = image;
-            CurrentAccentBrush = image is null ? CoverColorFactory.Neutral : CoverColorFactory.FromBitmap(image);
+            SolidColorBrush accent = image is null ? CoverColorFactory.Neutral : CoverColorFactory.FromBitmap(image);
+            CurrentAccentBrush = accent;
+            VinylBackgroundBrush = CoverColorFactory.LightTint(accent);
+            ImmersionBackgroundBrush = CoverColorFactory.DarkImmersive(accent);
+            ModernBackgroundBrush = CoverColorFactory.MidTone(accent);
         });
     }
 

@@ -175,6 +175,13 @@ public class MusicPlayerStyleTests
         System.Windows.Media.Color c = vm.CurrentAccentBrush.Color;
         Assert.True(c.R > 180, $"实际主色 {c}");
         Assert.True(c.R > c.G + 80, $"实际主色 {c}");
+
+        // OM-6 截图对齐：三风格背景刷由主色派生（彩胶近白 / 沉浸压暗 / 现代中调）
+        // 亮度用感知加权（WPF Color 无 GetBrightness）
+        static double Luma(System.Windows.Media.Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
+        Assert.True(Luma(vm.VinylBackgroundBrush.Color) > 0.8, "彩胶底应近白");
+        Assert.True(Luma(vm.ImmersionBackgroundBrush.Color) < 0.45, "沉浸底应深");
+        Assert.InRange(Luma(vm.ModernBackgroundBrush.Color), 0.6, 0.9);
     }
 
     [Fact]

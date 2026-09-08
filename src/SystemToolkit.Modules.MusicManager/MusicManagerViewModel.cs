@@ -495,10 +495,24 @@ public partial class MusicManagerViewModel : ObservableObject
             }
 
             _previousActiveIndex = value;
+
+            // OM-6 沉浸风格：中央单行大字 = 当前行文本（无行时清空）
+            CurrentLyricText = value >= 0 && value < _lyricRows.Count
+                ? _lyricRows[value].Text
+                : string.Empty;
         }
     }
 
     private int _previousActiveIndex = -1;
+
+    private string _currentLyricText = string.Empty;
+
+    /// <summary>沉浸风格中央大字：当前句文本（随 <see cref="ActiveLyricIndex"/> 同步）。</summary>
+    public string CurrentLyricText
+    {
+        get => _currentLyricText;
+        private set => SetProperty(ref _currentLyricText, value);
+    }
 
     private string _lyricsHint = string.Empty;
     public string LyricsHint { get => _lyricsHint; private set => SetProperty(ref _lyricsHint, value); }

@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
     <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />
   </ItemGroup>
 
 </Project>
