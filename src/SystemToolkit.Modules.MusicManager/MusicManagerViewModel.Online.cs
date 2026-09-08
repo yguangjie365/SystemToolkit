@@ -522,6 +522,7 @@ public partial class MusicManagerViewModel
             {
                 DailyRecommend.Add(new OnlineResultRowVm(track));
             }
+            BeginCoverLoads(DailyRecommend); // 实机反馈（图3）：每日推荐曲目也要显示封面（此前漏挂）
 
             List<OnlinePlaylist> recommended = await _catalog.LoadRecommendationsAsync(SelectedPlatform);
             RecommendedPlaylists.Clear();

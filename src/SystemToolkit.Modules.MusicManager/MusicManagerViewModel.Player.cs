@@ -295,6 +295,23 @@ public partial class MusicManagerViewModel
         }
     }
 
+    /// <summary>队列面板点选（图3 队列按钮配套行为）：定位到该曲并立即播放。</summary>
+    [RelayCommand]
+    private async Task PlayQueueItemAsync(MusicSong? song)
+    {
+        if (song is null)
+        {
+            return;
+        }
+
+        _queue.SetQueue(_queue.Queue, song);
+        OnPropertyChanged(nameof(QueueCurrent));
+        if (ResolveEngine() is { } engine)
+        {
+            await PlayCurrentCoreAsync(engine);
+        }
+    }
+
     // ════════ 音质菜单 ════════
 
     /// <summary>音质档（值 = 平台 level 参数；标签按 NexBox 音质菜单中文）。</summary>

@@ -125,8 +125,7 @@ public partial class MusicManagerView : UserControl
     private void OnDailyRecommendDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.PlayFromDailyRecommendCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
 
-    private void OnRecommendedPlaylistDoubleClick(object sender, MouseButtonEventArgs e)
-        => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
+    // OnRecommendedPlaylistDoubleClick 已随右卡「推荐歌单」分区移除（2026-09-09 实机反馈）
 
     /// <summary>打开平台登录窗并回传 Cookie（async void + 全捕获——事件处理器模式）。</summary>
     private async void OnLoginRequested(OnlineProvider provider)
@@ -148,15 +147,24 @@ public partial class MusicManagerView : UserControl
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
 
-    /// <summary>队列按钮（图3 对齐）：收起全屏播放器并定位到右卡 Up Next 列表。</summary>
+    /// <summary>队列按钮（图3 对齐）：弹出 Up Next 面板（Up Next 已从右卡移除）。</summary>
     private void OnQueueButtonClick(object sender, RoutedEventArgs e)
     {
-        if (_vm.IsFullPlayerOpen)
+        if (QueuePopup is not null)
         {
-            _vm.CloseFullPlayerCommand.Execute(null);
+            QueuePopup.IsOpen = true;
         }
+    }
 
-        UpNextList?.BringIntoView();
+    /// <summary>队列面板内单击曲目：立即播放该曲并收起面板；清空选中以便再次点同一首。</summary>
+    private void OnQueuePopupSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.ListBox list && list.SelectedItem is MusicSong song)
+        {
+            _vm.PlayQueueItemCommand.Execute(song);
+            QueuePopup.IsOpen = false;
+            list.SelectedItem = null; // 清空选中：允许再次单击同一首重播
+        }
     }
 
     /// <summary>
