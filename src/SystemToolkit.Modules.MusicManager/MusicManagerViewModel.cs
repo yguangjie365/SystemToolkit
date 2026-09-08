@@ -52,6 +52,8 @@ public partial class MusicManagerViewModel : ObservableObject
         _log = log;
 
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
+        SongsView = CollectionViewSource.GetDefaultView(Songs);
+        SongsView.Filter = o => o is MusicSong s && MatchesFilter(s);
         _queue.QueueChanged += RebuildUpNext;
         _queue.CurrentChanged += OnQueueCurrentChanged;
 
@@ -323,12 +325,6 @@ public partial class MusicManagerViewModel : ObservableObject
     /// <summary>View Loaded 调用一次：读曲库 + 接引擎事件。幂等。</summary>
     public async Task InitializeAsync()
     {
-        SongsView ??= CollectionViewSource.GetDefaultView(Songs);
-        if (SongsView.Filter is null)
-        {
-            SongsView.Filter = o => o is MusicSong s && MatchesFilter(s);
-        }
-
         MusicLibraryLoadResult loaded = await _store.LoadAsync();
         ApplyLibrary(loaded.Library);
         LibraryWarning = loaded.LoadWarning ?? string.Empty;
