@@ -42,14 +42,14 @@ public partial class MainWindow : Window
     private static readonly Dictionary<string, string> ModuleIconKeys = new()
     {
         ["overview"] = "Icon_Nav_Overview",
-        ["appmanager"] = "Icon_Nav_AppManager",
-        ["drivermanager"] = "Icon_Nav_DriverManager",
-        ["filebackup"] = "Icon_Nav_FileBackup",
-        ["filetransfer"] = "Icon_Nav_FileTransfer",
-        ["netmanager"] = "Icon_Nav_NetManager",
-        ["recoverymanager"] = "Icon_Nav_RecoveryManager",
-        ["gamemanager"] = "Icon_Nav_GameManager",
-        ["musicmanager"] = "Icon_Nav_MusicManager",
+        ["appmanager"] = "Icon_Nav_Appmanager",
+        ["drivermanager"] = "Icon_Nav_Drivermanager",
+        ["filebackup"] = "Icon_Nav_Filebackup",
+        ["filetransfer"] = "Icon_Nav_Filetransfer",
+        ["netmanager"] = "Icon_Nav_Netmanager",
+        ["recoverymanager"] = "Icon_Nav_Recoverymanager",
+        ["gamemanager"] = "Icon_Nav_Gamemanager",
+        ["musicmanager"] = "Icon_Nav_Musicmanager",
         ["settings"] = "Icon_Nav_Settings",
     };
 
