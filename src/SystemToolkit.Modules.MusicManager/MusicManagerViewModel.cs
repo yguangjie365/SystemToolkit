@@ -235,6 +235,9 @@ public partial class MusicManagerViewModel : ObservableObject
             ApplyLibrary(library);
 
             await _store.SaveAsync(library);
+            // 🔴 缓存同步（复审 🟠-1）：不同步 _scanRoots 的话，下一次扫描会基于过期根清单
+            // 构造 roots → 上一次新增根的曲目被「替换策略」整体清掉
+            _scanRoots = [.. roots];
             if (!result.WasCancelled)
             {
                 // 扫描成功即曲库已重建，旧的加载告警（如缓存损坏降级）随之失效（审查 🟠-5 采纳）
@@ -299,8 +302,7 @@ public partial class MusicManagerViewModel : ObservableObject
     public ObservableCollection<MusicSong> UpNext { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEngineReady))]
-    private MusicSong? _queueCurrent;
+    private MusicSong? _queueCurrent; // IsEngineReady 与队列无关（复审 🟠-2：移除无语义的通知挂接）
 
     public bool IsEngineReady => ResolveEngine() is not null;
 
