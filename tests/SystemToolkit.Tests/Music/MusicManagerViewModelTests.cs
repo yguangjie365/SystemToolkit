@@ -17,13 +17,11 @@ public class MusicManagerViewModelTests
     {
         dir = Path.Combine(Path.GetTempPath(), $"music-vm-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        ServiceProvider services = new ServiceCollection().BuildServiceProvider();
         return new MusicManagerViewModel(
-            services,
-            new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json")),
-            new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger())),
-            new PlaybackQueueService(),
-            new NoopLogger());
+            store: new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json")),
+            scanner: new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger())),
+            queue: new PlaybackQueueService(),
+            log: new NoopLogger());
     }
 
     [Fact]

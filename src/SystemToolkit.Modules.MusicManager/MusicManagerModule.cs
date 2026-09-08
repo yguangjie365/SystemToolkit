@@ -52,12 +52,13 @@ public sealed class MusicManagerModule : ModuleBase
         services.AddSingleton<IPlaybackQueueService, PlaybackQueueService>();
 
         services.AddSingleton(sp => new MusicManagerViewModel(
-            sp,
             sp.GetRequiredService<IMusicLibraryStore>(),
             sp.GetRequiredService<LocalMusicScanner>(),
             sp.GetRequiredService<IPlaybackQueueService>(),
             sp.GetRequiredKeyedService<ILogger>("musicmanager"),
-            System.Windows.Application.Current?.Dispatcher));
+            engineProvider: () => sp.GetService<IMusicPlaybackEngine>(), // 引擎可选（MUSIC-4 合入前 null）
+            tagReader: sp.GetRequiredService<IMusicTagReader>(),
+            dispatcher: System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<MusicManagerView>();
     }
 }

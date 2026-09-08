@@ -408,7 +408,13 @@ public class ViewLoadSmokeGuardTests
                 var store = new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json"));
                 var scanner = new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger()));
                 var vm = new MusicManagerViewModel(
-                    services, store, scanner, new PlaybackQueueService(), new NoopLogger());
+                    store,
+                    scanner,
+                    new PlaybackQueueService(),
+                    new NoopLogger(),
+                    engineProvider: null, // 引擎缺席场景的隔离验证
+                    tagReader: new TagLibMusicTagReader(new NoopLogger()),
+                    dispatcher: null);
                 var view = new MusicManagerView(vm);
 
                 stage = "measure + arrange";

@@ -31,11 +31,18 @@ public partial class MusicManagerViewModel : ObservableObject
     private readonly IMusicLibraryStore _store;
     private readonly LocalMusicScanner _scanner;
     private readonly IPlaybackQueueService _queue;
-    private readonly IServiceProvider _services;
     private readonly ILogger _log;
+
+    // 引擎为「可选/延迟」依赖（MUSIC-4 合入前模块仍可用）——经工厂委托注入保持依赖显式，
+    // 不用 IServiceProvider 服务定位器（2026-09-08 审查采纳项）。
+    private readonly Func<IMusicPlaybackEngine?>? _engineProvider;
+    private readonly IMusicTagReader? _tagReader;
     private IMusicPlaybackEngine? _engine;
     private CancellationTokenSource? _scanCts;
     private LyricDocument _lyrics = LyricDocument.None();
+
+    /// <summary>扫描根目录缓存（LoadAsync 时刷新，避免扫描时重复读曲库 JSON）。</summary>
+    private List<string> _scanRoots = [];
 
     /// <summary>
     /// UI 线程 Dispatcher（构造时捕获——VM 由 View 在 UI 线程构造，Application 已就绪）。
@@ -71,22 +78,24 @@ public partial class MusicManagerViewModel : ObservableObject
     private List<LyricLine> _lyricLineSource = [];
 
     public MusicManagerViewModel(
-        IServiceProvider services,
         IMusicLibraryStore store,
         LocalMusicScanner scanner,
         IPlaybackQueueService queue,
         ILogger log,
+        Func<IMusicPlaybackEngine?>? engineProvider = null,
+        IMusicTagReader? tagReader = null,
         System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
         // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
         // 测试宿主的 Application.Current 可能指向已退出的冒烟 STA，BeginInvoke 永不执行）
         _dispatcher = dispatcher;
-        _services = services;
         _store = store;
         _scanner = scanner;
         _queue = queue;
         _log = log;
+        _engineProvider = engineProvider;
+        _tagReader = tagReader;
 
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
         SongsView = CollectionViewSource.GetDefaultView(Songs);
@@ -155,8 +164,8 @@ public partial class MusicManagerViewModel : ObservableObject
 
         try
         {
-            // 合并根目录（多值假设：允许多个扫描根，不覆盖已有）
-            List<string> roots = _store.LibraryFilePath is null ? [root] : CurrentScanRoots();
+            // 合并根目录（多值假设：允许多个扫描根，不覆盖已有；根清单来自 LoadAsync 缓存）
+            List<string> roots = [.. _scanRoots];
             if (!roots.Contains(root, StringComparer.OrdinalIgnoreCase))
             {
                 roots.Add(root);
@@ -209,7 +218,7 @@ public partial class MusicManagerViewModel : ObservableObject
     // ════════ 播放 ════════
 
     /// <summary>解析引擎（null = MUSIC-4 未合入，播放禁用）。每次操作前取，便于热接通。</summary>
-    private IMusicPlaybackEngine? ResolveEngine() => _services.GetService<IMusicPlaybackEngine>();
+    private IMusicPlaybackEngine? ResolveEngine() => _engineProvider?.Invoke();
 
     private bool _engineWired;
 
@@ -325,8 +334,9 @@ public partial class MusicManagerViewModel : ObservableObject
     /// <summary>歌词行包装（模型 <see cref="LyricLine"/> 无 UI 状态，IsActive 由 VM 维护）。</summary>
     public sealed record LyricRowVm(string Text, bool IsActive);
 
-    private ObservableCollection<LyricRowVm> _lyricRows = [];
-    public ObservableCollection<LyricRowVm> LyricRows { get => _lyricRows; private set => SetProperty(ref _lyricRows, value); }
+    // 复用同一实例（Clear+Add），避免切歌时整体替换触发重绑定/闪烁（2026-09-08 审查采纳项）
+    private readonly ObservableCollection<LyricRowVm> _lyricRows = [];
+    public ObservableCollection<LyricRowVm> LyricRows => _lyricRows;
 
     private string _plainLyrics = string.Empty;
     public string PlainLyrics { get => _plainLyrics; private set => SetProperty(ref _plainLyrics, value); }
@@ -340,19 +350,28 @@ public partial class MusicManagerViewModel : ObservableObject
         get => _activeLyricIndex;
         private set
         {
-            if (SetProperty(ref _activeLyricIndex, value))
+            if (!SetProperty(ref _activeLyricIndex, value))
             {
-                for (int i = 0; i < _lyricRows.Count; i++)
-                {
-                    bool active = i == value;
-                    if (_lyricRows[i].IsActive != active)
-                    {
-                        _lyricRows[i] = _lyricRows[i] with { IsActive = active };
-                    }
-                }
+                return;
             }
+
+            // 精准只更新新旧两行（审查采纳项）：避免每次跳行全量遍历
+            if (value >= 0 && value < _lyricRows.Count)
+            {
+                _lyricRows[value] = _lyricRows[value] with { IsActive = true };
+            }
+
+            if (_previousActiveIndex >= 0 && _previousActiveIndex < _lyricRows.Count
+                && _previousActiveIndex != value)
+            {
+                _lyricRows[_previousActiveIndex] = _lyricRows[_previousActiveIndex] with { IsActive = false };
+            }
+
+            _previousActiveIndex = value;
         }
     }
+
+    private int _previousActiveIndex = -1;
 
     private string _lyricsHint = string.Empty;
     public string LyricsHint { get => _lyricsHint; private set => SetProperty(ref _lyricsHint, value); }
@@ -364,6 +383,7 @@ public partial class MusicManagerViewModel : ObservableObject
     {
         MusicLibraryLoadResult loaded = await _store.LoadAsync();
         ApplyLibrary(loaded.Library);
+        _scanRoots = [.. loaded.Library.ScanRoots]; // 缓存扫描根（审查采纳项：扫描时不再重复读 JSON）
         LibraryWarning = loaded.LoadWarning ?? string.Empty;
         if (loaded.IsDegraded)
         {
@@ -423,7 +443,7 @@ public partial class MusicManagerViewModel : ObservableObject
             CurrentTitle = song.Name;
             CurrentSub = string.IsNullOrEmpty(song.Album) ? song.Artist : $"{song.Artist} — {song.Album}";
             _queue.ReportPlaybackStarted(song);
-            LoadLyrics(song);
+            _ = LoadLyricsAsync(song); // IO 在后台；结果经 RunOnUi 回 UI
         }
     }
 
@@ -528,56 +548,55 @@ public partial class MusicManagerViewModel : ObservableObject
         }
     }
 
-    private void LoadLyrics(MusicSong song)
+    /// <summary>
+    /// 歌词加载（IO 在后台线程：.lrc 同名文件优先、内嵌兜底），
+    /// 结果经 <see cref="RunOnUi"/> 回 UI 更新集合（🔴 集合修改必须在 UI 线程）。
+    /// </summary>
+    private async Task LoadLyricsAsync(MusicSong song)
     {
-        // .lrc 同名文件优先，内嵌兜底（设计文档 §播放与歌词）
-        string lrcPath = Path.ChangeExtension(song.LocalPath, ".lrc");
-        if (File.Exists(lrcPath))
-        {
-            string text = File.ReadAllText(lrcPath);
-            _lyrics = LyricParser.Parse(text, source: LyricSource.SidecarFile);
-        }
-        else
-        {
-            IMusicTagReader? reader = _services.GetService<IMusicTagReader>();
-            MusicTagReadResult? tag = reader?.Read(song.LocalPath);
-            string? embedded = tag is { Success: true } ? tag.Tags?.Lyrics : null;
-            _lyrics = LyricParser.Parse(embedded, source: LyricSource.Embedded);
-        }
-
-        _lyricLineSource = _lyrics.Lines;
-        LyricRows = new ObservableCollection<LyricRowVm>(
-            _lyrics.Lines.Select(l => new LyricRowVm(l.Text, false)));
-        PlainLyrics = _lyrics.PlainText ?? string.Empty;
-        HasLyrics = LyricRows.Count > 0 || !string.IsNullOrEmpty(PlainLyrics);
-        ActiveLyricIndex = -1;
-        LyricsHint = HasLyrics
-            ? string.Empty
-            : "未找到歌词（同名 .lrc 与内嵌歌词均无）";
-    }
-
-    private List<string> CurrentScanRoots()
-    {
-        // 从现有曲库文件还原根目录清单（避免为读 roots 再开一次文件——LoadAsync 已有；
-        // 这里轻量重读：扫描频度低，代价可忽略）
+        LyricDocument doc;
         try
         {
-            if (File.Exists(_store.LibraryFilePath))
+            string lrcPath = Path.ChangeExtension(song.LocalPath, ".lrc");
+            if (File.Exists(lrcPath))
             {
-                MusicLibrary? lib = JsonSerializer.Deserialize<MusicLibrary>(
-                    File.ReadAllText(_store.LibraryFilePath));
-                if (lib is not null)
-                {
-                    return [.. lib.ScanRoots];
-                }
+                string text = await File.ReadAllTextAsync(lrcPath);
+                doc = LyricParser.Parse(text, source: LyricSource.SidecarFile);
+            }
+            else
+            {
+                MusicTagReadResult? tag = _tagReader?.Read(song.LocalPath);
+                string? embedded = tag is { Success: true } ? tag.Tags?.Lyrics : null;
+                doc = LyricParser.Parse(embedded, source: LyricSource.Embedded);
             }
         }
         catch (Exception ex)
         {
-            _log.Warn($"[Music] 读取扫描根目录失败（{ex.Message}），将只扫描本次所选目录");
+            // 歌词读取失败不影响播放，但要可见（🔴 不静默）
+            _log.Warn($"[Music] 歌词加载失败：{song.Name}（{ex.Message}）");
+            doc = LyricDocument.None();
         }
 
-        return [];
+        RunOnUi(() => ApplyLyrics(doc));
+    }
+
+    private void ApplyLyrics(LyricDocument doc)
+    {
+        _lyrics = doc;
+        _lyricLineSource = doc.Lines;
+        _lyricRows.Clear();
+        foreach (LyricLine line in doc.Lines)
+        {
+            _lyricRows.Add(new LyricRowVm(line.Text, false));
+        }
+
+        PlainLyrics = doc.PlainText ?? string.Empty;
+        HasLyrics = LyricRows.Count > 0 || !string.IsNullOrEmpty(PlainLyrics);
+        ActiveLyricIndex = -1;
+        _previousActiveIndex = -1;
+        LyricsHint = HasLyrics
+            ? string.Empty
+            : "未找到歌词（同名 .lrc 与内嵌歌词均无）";
     }
 
     private bool MatchesFilter(MusicSong s)

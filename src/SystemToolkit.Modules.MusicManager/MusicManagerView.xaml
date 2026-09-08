@@ -7,8 +7,7 @@
     <!-- 2026-09-08 用户拍板布局（替代三 Tab，解操作割裂）：
          顶部搜索+扫描 / 左栏曲库 / 右栏歌词 / 底部常驻播放条 / 点播放条进完整播放器覆盖层。 -->
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <local:BoolToVisibilityConverter x:Key="BoolToVis2"/>
+        <local:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <local:InverseBoolConverter x:Key="Inverse"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseToVis"/>
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
@@ -47,7 +46,7 @@
                 </Button>
                 <Button Style="{StaticResource RowActionButton}" Height="32" Content="取消" Margin="6,0,0,0"
                         Command="{Binding CancelScanCommand}"
-                        Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis2}}"/>
+                        Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </Grid>
 
@@ -73,7 +72,8 @@
                      HorizontalContentAlignment="Stretch"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"
-                     VirtualizingPanel.VirtualizationMode="Recycling">
+                     VirtualizingPanel.VirtualizationMode="Recycling"
+                     VirtualizingPanel.ScrollUnit="Pixel">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <Grid Margin="4">
@@ -105,7 +105,8 @@
                      Background="Transparent" BorderThickness="0"
                      HorizontalContentAlignment="Center"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     VirtualizingPanel.IsVirtualizing="True">
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.ScrollUnit="Pixel">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding Text, Mode=OneWay}" Padding="8,6"
@@ -200,7 +201,7 @@
         <!-- 完整播放器覆盖层（点底部条展开；大封面 + 控制 + 队列） -->
         <Grid Grid.Row="0" Grid.RowSpan="3"
               Background="{StaticResource Brush_Background}"
-              Visibility="{Binding IsFullPlayerOpen, Converter={StaticResource BoolToVis2}}">
+              Visibility="{Binding IsFullPlayerOpen, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
