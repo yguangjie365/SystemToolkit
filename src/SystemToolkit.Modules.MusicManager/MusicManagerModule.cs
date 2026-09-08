@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Music.Online;
 using SystemToolkit.Core.Music.Services;
 
 namespace SystemToolkit.Modules.MusicManager;
@@ -51,6 +52,10 @@ public sealed class MusicManagerModule : ModuleBase
         // 播放队列（MUSIC-5）
         services.AddSingleton<IPlaybackQueueService, PlaybackQueueService>();
 
+        // 在线流实现（OM-0~OM-3：平台客户端/Cookie 存储/音频代理/URL 解析器）位于
+        // Infrastructure——🔴 模块禁引 Infrastructure（依赖守卫红线），由 Shell
+        // RegisterSharedInfrastructure 注册；本模块 VM 经 GetService 可选解析（缺席降级）
+
         services.AddSingleton(sp => new MusicManagerViewModel(
             sp.GetRequiredService<IMusicLibraryStore>(),
             sp.GetRequiredService<LocalMusicScanner>(),
@@ -58,7 +63,9 @@ public sealed class MusicManagerModule : ModuleBase
             sp.GetRequiredKeyedService<ILogger>("musicmanager"),
             engineProvider: () => sp.GetService<IMusicPlaybackEngine>(), // 引擎可选依赖（DI 未注册时为 null，模块降级可用）
             tagReader: sp.GetRequiredService<IMusicTagReader>(),
-            dispatcher: System.Windows.Application.Current?.Dispatcher));
+            dispatcher: System.Windows.Application.Current?.Dispatcher,
+            urlResolver: sp.GetService<IOnlineUrlResolver>(),
+            audioProxy: sp.GetService<IAudioProxyService>()));
         services.AddSingleton<MusicManagerView>();
     }
 }

@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using SystemToolkit.Core.Music.Online;
+
 namespace SystemToolkit.Core.Music.Models;
 
 /// <summary>播放状态。</summary>
@@ -126,6 +129,22 @@ public sealed record MusicSong
 
     /// <summary>是否含内嵌歌词（USLT/LYRICS 帧）。为 false 时歌词 Tab 应回退找同名 .lrc。</summary>
     public bool HasEmbeddedLyrics { get; init; }
+
+    /// <summary>
+    /// 在线曲目元数据；<b>本地曲恒为 null</b>（OM-4 混合队列：本地/在线共用同一队列容器）。
+    /// </summary>
+    /// <remarks>
+    /// <para>在线曲目的 <see cref="LocalPath"/> 存的是<b>代理播放 URL</b>（经
+    /// <c>IAudioProxyService.GetProxiedAudioUrlAsync</c> 生成，引擎可直接打开），
+    /// 而非磁盘路径——UI/持久化不得对在线曲目做文件系统假设（IsOnline 为 true 时）。</para>
+    /// <para>曲库 JSON 持久化按 null 省略：本地曲序列化形态与 OM-4 之前完全一致。</para>
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OnlineTrack? Online { get; init; }
+
+    /// <summary>是否为在线曲目（<see cref="Online"/> 非 null）。</summary>
+    [JsonIgnore]
+    public bool IsOnline => Online is not null;
 
     /// <summary>时长展示文本（如 <c>3:45</c> / <c>1:02:03</c>；未知时为 <c>—</c>）。</summary>
     /// <remarks>曲库列表、播放页、Shell 迷你条三处都要显示，收敛到一处避免三份格式化代码。</remarks>

@@ -1,20 +1,9 @@
 namespace SystemToolkit.Core.Music.Online;
 
-//（PlayState/PlayMode 未移植：新项目 Core/Music 已有同语义类型；本文件的 PlayMode 为在线队列专用，
-//  与本地队列 PlayMode 命名空间不同——OM-4 接线时如二者同文件引用需用别名消歧）
-
-/// <summary>播放模式（对照 NexBox togglePlayMode；在线队列专用）。</summary>
-public enum PlayMode
-{
-    /// <summary>列表循环</summary>
-    List,
-    /// <summary>心动模式（基于当前歌曲推荐相似歌曲，仅网易云）</summary>
-    Heartbeat,
-    /// <summary>随机播放</summary>
-    Shuffle,
-    /// <summary>单曲循环</summary>
-    One,
-}
+//（PlayState/PlayMode 未移植：新项目 Core/Music.Models 已有同语义类型。
+//  原「在线队列专用 PlayMode（含 Heartbeat 心动模式）」在 OM-4 接线时移除——
+//  本地/在线共用同一队列与同一播放模式切换（Models.PlayMode），心跳模式属超范围裁定外能力，
+//  如后续要做心动模式，随对应里程碑以独立类型引入，避免与本地 PlayMode 二义性。）
 
 /// <summary>音质选项（对照 NexBox OnlinePlaybackQuality；值即 API level 参数）。</summary>
 public enum OnlinePlaybackQuality

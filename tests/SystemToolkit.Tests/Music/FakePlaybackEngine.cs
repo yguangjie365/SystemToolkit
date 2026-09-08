@@ -19,8 +19,12 @@ public sealed class FakePlaybackEngine : IMusicPlaybackEngine
     public event Action<MusicSong>? TrackEnded;
     public event Action<string>? PlaybackFailed;
 
+    /// <summary>PlayAsync 收到的音源记录（OM-4 管线测试：断言代理 URL 与调用次数）。</summary>
+    public List<string> PlayedSources { get; } = [];
+
     public Task PlayAsync(string filePath, MusicSong song, CancellationToken ct = default)
     {
+        PlayedSources.Add(filePath);
         CurrentSong = song;
         State = PlayState.Playing;
         StateChanged?.Invoke(State, song);

@@ -188,6 +188,35 @@ public partial class App : Application
         services.AddSingleton<SystemToolkit.Core.Music.Services.IMusicPlaybackEngine>(_ =>
             new SystemToolkit.Infrastructure.Music.NAudioMusicPlayerEngine(
                 new SystemToolkit.Core.Contracts.FileLogger("musicplayer")));
+
+        // OM-0~OM-4 阶段二在线流组件（Infrastructure 实现，Core.Music.Online 契约）。
+        // 与引擎同款：直建 FileLogger 而非键控解析——本方法同时服务于各模块守卫容器，
+        // 键控 "musicmanager" 只在音乐模块容器存在。
+        // 模块侧经 GetService 可选解析（urlResolver/audioProxy），缺席时在线功能降级、本地播放不受影响。
+        services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.NetEaseOnlineClient>(_ =>
+            new SystemToolkit.Infrastructure.Music.Online.NetEaseOnlineClient(
+                new SystemToolkit.Core.Contracts.FileLogger("musicmanager")));
+        services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient>(_ =>
+            new SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient(
+                new SystemToolkit.Core.Contracts.FileLogger("musicmanager")));
+        services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.DpapiOnlineCredentialStore>();
+        services.AddSingleton<SystemToolkit.Core.Music.Online.IOnlineCredentialStore>(
+            sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.DpapiOnlineCredentialStore>());
+        services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>();
+        services.AddSingleton<SystemToolkit.Core.Music.Online.IAudioProxyService>(
+            sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>());
+        services.AddSingleton<SystemToolkit.Core.Music.Online.IOnlineUrlResolver>(sp =>
+        {
+            SystemToolkit.Core.Contracts.FileLogger onlineLog = new("musicmanager");
+            return new SystemToolkit.Infrastructure.Music.Online.OnlineUrlResolver(
+                (id, quality, cookie, ct) => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.NetEaseOnlineClient>()
+                    .GetSongUrlAsync(id, quality, cookie, ct),
+                (mid, cookie, ct) => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient>()
+                    .GetSongUrlAsync(mid, cookie, ct),
+                sp.GetRequiredService<SystemToolkit.Core.Music.Online.IOnlineCredentialStore>(),
+                onlineLog);
+        });
+
         services.AddSingleton<SystemToolkit.Core.Network.Services.ICommandRunner,
             SystemToolkit.Core.Network.Services.CommandRunner>();
 

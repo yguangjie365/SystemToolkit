@@ -7,6 +7,7 @@ using System.Windows.Data;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Music.Models;
+using SystemToolkit.Core.Music.Online;
 using SystemToolkit.Core.Music.Services;
 using SystemToolkit.Core.Utilities;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -37,7 +38,21 @@ public partial class MusicManagerViewModel : ObservableObject
     // 不用 IServiceProvider 服务定位器（2026-09-08 审查采纳项）。
     private readonly Func<IMusicPlaybackEngine?>? _engineProvider;
     private readonly IMusicTagReader? _tagReader;
+
+    // 在线播放组件（OM-4，均可空：在线组件缺席时本地播放完全不受影响——故障隔离同引擎语义）
+    private readonly IOnlineUrlResolver? _urlResolver;
+    private readonly IAudioProxyService? _audioProxy;
     private CancellationTokenSource? _scanCts;
+
+    /// <summary>
+    /// 播放请求竞态序号：每次 PlayCurrentCoreAsync 递增；异步链每步之后校验，
+    /// 过期请求（用户已切走/跳过策略已触发下一次）直接放弃回写——
+    /// 对照 NexBox music-store 的 playSongSeq 防竞态设计（慢 URL 解析不得覆盖新曲目状态）。
+    /// </summary>
+    private long _playSeq;
+
+    /// <summary>在线曲目连续不可播计数（成功起播归零；达到 <see cref="OnlineSkipPolicy.MaxConsecutiveSkips"/> 停止自动切曲）。</summary>
+    private int _consecutiveOnlineFailures;
 
     /// <summary>扫描根目录缓存（LoadAsync 时刷新，避免扫描时重复读曲库 JSON）。</summary>
     private List<string> _scanRoots = [];
@@ -99,7 +114,9 @@ public partial class MusicManagerViewModel : ObservableObject
         ILogger log,
         Func<IMusicPlaybackEngine?>? engineProvider = null,
         IMusicTagReader? tagReader = null,
-        System.Windows.Threading.Dispatcher? dispatcher = null)
+        System.Windows.Threading.Dispatcher? dispatcher = null,
+        IOnlineUrlResolver? urlResolver = null,
+        IAudioProxyService? audioProxy = null)
     {
         // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
         // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
@@ -111,6 +128,8 @@ public partial class MusicManagerViewModel : ObservableObject
         _log = log;
         _engineProvider = engineProvider;
         _tagReader = tagReader;
+        _urlResolver = urlResolver;
+        _audioProxy = audioProxy;
 
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
         SongsView = CollectionViewSource.GetDefaultView(Songs);
@@ -298,6 +317,11 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private bool _isPlaying;
     public bool IsPlaying { get => _isPlaying; private set => SetProperty(ref _isPlaying, value); }
+
+    /// <summary>期望在线音质（网易：jymaster/hires/lossless/exhigh/standard；QQ 当前固定 standard）。</summary>
+    /// <remarks>音质选择 UI 在 OM-6 播放器还原时接线；未知值由网易客户端回退 exhigh。</remarks>
+    [ObservableProperty]
+    private string _preferredQuality = "exhigh";
 
     public ObservableCollection<MusicSong> UpNext { get; } = [];
 
@@ -522,6 +546,13 @@ public partial class MusicManagerViewModel : ObservableObject
             // 🔴 播放失败显式可见，不静默跳曲
             ScanStatusText = $"播放失败：{msg}";
             _log.Warn($"[Music] 播放失败：{msg}");
+
+            // 在线曲目：引擎侧失败（断流/格式不支持）并入统一跳过策略（OM-4）；
+            // 本地曲目维持原语义——只提示不自动跳（用户文件可修复）
+            if (QueueCurrent?.IsOnline == true)
+            {
+                _ = AutoSkipOrStopOnlineAsync(ResolveEngine(), msg);
+            }
         });
         _log.Info("[Music] 播放引擎已接通");
     }
@@ -533,6 +564,7 @@ public partial class MusicManagerViewModel : ObservableObject
         {
             CurrentTitle = song.Name;
             CurrentSub = string.IsNullOrEmpty(song.Album) ? song.Artist : $"{song.Artist} — {song.Album}";
+            _consecutiveOnlineFailures = 0; // 真正起播 = 连续失败链归零（OnlineSkipPolicy 语义）
             _queue.ReportPlaybackStarted(song);
             _ = LoadLyricsAsync(song); // IO 在后台；结果经 RunOnUi 回 UI
         }
@@ -617,9 +649,21 @@ public partial class MusicManagerViewModel : ObservableObject
             return;
         }
 
+        long seq = ++_playSeq; // 竞态序号：本次请求的身份证
+        if (song.IsOnline)
+        {
+            await PlayOnlineCoreAsync(engine, song, seq);
+            return;
+        }
+
         try
         {
             await engine.PlayAsync(song.LocalPath, song);
+            if (seq != _playSeq)
+            {
+                return; // 播放期间用户已切走：放弃回写（慢 IO 不得覆盖新状态）
+            }
+
             QueueCurrent = song;
         }
         catch (Exception ex)
@@ -628,6 +672,142 @@ public partial class MusicManagerViewModel : ObservableObject
             _log.Warn($"[Music] 播放失败：{song.Name}（{ex.Message}）");
         }
     }
+
+    /// <summary>
+    /// 在线曲目播放核心（OM-4）：解析直链 → 代理包装 → 引擎播放；
+    /// 不可播 → 原因分类 + 自动跳过（连续上限见 <see cref="OnlineSkipPolicy"/>）。
+    /// </summary>
+    private async Task PlayOnlineCoreAsync(IMusicPlaybackEngine engine, MusicSong song, long seq)
+    {
+        if (_urlResolver is null || _audioProxy is null)
+        {
+            // 在线组件缺席：显式可见（不静默），不影响本地播放
+            ScanStatusText = "在线播放组件未就绪（urlResolver/audioProxy 未注入）";
+            _log.Warn("[Music] 在线播放组件未注入，无法播放在线曲目");
+            return;
+        }
+
+        OnlineSongUrlResult result = await _urlResolver.ResolveAsync(song.Online!, PreferredQuality);
+        if (seq != _playSeq)
+        {
+            return; // 解析期间用户已切走：过期请求放弃（playSongSeq 竞态防护核心点）
+        }
+
+        if (!result.Playable)
+        {
+            HandleOnlineUnplayable(song, result);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(result.Url))
+        {
+            // 结果标记可播但无 URL：按不可播处理（保守路径，跳过策略统一出口）
+            HandleOnlineUnplayable(song, new OnlineSongUrlResult
+            {
+                Playable = false,
+                Reason = "error",
+                Message = "播放地址为空",
+            });
+            return;
+        }
+
+        string playUrl = await _audioProxy.GetProxiedAudioUrlAsync(result.Url);
+        if (seq != _playSeq)
+        {
+            return; // 代理包装期间同样可能过期
+        }
+
+        try
+        {
+            await engine.PlayAsync(playUrl, song);
+            if (seq != _playSeq)
+            {
+                return;
+            }
+
+            QueueCurrent = song;
+            if (result.Trial)
+            {
+                // 试听片段可播但非完整版：显式告知（trial/reason 语义透传 UI，🔴 不静默）
+                ScanStatusText = $"试听片段：{song.Name}（完整版需要 VIP/登录）";
+            }
+        }
+        catch (Exception ex)
+        {
+            // 引擎侧打开失败（格式不支持/网络断流）也走统一跳过策略
+            ScanStatusText = $"在线播放失败：{song.Name}（{ex.Message}）";
+            _log.Warn($"[Music] 在线播放失败：{song.Name}（{ex.Message}）");
+            await AutoSkipOrStopOnlineAsync(engine, $"播放异常：{ex.Message}");
+        }
+    }
+
+    /// <summary>解析不可播：原因分类 → 用户可见 → 自动跳过（计连续次数，达上限停止）。</summary>
+    private void HandleOnlineUnplayable(MusicSong song, OnlineSongUrlResult result)
+    {
+        string reason = OnlineSkipPolicy.Describe(result);
+        ScanStatusText = $"跳过 {song.Name}：{reason}";
+        _log.Warn($"[Music] 在线曲目不可播：{song.Name}（{reason}）");
+        _ = AutoSkipOrStopOnlineAsync(ResolveEngine(), reason);
+    }
+
+    /// <summary>连续失败计数 + 自动切下一首；达上限停止并给出汇总。engine 可为 null（保守直退）。</summary>
+    private async Task AutoSkipOrStopOnlineAsync(IMusicPlaybackEngine? engine, string reason)
+    {
+        _consecutiveOnlineFailures++;
+        if (OnlineSkipPolicy.ShouldStop(_consecutiveOnlineFailures, out string? stopMessage))
+        {
+            // 🔴 达上限：停止自动切曲（防死循环），汇总原因显式可见
+            ScanStatusText = stopMessage!;
+            _log.Warn($"[Music] {stopMessage}");
+            return;
+        }
+
+        if (engine is null)
+        {
+            return;
+        }
+
+        await NextAsync(); // PickNext 内部推进队列 → PlayCurrentCoreAsync 递增 seq，天然衔接
+    }
+
+    /// <summary>
+    /// 在线搜索结果起播入口（OM-5 搜索 UI 将调用）：在线曲目包装为队列曲 + 建队列起播。
+    /// </summary>
+    /// <param name="tracks">本次要入队的在线曲目（如搜索结果页/歌单详情）。</param>
+    /// <param name="startAt">起播曲目（null = 首曲）。</param>
+    public async Task PlayOnlineTracksAsync(IReadOnlyList<OnlineTrack> tracks, OnlineTrack? startAt = null)
+    {
+        WireEngineOnce(); // 引擎热接通自愈（同 PlayFromLibrary）
+        IMusicPlaybackEngine? engine = ResolveEngine();
+        if (engine is null)
+        {
+            ScanStatusText = "播放引擎未就绪，无法播放在线曲目";
+            return;
+        }
+
+        if (tracks.Count == 0)
+        {
+            ScanStatusText = "没有可播放的在线曲目";
+            return;
+        }
+
+        var songs = tracks.Select(ToQueueSong).ToList();
+        MusicSong? start = startAt is null ? null : songs.FirstOrDefault(s => s.Online!.Id == startAt.Id);
+        _queue.SetQueue(songs, start);
+        await PlayCurrentCoreAsync(engine);
+    }
+
+    /// <summary>OnlineTrack → 队列曲（混合队列统一容器）。代理 URL 由播放核心在解析后生成。</summary>
+    private static MusicSong ToQueueSong(OnlineTrack t) => new()
+    {
+        Id = $"{t.Provider}:{t.Id}",
+        LocalPath = string.Empty, // 在线曲无本地路径；真实音源 URL 由 PlayOnlineCoreAsync 解析后经代理生成
+        Name = t.Name,
+        Artist = t.Artist,
+        Album = t.Album,
+        DurationMs = t.DurationMs,
+        Online = t,
+    };
 
     private void OnQueueCurrentChanged()
     {
