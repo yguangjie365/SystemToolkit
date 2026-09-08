@@ -148,6 +148,7 @@ public partial class MusicManagerViewModel : ObservableObject
         // 一律经 RunOnUi 编组后再碰 ObservableCollection / 触发绑定刷新
         _queue.QueueChanged += () => RunOnUi(RebuildUpNext);
         _queue.CurrentChanged += () => RunOnUi(OnQueueCurrentChanged);
+        InitEqBands(); // OM-7：10 段滑条行（构造期一次；不依赖任何异步初始化）
 
         // 引擎事件在 InitializeAsync 里解析引擎后接线（引擎实现可能晚于本模块合入）
     }
@@ -568,6 +569,8 @@ public partial class MusicManagerViewModel : ObservableObject
 
         _engineWired = true;
         OnPropertyChanged(nameof(IsEngineReady));
+        // OM-7：EQ 可选能力探测（引擎不支持时 EQ UI 禁用——与引擎可选同一隔离哲学）
+        IsEqAvailable = engine is IEqualizerEngine;
         // 🔴 全部经 RunOnUi 编组：引擎事件可能在 NAudio 回调/Timer 线程触发，
         // 处理器会改 ObservableCollection（LyricRows/UpNext）与触发绑定刷新
         engine.StateChanged += (state, song) => RunOnUi(() => OnEngineStateChanged(state, song));

@@ -20,7 +20,7 @@ namespace SystemToolkit.Infrastructure.Music;
 /// 本实现用 <c>_stopRequested</c> 标志位分流：只有非请求发起的停止
 /// （到达流末尾）才触发 <see cref="TrackEnded"/>。</para>
 /// </remarks>
-public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable, IAsyncDisposable
+public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IEqualizerEngine, IDisposable, IAsyncDisposable
 {
     private readonly ILogger _logger;
     private WaveStream? _reader;
@@ -36,6 +36,11 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
     private float _volume = 1.0f;
     private float _prevVolume = 1.0f;
     private bool _muted;
+
+    // OM-7 播放器内 EQ：用户配置快照 + 当前音源路径（播放中应用 EQ 时原地重建链用）
+    private EqProfile _eq = new();
+    private string? _currentSourcePath;
+    private EqChainSampleProvider? _eqChain;
 
     /// <inheritdoc />
     public PlayState State => _state;
@@ -100,9 +105,10 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
         {
             ct.ThrowIfCancellationRequested();
             _reader = new MediaFoundationReader(filePath);
+            _currentSourcePath = filePath;
             _output = new WaveOutEvent();
             _output.Volume = 0f; // 起步 0 音量，随后淡入补到目标，避免首帧硬响（静音态下淡入到 0）
-            _output.Init(_reader);
+            _output.Init(BuildPlaybackChain(_reader));
             _output.PlaybackStopped += OnPlaybackStopped;
             _stopRequested = false; // 新链建立完成，恢复自然结束检测
             _currentSong = song;
@@ -396,5 +402,106 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
     {
         Dispose();
         await ValueTask.CompletedTask;
+    }
+
+    // ════════ OM-7 播放器内 EQ（IEqualizerEngine） ════════
+
+    /// <inheritdoc />
+    public void ApplyEqualizer(EqProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        _eq = new EqProfile
+        {
+            Enabled = profile.Enabled,
+            PreampDb = profile.PreampDb,
+        };
+        for (int i = 0; i < EqProfile.BandCount; i++)
+        {
+            _eq[i] = profile[i];
+        }
+
+        _logger.Info($"[MusicPlayer] EQ 应用：{(profile.Enabled ? "开" : "关")}，preamp {profile.PreampDb:+0.#;-0.#;0} dB");
+
+        // 播放/暂停中：
+        // ① 链已建且仍启用 → 只热更系数（无缝，无爆音无间隙）
+        // ② 直通 ↔ 链 的开关切换 → 原地重建音频图（保位置保状态）
+        if (_eqChain is not null && _eq.Enabled
+            && _state is PlayState.Playing or PlayState.Paused)
+        {
+            _eqChain.Update(_eq.GainsCopy(), _eq.PreampDb);
+            return;
+        }
+
+        if (_output is not null && _reader is not null
+            && _currentSourcePath is not null
+            && _state is PlayState.Playing or PlayState.Paused)
+        {
+            RebuildGraphInPlace(_reader.CurrentTime, keepPlaying: _state == PlayState.Playing);
+        }
+
+        // 停止态：仅记录配置，下次 PlayAsync 建链时生效
+    }
+
+    /// <summary>按 EQ 配置构建播放链：EQ 关 = 直通；开 = preamp + 10 段 peaking 级联。</summary>
+    private IWaveProvider BuildPlaybackChain(WaveStream reader)
+    {
+        if (!_eq.Enabled)
+        {
+            _eqChain = null;
+            return reader; // 直通：零开销
+        }
+
+        _eqChain = new EqChainSampleProvider(
+            reader.ToSampleProvider(), reader.WaveFormat.SampleRate, _eq.GainsCopy(), _eq.PreampDb);
+        return new NAudio.Wave.SampleProviders.SampleToWaveProvider(_eqChain);
+    }
+
+    /// <summary>
+    /// 播放中原地重建音频图（EQ 应用）：停旧链（不触发 TrackEnded）→ 建新链 → 回跳原位置 → 恢复播放态。
+    /// </summary>
+    private void RebuildGraphInPlace(TimeSpan position, bool keepPlaying)
+    {
+        // 先退订停止回调再 Stop——PlaybackStopped 不能在此路径触发（会置 Stopped 清歌）
+        if (_output is not null)
+        {
+            _output.PlaybackStopped -= OnPlaybackStopped;
+        }
+
+        _stopRequested = true;
+        TimeSpan prevPosition = position;
+        MusicSong? song = _currentSong;
+
+        _output?.Stop();
+        _output?.Dispose();
+        _output = null;
+        _reader?.Dispose();
+        _reader = null;
+
+        try
+        {
+            _reader = new MediaFoundationReader(_currentSourcePath!);
+            _output = new WaveOutEvent();
+            _output.Volume = _muted ? 0f : _volume;
+            _output.Init(BuildPlaybackChain(_reader));
+            _output.PlaybackStopped += OnPlaybackStopped;
+            _currentSong = song;
+            if (prevPosition > TimeSpan.Zero)
+            {
+                _reader.CurrentTime = prevPosition; // 保位
+            }
+
+            _stopRequested = false;
+            if (keepPlaying)
+            {
+                _output.Play();
+            }
+        }
+        catch (Exception ex)
+        {
+            // 重建失败：显式可见（🔴 不静默），旧链已释放则回落到停止态
+            _logger.Error("[MusicPlayer] EQ 重建音频链失败", ex);
+            _stopRequested = true;
+            StopInternal(reportStateChange: true);
+        }
     }
 }

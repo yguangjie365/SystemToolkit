@@ -5,7 +5,7 @@ using SystemToolkit.Core.Music.Services;
 namespace SystemToolkit.Tests.Music;
 
 /// <summary>可控假引擎：事件由测试手动触发，用于复现「引擎后台线程事件 → VM 跨线程改集合」崩溃。</summary>
-public sealed class FakePlaybackEngine : IMusicPlaybackEngine
+public class FakePlaybackEngine : IMusicPlaybackEngine
 {
     public PlayState State { get; private set; } = PlayState.Stopped;
     public MusicSong? CurrentSong { get; private set; }
