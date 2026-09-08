@@ -438,6 +438,77 @@ public class ViewLoadSmokeGuardTests
             $"音乐管理 View 加载抛异常（阶段：{stage}）：\n{captured}");
     }
 
+    /// <summary>
+    /// 黑胶旋转冒烟（2026-09-08 真机事故）：播放 → <c>UpdateDiscSpin</c> → Storyboard.Begin。
+    /// 🔴 code-behind 自建 Storyboard 时 <c>SetTarget</c> 必须配对 <c>SetTargetProperty</c>，
+    /// 缺 TargetProperty 时 Begin 的 ClockTreeWalkRecursive 直接抛 InvalidOperationException。
+    /// 仅构造 View + 布局抓不到——异常只在 IsPlaying 状态变化触发旋转时发生（同 NameScope 事故教训：
+    /// 模板/动画求值发生在数据填充之后，守卫必须把状态走完）。
+    /// </summary>
+    [Fact]
+    public void MusicManagerView_DiscSpinStartsAndPauses_WithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+        string dir = Path.Combine(Path.GetTempPath(), $"music-disc-smoke-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct services + VM + View";
+                ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+                var store = new JsonMusicLibraryStore(Path.Combine(dir, "music-library.json"));
+                var scanner = new LocalMusicScanner(new NoopLogger(), new TagLibMusicTagReader(new NoopLogger()));
+                var vm = new MusicManagerViewModel(
+                    store,
+                    scanner,
+                    new PlaybackQueueService(),
+                    new NoopLogger(),
+                    engineProvider: null,
+                    tagReader: new TagLibMusicTagReader(new NoopLogger()),
+                    dispatcher: null);
+                var view = new MusicManagerView(vm);
+                view.Measure(new Size(1600, 900));
+                view.Arrange(new Rect(0, 0, 1600, 900));
+                view.UpdateLayout();
+
+                stage = "raise Loaded（订阅 vm.PropertyChanged）";
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+
+                // IsPlaying 是私有 setter（引擎状态回写专用）——测试经反射触发真实 PropertyChanged 路径，
+                // 不为测试放宽生产代码可访问性
+                Action<object?> setPlaying = value => typeof(MusicManagerViewModel)
+                    .GetProperty(nameof(MusicManagerViewModel.IsPlaying))!
+                    .GetSetMethod(nonPublic: true)!
+                    .Invoke(vm, [value]);
+
+                stage = "IsPlaying=true → Storyboard.Begin";
+                setPlaying(true); // 修复前：此处抛「必须为 DoubleAnimation 指定 TargetProperty」
+                view.UpdateLayout();
+
+                stage = "IsPlaying=false → Pause";
+                setPlaying(false);
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"黑胶旋转 Storyboard 抛异常（阶段：{stage}）：\n{captured}");
+    }
+
     internal static Application EnsureApplication()
     {
         if (Application.Current is not null)

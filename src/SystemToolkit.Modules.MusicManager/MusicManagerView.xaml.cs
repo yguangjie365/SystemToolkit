@@ -82,15 +82,20 @@ public partial class MusicManagerView : UserControl
         {
             if (!_discSpinStarted)
             {
-                var spin0 = new System.Windows.Media.Animation.DoubleAnimation(
+                var spin = new System.Windows.Media.Animation.DoubleAnimation(
                     0, 360, TimeSpan.FromSeconds(24))
                 {
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                 };
                 _discSpin = new System.Windows.Media.Animation.Storyboard();
-                var spin = (System.Windows.Media.Animation.DoubleAnimation)spin0.Clone();
                 _discSpin.Children.Add(spin);
                 System.Windows.Media.Animation.Storyboard.SetTarget(spin, DiscHost);
+                // 🔴 SetTarget 必须配对 SetTargetProperty——缺 TargetProperty 时
+                // Begin 的 ClockTreeWalkRecursive 直接抛 InvalidOperationException
+                //（2026-09-08 真机实证：必须为 DoubleAnimation 指定 TargetProperty）
+                System.Windows.Media.Animation.Storyboard.SetTargetProperty(
+                    spin,
+                    new System.Windows.PropertyPath("(UIElement.RenderTransform).(RotateTransform.Angle)"));
                 _discSpin.Begin(DiscHost, true); // controllable
                 _discSpinStarted = true;
             }
