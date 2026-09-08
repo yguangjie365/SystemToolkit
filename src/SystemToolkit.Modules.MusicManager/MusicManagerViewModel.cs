@@ -115,8 +115,10 @@ public partial class MusicManagerViewModel : ObservableObject
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
         SongsView = CollectionViewSource.GetDefaultView(Songs);
         SongsView.Filter = o => o is MusicSong s && MatchesFilter(s);
-        _queue.QueueChanged += RebuildUpNext;
-        _queue.CurrentChanged += OnQueueCurrentChanged;
+        // 🔴 队列服务契约未承诺事件线程（审查 🔴-2 防御性采纳）：与引擎事件同规则——
+        // 一律经 RunOnUi 编组后再碰 ObservableCollection / 触发绑定刷新
+        _queue.QueueChanged += () => RunOnUi(RebuildUpNext);
+        _queue.CurrentChanged += () => RunOnUi(OnQueueCurrentChanged);
 
         // 引擎事件在 InitializeAsync 里解析引擎后接线（引擎实现可能晚于本模块合入）
     }
@@ -194,11 +196,33 @@ public partial class MusicManagerViewModel : ObservableObject
                 new Progress<MusicScanProgress>(p => ScanStatusText = $"扫描中… {p.Percent}%（{p.Scanned}/{p.Total}）"),
                 _scanCts.Token);
 
-            // 合并策略：新扫描结果按 Id 覆盖旧条目（保留未被本轮触及的其它根的曲目）
-            var merged = new Dictionary<string, MusicSong>(Songs.ToDictionary(s => s.Id));
+            // 合并/替换策略（审查 🔴-1 采纳）：
+            // 完整扫描（未取消）→ 以本轮结果替换，磁盘已删除的曲目不再残留为僵尸条目；
+            //   例外：本轮解析失败（Failures）的文件「缺席 ≠ 已删除」，按路径保留旧条目避免误清；
+            // 取消扫描 → 本轮只是部分结果，维持「旧库 + 本轮已扫到」合并
+            Dictionary<string, MusicSong> oldByPath = new(StringComparer.OrdinalIgnoreCase);
+            foreach (MusicSong s in Songs)
+            {
+                oldByPath[s.LocalPath] = s;
+            }
+
+            Dictionary<string, MusicSong> merged = result.WasCancelled
+                ? new Dictionary<string, MusicSong>(Songs.ToDictionary(s => s.Id))
+                : [];
             foreach (MusicSong song in result.Songs)
             {
                 merged[song.Id] = song;
+            }
+
+            if (!result.WasCancelled)
+            {
+                foreach (MusicScanFailure failure in result.Failures)
+                {
+                    if (oldByPath.TryGetValue(failure.FilePath, out MusicSong? kept))
+                    {
+                        merged[kept.Id] = kept;
+                    }
+                }
             }
 
             var library = new MusicLibrary
@@ -211,6 +235,11 @@ public partial class MusicManagerViewModel : ObservableObject
             ApplyLibrary(library);
 
             await _store.SaveAsync(library);
+            if (!result.WasCancelled)
+            {
+                // 扫描成功即曲库已重建，旧的加载告警（如缓存损坏降级）随之失效（审查 🟠-5 采纳）
+                LibraryWarning = string.Empty;
+            }
             ScanStatusText = result.WasCancelled
                 ? $"扫描已取消（已扫 {result.ProcessedCount} 个文件，结果已保留）"
                 : result.IsClean
@@ -305,13 +334,32 @@ public partial class MusicManagerViewModel : ObservableObject
 
         if (IsPlaying)
         {
-            engine.Pause();
+            // 🔴 AsyncRelayCommand 会吞异常（项目已知坑）——同步引擎操作必须就地显式化（审查 🟠-4 采纳）
+            try
+            {
+                engine.Pause();
+            }
+            catch (Exception ex)
+            {
+                ScanStatusText = $"暂停失败：{ex.Message}";
+                _log.Warn($"[Music] 暂停失败：{ex.Message}");
+            }
+
             return;
         }
 
         if (QueueCurrent is not null)
         {
-            engine.Resume();
+            try
+            {
+                engine.Resume();
+            }
+            catch (Exception ex)
+            {
+                ScanStatusText = $"恢复播放失败：{ex.Message}";
+                _log.Warn($"[Music] 恢复播放失败：{ex.Message}");
+            }
+
             return;
         }
 
@@ -520,11 +568,22 @@ public partial class MusicManagerViewModel : ObservableObject
 
         var target = TimeSpan.FromMilliseconds(
             engine.Duration.TotalMilliseconds * Math.Clamp(percent, 0, 100) / 100);
-        engine.Seek(target);
-        // 立即本地回显，不等下一次位置轮询（审查 🟠-2 采纳：消除拖动结束的视觉延迟）
-        PositionCurrentText = FormatTime(target);
-        PositionDurationText = FormatTime(engine.Duration);
-        ProgressValue = Math.Clamp(percent, 0, 100);
+
+        // 🔴 AsyncRelayCommand 会吞异常——Seek 就地显式化（审查 🟠-4 采纳）
+        try
+        {
+            engine.Seek(target);
+            // 立即本地回显，不等下一次位置轮询（审查 🟠-2 采纳：消除拖动结束的视觉延迟）
+            PositionCurrentText = FormatTime(target);
+            PositionDurationText = FormatTime(engine.Duration);
+            ProgressValue = Math.Clamp(percent, 0, 100);
+        }
+        catch (Exception ex)
+        {
+            ScanStatusText = $"进度定位失败：{ex.Message}";
+            _log.Warn($"[Music] 进度定位失败：{ex.Message}");
+        }
+
         _seeking = false;
     }
 
