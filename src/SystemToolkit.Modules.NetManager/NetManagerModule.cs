@@ -60,7 +60,18 @@ public sealed class NetManagerModule : ModuleBase
         services.AddSingleton<INetworkSnapshotService, NetworkSnapshotService>();
 
         // VM 组合根 + 视图
-        services.AddSingleton<NetManagerViewModel>();
+        // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）
+        services.AddSingleton(sp => new NetManagerViewModel(
+            sp.GetRequiredService<INetworkInfoService>(),
+            sp.GetRequiredService<INetConfigService>(),
+            sp.GetRequiredService<INetworkSnapshotService>(),
+            sp.GetRequiredService<INetDiagnosticService>(),
+            sp.GetRequiredService<DnsProbeService>(),
+            sp.GetRequiredService<ContinuousPingService>(),
+            sp.GetRequiredService<INetRepairService>(),
+            sp.GetRequiredService<ITcpTuningService>(),
+            sp.GetRequiredService<IElevationProvider>(),
+            sp.GetRequiredKeyedService<ILogger>("netmanager")));
         services.AddSingleton<NetManagerView>();
     }
 }

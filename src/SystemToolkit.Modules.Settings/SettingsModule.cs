@@ -26,7 +26,10 @@ public sealed class SettingsModule : ModuleBase
     public override void RegisterServices(IServiceCollection services)
     {
         services.AddKeyedSingleton<ILogger>("settings", new FileLogger("settings"));
-        services.AddSingleton<SettingsViewModel>();
+        // 工厂注册：接通键控日志器（同 NetManager，反模式存量清理）
+        services.AddSingleton(sp => new SettingsViewModel(
+            sp.GetRequiredService<BackupConfigService>(),
+            sp.GetRequiredKeyedService<ILogger>("settings")));
         services.AddSingleton<SettingsView>();
     }
 }
