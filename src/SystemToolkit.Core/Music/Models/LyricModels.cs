@@ -11,6 +11,9 @@ public enum LyricSource
 
     /// <summary>同名外部 <c>.lrc</c> 文件。</summary>
     SidecarFile,
+
+    /// <summary>在线歌词（OM-5：平台目录服务返回的 LRC；本地/在线同一解析管道）。</summary>
+    Online,
 }
 
 /// <summary>

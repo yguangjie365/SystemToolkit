@@ -33,22 +33,44 @@
                            Foreground="{StaticResource Brush_TextMuted}"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                         Width="220" Padding="8,5" VerticalContentAlignment="Center"/>
-                <Button Height="32" Content="扫描曲库" Margin="8,0,0,0" Command="{Binding ScanCommand}">
+                <Button Height="32" Content="网易云" Padding="10,0"
+                        Command="{Binding SelectPlatformCommand}" CommandParameter="NetEase">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedPlatform, Mode=OneWay}" Value="NetEase">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Height="32" Content="QQ 音乐" Padding="10,0" Margin="4,0,0,0"
+                        Command="{Binding SelectPlatformCommand}" CommandParameter="QQMusic">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedPlatform, Mode=OneWay}" Value="QQMusic">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <TextBox x:Name="OnlineSearchBox" Text="{Binding OnlineSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                         Width="220" Padding="8,5" VerticalContentAlignment="Center" Margin="8,0,0,0"
+                         KeyDown="OnOnlineSearchKeyDown"/>
+                <Button Height="32" Content="搜索" Margin="6,0,0,0" Command="{Binding SearchOnlineCommand}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsScanning}" Value="True">
+                                <DataTrigger Binding="{Binding IsSearchingOnline, Mode=OneWay}" Value="True">
                                     <Setter Property="IsEnabled" Value="False"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Style="{StaticResource RowActionButton}" Height="32" Content="取消" Margin="6,0,0,0"
-                        Command="{Binding CancelScanCommand}"
-                        Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </Grid>
 
@@ -65,84 +87,364 @@
                        Visibility="{Binding ScanStatusText, Converter={StaticResource StrToVis}}"/>
         </StackPanel>
 
-        <!-- 主区：左曲库 / 右歌词 -->
+        <!-- 主区：左歌单面板 / 中内容区三态（OM-5，2026-09-08 用户批准示意） / 右推荐+队列 -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="190"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="230"/>
             </Grid.ColumnDefinitions>
 
-            <ListBox Grid.Column="0" ItemsSource="{Binding SongsView}"
-                     SelectedItem="{Binding SelectedSong, Mode=OneWayToSource}"
-                     MouseDoubleClick="OnSongListDoubleClick"
-                     Background="Transparent" BorderThickness="0"
-                     HorizontalContentAlignment="Stretch"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     VirtualizingPanel.IsVirtualizing="True"
-                     VirtualizingPanel.VirtualizationMode="Recycling"
-                     VirtualizingPanel.ScrollUnit="Pixel">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="150"/>
-                                <ColumnDefinition Width="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding Name, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBody}"
-                                       Foreground="{StaticResource Brush_TextPrimary}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Artist, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextMuted}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="2" Text="{Binding DurationText, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextMuted}"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <!-- 左：歌单面板（歌单列表 + 底部登录态芯片） -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="歌单" FontSize="{DynamicResource Font_SizeBody}"
+                           Foreground="{StaticResource Brush_TextSecondary}" Margin="2,0,0,6"/>
+                <Button DockPanel.Dock="Top" Style="{StaticResource RowActionButton}" Height="28" Margin="0,0,0,6"
+                        Content="本地曲库" HorizontalAlignment="Stretch"
+                        Command="{Binding ClosePlaylistCommand}"/>
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding SelectedPlatformText, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeBodySm}"
+                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Height="24" Padding="8,0" Content="刷新"
+                            Command="{Binding LoadPlaylistsCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsLoadingPlaylists, Mode=OneWay}" Value="True">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+                <StackPanel DockPanel.Dock="Bottom">
+                    <Grid Margin="2,4,2,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding NetEaseLoginText, Mode=OneWay}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Height="20" Padding="6,0"
+                                Content="登录" Command="{Binding RequestLoginCommand}" CommandParameter="NetEase"/>
+                    </Grid>
+                    <Grid Margin="2,2,2,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding QqLoginText, Mode=OneWay}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Height="20" Padding="6,0"
+                                Content="登录" Command="{Binding RequestLoginCommand}" CommandParameter="QQMusic"/>
+                    </Grid>
+                </StackPanel>
+                <ListBox x:Name="PlaylistList" ItemsSource="{Binding UserPlaylists}"
+                         MouseDoubleClick="OnPlaylistListDoubleClick"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextPrimary}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1" Text="{Binding CountText, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextMuted}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
 
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
                           VerticalAlignment="Stretch" Background="Transparent"/>
 
-            <ListBox x:Name="LyricsList" Grid.Column="2" ItemsSource="{Binding LyricRows}"
-                     Background="Transparent" BorderThickness="0"
-                     HorizontalContentAlignment="Center"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     VirtualizingPanel.IsVirtualizing="True"
-                     VirtualizingPanel.ScrollUnit="Pixel">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Text, Mode=OneWay}" Padding="8,6"
-                                   TextWrapping="Wrap" TextAlignment="Center">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodyLg}"/>
-                                    <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <!-- 中：内容区三态（视图状态机） -->
+            <Grid Grid.Column="2">
+                <!-- 态① 本地曲库 -->
+                <DockPanel Visibility="{Binding IsLocalLibraryView, Converter={StaticResource BoolToVis}}">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                 Padding="8,5" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
+                        <Button Grid.Column="1" Height="30" Content="扫描曲库" Margin="0,0,6,0" Command="{Binding ScanCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
-                                            <Setter Property="FontSize" Value="{DynamicResource Font_SizeDisplay}"/>
-                                            <Setter Property="Foreground" Value="{StaticResource Brush_TextPrimary}"/>
+                                        <DataTrigger Binding="{Binding IsScanning, Mode=OneWay}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Visibility="{Binding HasLyrics, Converter={StaticResource InverseToVis}}">
-                <TextBlock Text="未找到歌词" FontSize="{DynamicResource Font_SizeTitle}"
-                           Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
-                <TextBlock Text="{Binding LyricsHint}" Margin="0,8,0,0"
-                           FontSize="{DynamicResource Font_SizeBodySm}"
-                           Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
-            </StackPanel>
+                            </Button.Style>
+                        </Button>
+                        <Button Grid.Column="2" Style="{StaticResource RowActionButton}" Height="30" Content="取消"
+                                Command="{Binding CancelScanCommand}"
+                                Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
+                    <ListBox ItemsSource="{Binding SongsView}"
+                             SelectedItem="{Binding SelectedSong, Mode=OneWayToSource}"
+                             MouseDoubleClick="OnSongListDoubleClick"
+                             Background="Transparent" BorderThickness="0"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBody}"
+                                               Foreground="{StaticResource Brush_TextPrimary}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Artist, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding DurationText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+
+                <!-- 态② 在线搜索结果 -->
+                <DockPanel Visibility="{Binding IsOnlineSearchView, Converter={StaticResource BoolToVis}}">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding OnlineStatusText, Mode=OneWay}"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}" Margin="2,0,0,6"
+                               Visibility="{Binding OnlineStatusText, Converter={StaticResource StrToVis}}"/>
+                    <ListBox x:Name="SearchResultList" ItemsSource="{Binding SearchResults}"
+                             MouseDoubleClick="OnSearchListDoubleClick"
+                             Background="Transparent" BorderThickness="0"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="44"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBody}"
+                                               Foreground="{StaticResource Brush_TextPrimary}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Subtitle, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="2" Background="{StaticResource Brush_AccentSoft}"
+                                            CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="0,0,8,0"
+                                            Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
+                                        <TextBlock Text="{Binding Badge, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_Accent}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="3" Text="{Binding DurationText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+
+                <!-- 态③ 歌单详情 -->
+                <DockPanel Visibility="{Binding IsPlaylistDetailView, Converter={StaticResource BoolToVis}}">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding ViewTitle, Mode=OneWay}"
+                                   FontSize="{DynamicResource Font_SizeTitle}"
+                                   Foreground="{StaticResource Brush_TextPrimary}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" Height="30" Content="全部播放" Margin="0,0,6,0"
+                                Command="{Binding PlayPlaylistFromStartCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}"/>
+                            </Button.Style>
+                        </Button>
+                        <Button Grid.Column="2" Style="{StaticResource RowActionButton}" Height="30" Content="返回"
+                                Command="{Binding ClosePlaylistCommand}"/>
+                    </Grid>
+                    <ListBox x:Name="PlaylistTrackList" ItemsSource="{Binding PlaylistTracks}"
+                             MouseDoubleClick="OnPlaylistTrackDoubleClick"
+                             Background="Transparent" BorderThickness="0"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="44"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Title, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBody}"
+                                               Foreground="{StaticResource Brush_TextPrimary}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Subtitle, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="2" Background="{StaticResource Brush_AccentSoft}"
+                                            CornerRadius="{DynamicResource Radius_MD}" Padding="6,1" Margin="0,0,8,0"
+                                            Visibility="{Binding Badge, Converter={StaticResource StrToVis}}">
+                                        <TextBlock Text="{Binding Badge, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_Accent}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="3" Text="{Binding DurationText, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Grid>
+
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- 右：推荐 + 播放队列 -->
+            <Grid Grid.Column="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="2*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="1.2*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="每日推荐" FontSize="{DynamicResource Font_SizeBodySm}"
+                               Foreground="{StaticResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Height="22" Padding="8,0"
+                            Content="刷新" Command="{Binding LoadRecommendationsCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsLoadingRecommendations, Mode=OneWay}" Value="True">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+                <ListBox Grid.Row="2" x:Name="DailyRecommendList" ItemsSource="{Binding DailyRecommend}"
+                         MouseDoubleClick="OnDailyRecommendDoubleClick"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="2" Text="{Binding Title, Mode=OneWay}"
+                                       FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Grid.Row="3" Text="推荐歌单" FontSize="{DynamicResource Font_SizeBodySm}"
+                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,6,0,4"/>
+                <ListBox Grid.Row="4" x:Name="RecommendedPlaylistList" ItemsSource="{Binding RecommendedPlaylists}"
+                         MouseDoubleClick="OnRecommendedPlaylistDoubleClick"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="2" Text="{Binding Title, Mode=OneWay}"
+                                       FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Grid.Row="5" Text="Up Next" FontSize="{DynamicResource Font_SizeBodySm}"
+                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,6,0,4"/>
+                <ListBox Grid.Row="6" ItemsSource="{Binding UpNext}"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="2" Text="{Binding Name, Mode=OneWay}"
+                                       FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
         </Grid>
 
         <!-- 底部常驻播放条（点击空白区展开完整播放器） -->

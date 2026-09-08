@@ -65,7 +65,9 @@ public sealed class MusicManagerModule : ModuleBase
             tagReader: sp.GetRequiredService<IMusicTagReader>(),
             dispatcher: System.Windows.Application.Current?.Dispatcher,
             urlResolver: sp.GetService<IOnlineUrlResolver>(),
-            audioProxy: sp.GetService<IAudioProxyService>()));
+            audioProxy: sp.GetService<IAudioProxyService>(),
+            catalog: sp.GetService<IOnlineMusicCatalogService>(),
+            credentials: sp.GetService<IOnlineCredentialStore>()));
         services.AddSingleton<MusicManagerView>();
     }
 }

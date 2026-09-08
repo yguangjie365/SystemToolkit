@@ -12,7 +12,7 @@ namespace SystemToolkit.Infrastructure.Music.Online;
 /// 移植自 NexBox src-tauri/src/music_api/netease.rs。
 /// 仅实现搜索 / 歌曲链接 / 歌词三个核心功能（用户 R1 拍板）。
 /// </summary>
-public sealed class NetEaseOnlineClient : IOnlineMusicClient, IDisposable
+public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi, IDisposable
 {
     private const string UserAgent =
         "Mozilla/5.0 (Linux; Android 9; PCT-AL10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.64 HuaweiBrowser/10.0.3.311 Mobile Safari/537.36";

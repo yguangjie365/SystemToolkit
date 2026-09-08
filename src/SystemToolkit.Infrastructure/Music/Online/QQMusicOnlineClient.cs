@@ -12,7 +12,7 @@ namespace SystemToolkit.Infrastructure.Music.Online;
 /// 移植自 NexBox src-tauri/src/music_api/qqmusic.rs。
 /// 仅实现搜索 / 歌曲链接 / 歌词三个核心功能（用户 R1 拍板）。
 /// </summary>
-public sealed class QQMusicOnlineClient : IOnlineMusicClient, IDisposable
+public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi, IDisposable
 {
     private const string MusicuUrl = "https://u.y.qq.com/cgi-bin/musicu.fcg";
     private const string LyricUrl = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg";

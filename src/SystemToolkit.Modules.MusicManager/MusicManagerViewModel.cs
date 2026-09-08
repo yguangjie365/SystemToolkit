@@ -42,6 +42,12 @@ public partial class MusicManagerViewModel : ObservableObject
     // 在线播放组件（OM-4，均可空：在线组件缺席时本地播放完全不受影响——故障隔离同引擎语义）
     private readonly IOnlineUrlResolver? _urlResolver;
     private readonly IAudioProxyService? _audioProxy;
+
+    /// <summary>在线目录服务（OM-5：搜索/歌单/推荐/登录态/在线歌词；可空，缺席时在线浏览降级）。</summary>
+    private readonly IOnlineMusicCatalogService? _catalog;
+
+    /// <summary>Cookie 凭据存储（OM-1，Core 契约；登录窗回传的 Cookie 加密落盘用）。</summary>
+    private readonly IOnlineCredentialStore? _credentials;
     private CancellationTokenSource? _scanCts;
 
     /// <summary>
@@ -116,7 +122,9 @@ public partial class MusicManagerViewModel : ObservableObject
         IMusicTagReader? tagReader = null,
         System.Windows.Threading.Dispatcher? dispatcher = null,
         IOnlineUrlResolver? urlResolver = null,
-        IAudioProxyService? audioProxy = null)
+        IAudioProxyService? audioProxy = null,
+        IOnlineMusicCatalogService? catalog = null,
+        IOnlineCredentialStore? credentials = null)
     {
         // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
         // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
@@ -130,6 +138,8 @@ public partial class MusicManagerViewModel : ObservableObject
         _tagReader = tagReader;
         _urlResolver = urlResolver;
         _audioProxy = audioProxy;
+        _catalog = catalog;
+        _credentials = credentials;
 
         Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
         SongsView = CollectionViewSource.GetDefaultView(Songs);
@@ -508,6 +518,14 @@ public partial class MusicManagerViewModel : ObservableObject
         }
 
         WireEngineOnce();
+
+        // OM-5：在线目录随启动预热（目录服务缺席时跳过，不给本地用户制造噪音）
+        if (_catalog is not null)
+        {
+            _ = LoadPlaylistsAsync();
+            _ = LoadRecommendationsAsync();
+            _ = RefreshLoginStateAsync();
+        }
     }
 
     private void ApplyLibrary(MusicLibrary library)
@@ -856,10 +874,28 @@ public partial class MusicManagerViewModel : ObservableObject
         LyricDocument doc;
         try
         {
-            string lrcPath = Path.ChangeExtension(song.LocalPath, ".lrc");
-            if (File.Exists(lrcPath))
+            if (song.IsOnline)
             {
-                string text = await File.ReadAllTextAsync(lrcPath);
+                // OM-5：在线曲歌词走目录服务（网易含翻译；QQ 走 songMid）
+                if (_catalog is null)
+                {
+                    doc = LyricDocument.None();
+                }
+                else
+                {
+                    string key = song.Online!.Provider == OnlineProvider.QQMusic
+                        ? (song.Online.Mid ?? song.Online.Id)
+                        : song.Online.Id;
+                    OnlineLyrics online = await _catalog.GetLyricsAsync(song.Online.Provider, key);
+                    doc = LyricParser.Parse(
+                        string.IsNullOrWhiteSpace(online.Lyric) ? null : online.Lyric,
+                        online.Translation,
+                        source: LyricSource.Online);
+                }
+            }
+            else if (File.Exists(Path.ChangeExtension(song.LocalPath, ".lrc")))
+            {
+                string text = await File.ReadAllTextAsync(Path.ChangeExtension(song.LocalPath, ".lrc"));
                 doc = LyricParser.Parse(text, source: LyricSource.SidecarFile);
             }
             else

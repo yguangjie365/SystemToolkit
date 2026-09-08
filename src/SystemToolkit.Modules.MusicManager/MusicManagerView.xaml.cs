@@ -2,13 +2,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using SystemToolkit.Core.Music.Models;
+using SystemToolkit.Core.Music.Online;
 using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Modules.MusicManager;
 
 /// <summary>
-/// 音乐管理视图（2026-09-08 用户拍板单屏布局）：左曲库 / 右歌词 / 底部播放条 / 完整播放器覆盖层。
-/// Loaded 注入文件夹选择回调并初始化曲库（幂等）。
+/// 音乐管理视图（2026-09-08 OM-5 三面板布局）：左歌单面板 / 中内容区三态 / 右推荐+队列 /
+/// 底部播放条 / 完整播放器覆盖层。
+/// Loaded 注入文件夹选择与登录窗回调并初始化曲库（幂等）。
 /// </summary>
 public partial class MusicManagerView : UserControl
 {
@@ -33,6 +35,9 @@ public partial class MusicManagerView : UserControl
             };
             return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
         };
+
+        // 登录窗回调注入（OM-5）：VM 只发请求，窗口由 View 打开，Cookie 回传 VM 加密落盘
+        _vm.LoginRequested ??= OnLoginRequested;
 
         // 订阅平衡：Loaded 订阅 / Unloaded 退订（View/VM 均为 DI 单例，Shell 切换导航会卸载重挂同一实例；
         // 不退订则隐藏中的旧实例继续消费 VM 事件）。「-= 先行」保证 Loaded 重复触发也只有一个订阅
@@ -72,6 +77,57 @@ public partial class MusicManagerView : UserControl
     /// <summary>底部播放条空白区点击 → 展开完整播放器（按钮区域自行处理点击，不冒泡到这里）。</summary>
     private void OnBottomBarTap(object sender, MouseButtonEventArgs e)
         => _vm.OpenFullPlayerCommand.Execute(null);
+
+    // ════════ OM-5 在线三面板交互 ════════
+
+    private void OnOnlineSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && _vm.SearchOnlineCommand.CanExecute(null))
+        {
+            _vm.SearchOnlineCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>列表双击取行 VM：SelectedItem 优先，行 DataContext 兜底（同曲库双击的实测教训）。</summary>
+    private static T? RowOf<T>(object sender)
+        where T : class
+    {
+        return sender is ListBox { SelectedItem: T selected }
+            ? selected
+            : (sender as ListBox)?.SelectedItem as T;
+    }
+
+    private void OnSearchListDoubleClick(object sender, MouseButtonEventArgs e)
+        => _vm.PlayFromSearchCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+
+    private void OnPlaylistListDoubleClick(object sender, MouseButtonEventArgs e)
+        => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
+
+    private void OnPlaylistTrackDoubleClick(object sender, MouseButtonEventArgs e)
+        => _vm.PlayFromPlaylistCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+
+    private void OnDailyRecommendDoubleClick(object sender, MouseButtonEventArgs e)
+        => _vm.PlayFromDailyRecommendCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+
+    private void OnRecommendedPlaylistDoubleClick(object sender, MouseButtonEventArgs e)
+        => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
+
+    /// <summary>打开平台登录窗并回传 Cookie（async void + 全捕获——事件处理器模式）。</summary>
+    private async void OnLoginRequested(OnlineProvider provider)
+    {
+        try
+        {
+            string? cookie = await OnlineLoginWindow.ShowAsync(Window.GetWindow(this), provider);
+            await _vm.OnLoginCookieObtainedAsync(provider, cookie);
+        }
+        catch (Exception ex)
+        {
+            // 登录窗异常降级为可见状态（🔴 不静默），不打崩进程
+            await _vm.OnLoginCookieObtainedAsync(provider, null);
+            System.Diagnostics.Debug.WriteLine($"[Music] 登录窗异常：{ex.Message}");
+        }
+    }
 
     /// <summary>完整播放器进度条拖动结束。</summary>
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
@@ -134,12 +190,8 @@ public partial class MusicManagerView : UserControl
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
         {
+            // OM-5：歌词流收敛到完整播放器（主页面右栏改为推荐+队列——用户批准示意）
             MusicManagerViewModel.LyricRowVm row = _vm.LyricRows[_vm.ActiveLyricIndex];
-            if (LyricsList.IsVisible)
-            {
-                LyricsList.ScrollIntoView(row);
-            }
-
             if (FullLyricsList.IsVisible)
             {
                 FullLyricsList.ScrollIntoView(row);

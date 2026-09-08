@@ -205,6 +205,12 @@ public partial class App : Application
         services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>();
         services.AddSingleton<SystemToolkit.Core.Music.Online.IAudioProxyService>(
             sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>());
+        services.AddSingleton<SystemToolkit.Core.Music.Online.IOnlineMusicCatalogService>(sp =>
+            new SystemToolkit.Infrastructure.Music.Online.OnlineMusicCatalogService(
+                sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.NetEaseOnlineClient>(),
+                sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient>(),
+                sp.GetRequiredService<SystemToolkit.Core.Music.Online.IOnlineCredentialStore>(),
+                new SystemToolkit.Core.Contracts.FileLogger("musicmanager")));
         services.AddSingleton<SystemToolkit.Core.Music.Online.IOnlineUrlResolver>(sp =>
         {
             SystemToolkit.Core.Contracts.FileLogger onlineLog = new("musicmanager");
