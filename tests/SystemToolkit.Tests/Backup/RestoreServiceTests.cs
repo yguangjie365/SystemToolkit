@@ -643,3 +643,128 @@ public class RestoreServiceTests
         finally { Directory.Delete(dir, recursive: true); }
     }
 }
+
+/// <summary>BKP-3 部分恢复（2026-09-08）：includeRelativePaths 非空时只恢复命中文件。</summary>
+public class RestorePartialTests
+{
+    /// <summary>多文件快照工厂：src 下 root1/{a.txt,b.txt} 两个文件。</summary>
+    private static async Task<(SnapshotInfo Info, string SrcDir)> CreateMultiFileBackup(
+        BackupConfigService cfg, string tag, string contentA = "AAA", string contentB = "BBB")
+    {
+        string temp = Path.GetTempPath();
+        string srcDir = Path.Combine(temp, $"fb_src_{tag}_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(srcDir);
+        string f1 = Path.Combine(srcDir, "a.txt");
+        string f2 = Path.Combine(srcDir, "b.txt");
+        File.WriteAllText(f1, contentA, Encoding.UTF8);
+        File.WriteAllText(f2, contentB, Encoding.UTF8);
+
+        // 单次备份整个目录（天然含两个文件，避免同秒双快照的序号干扰）
+        var rule = new BackupRule { RuleName = "部分恢复测试", SourcePath = srcDir, SourceType = SourceTypes.Folder };
+        var svc = new BackupService(cfg);
+        BackupResult result = await svc.BackupRuleAsync(rule);
+        Assert.True(result.Success, result.Message);
+
+        var mgr = SnapshotManager.FromRule(rule, cfg.Settings.BackupRoot);
+        SnapshotInfo? info = mgr.LatestSnapshot();
+        Assert.NotNull(info);
+        Assert.True(info.Files.Count >= 2, "测试前置：快照应含两个文件");
+        return (info, srcDir);
+    }
+
+    [Fact]
+    public async Task Restore_WithIncludePaths_OnlyWritesSelectedFiles()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("fb_part");
+        try
+        {
+            (SnapshotInfo? info, _) = await CreateMultiFileBackup(cfg!, "part_ok");
+            string target = Path.Combine(temp, "fb_part_target_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(target);
+
+            // 只恢复 b.txt
+            string? bRel = info.Files.Select(f => f.RelativePath).First(p => p.EndsWith("b.txt"));
+            var svc = new RestoreService();
+            RestoreReport report = await svc.RestoreSnapshotAsync(info, target, ConflictPolicy.Overwrite,
+                includeRelativePaths: new[] { bRel });
+
+            Assert.True(report.Success, report.Message);
+            Assert.Equal(1, report.Restored);
+            Assert.Equal(1, report.Total);
+            Assert.True(File.Exists(Path.Combine(target, bRel)), "选中的 b.txt 应已恢复");
+            // 未选中的 a.txt 不应出现在目标
+            Assert.False(File.Exists(Path.Combine(target, "a.txt")));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+            catch
+            {
+                // 并行用例同名目录残留不阻塞
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Restore_WithIncludePaths_MissingSelection_ReportsEmpty()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("fb_part_miss");
+        try
+        {
+            (SnapshotInfo? info, _) = await CreateMultiFileBackup(cfg!, "part_miss");
+            string target = Path.Combine(temp, "fb_part_miss_target_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(target);
+
+            var svc = new RestoreService();
+            RestoreReport report = await svc.RestoreSnapshotAsync(info, target, ConflictPolicy.Overwrite,
+                includeRelativePaths: new[] { "not/exists.txt" });
+
+            Assert.True(report.Success);
+            Assert.Equal(0, report.Total);
+            Assert.Equal(0, report.Restored);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+            catch
+            {
+                // 同上
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Restore_WithoutIncludePaths_StillRestoresAll()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("fb_part_all");
+        try
+        {
+            (SnapshotInfo? info, _) = await CreateMultiFileBackup(cfg!, "part_all");
+            string target = Path.Combine(temp, "fb_part_all_target_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(target);
+
+            var svc = new RestoreService();
+            RestoreReport report = await svc.RestoreSnapshotAsync(info, target, ConflictPolicy.Overwrite);
+
+            Assert.True(report.Success, report.Message);
+            Assert.Equal(info.Files.Count, report.Restored);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+            catch
+            {
+                // 同上
+            }
+        }
+    }
+}

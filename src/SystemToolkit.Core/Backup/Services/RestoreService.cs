@@ -44,6 +44,10 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
     /// <param name="reporter">可选的进度/日志上报器。</param>
     /// <param name="ct">取消令牌。</param>
     /// <param name="trustedRoots">可信源路径白名单（优先于 manifest 自带来源，防单点篡改）；null 时回退 manifest 白名单（弱信任，留痕）。</param>
+    /// <param name="includeRelativePaths">
+    /// 部分恢复（BKP-3）：仅恢复 RelativePath 命中（忽略大小写精确匹配）的文件；
+    /// null 或空集合 = 整快照恢复。空目录只重建选中文件祖先链内的。
+    /// </param>
     /// <returns>恢复结果报告（计数汇总与失败/跳过明细）。</returns>
     public async Task<RestoreReport> RestoreSnapshotAsync(
         SnapshotInfo info,
@@ -52,7 +56,8 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
         Func<IReadOnlyList<string>, ConflictPolicy>? userChoice = null,
         IProgressReporter? reporter = null,
         CancellationToken ct = default,
-        IReadOnlyList<string>? trustedRoots = null)
+        IReadOnlyList<string>? trustedRoots = null,
+        IReadOnlyCollection<string>? includeRelativePaths = null)
     {
         Action<string>? log = reporter is null ? null : (Action<string>)reporter.OnLog;
         var report = new RestoreReport { SnapshotId = info.SnapshotId, RuleName = info.RuleName };
@@ -66,16 +71,25 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
             if (!Directory.Exists(filesDir))
                 throw new IOException($"快照文件目录不存在：{filesDir}");
 
-            report.Total = info.Files.Count;
+            // 部分恢复（BKP-3）：includeRelativePaths 非空时只恢复清单中命中的文件
+            // （忽略大小写精确匹配 RelativePath）；null/空集合 = 整快照恢复
+            List<FileEntry> selected = info.Files;
+            if (includeRelativePaths is { Count: > 0 })
+            {
+                var wanted = new HashSet<string>(includeRelativePaths, StringComparer.OrdinalIgnoreCase);
+                selected = info.Files.Where(f => wanted.Contains(f.RelativePath)).ToList();
+            }
+
+            report.Total = selected.Count;
             if (report.Total == 0)
             {
                 report.Success = true;
-                report.Message = "快照中没有可恢复的文件。";
+                report.Message = "选中的范围里没有可恢复的文件。";
                 return report;
             }
 
             // 安全校验：拒绝不安全的相对路径
-            var unsafePaths = info.Files.Where(f => !IsSafeRelativePath(f.RelativePath)).ToList();
+            var unsafePaths = selected.Where(f => !IsSafeRelativePath(f.RelativePath)).ToList();
             if (unsafePaths.Count > 0)
                 throw new IOException("快照清单包含不安全路径，已中止恢复：" +
                     string.Join("；", unsafePaths.Take(10).Select(f => f.RelativePath)));
@@ -83,7 +97,7 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
             // 磁盘空间预检（含 20% 余量），避免复制到一半空间耗尽。
             // 无法确认（网络路径/驱动器未就绪）时不阻断，但必须留痕并提示用户，
             // 不能像过去那样被静默当成"空间充足"。
-            long totalSize = info.Files.Sum(f => f.Size);
+            long totalSize = selected.Sum(f => f.Size);
             long needed = (long)(totalSize * 1.2);
             DiskSpaceCheck space = SpaceProbe(targetRoot ?? info.SourcePath, needed);
             if (space == DiskSpaceCheck.Unknown)
@@ -153,7 +167,7 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
             // 被跳过条目的原因明细（多源快照的空目录、不安全路径等），与 skipped 计数配套
             var skippedItems = new List<string>();
             int done = 0;
-            int total = info.Files.Count;
+            int total = selected.Count;
             object lockObj = new object();
 
             var options = new ParallelOptions
@@ -164,7 +178,7 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
 
             try
             {
-                await Parallel.ForEachAsync(info.Files, options, (f, token) =>
+                await Parallel.ForEachAsync(selected, options, (f, token) =>
                 {
                     try
                     {
@@ -216,8 +230,8 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
                 return report;
             }
 
-            // 恢复空目录
-            foreach (string rel in info.EmptyDirs)
+            // 恢复空目录（BKP-3：部分恢复时只重建位于选中文件祖先链内的空目录）
+            foreach (string rel in FilterEmptyDirs(info.EmptyDirs, selected, includeRelativePaths))
             {
                 if (ct.IsCancellationRequested)
                     break;
@@ -558,6 +572,36 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
     // 路径计算与安全校验
     // ------------------------------------------------------------------
     private static bool IsSafeRelativePath(string rel) => PathUtil.IsSafeRelativePath(rel);
+
+    /// <summary>
+    /// 空目录过滤（BKP-3）：整快照恢复原样返回；部分恢复时只保留位于
+    /// 选中文件祖先链内的空目录（<c>a/b.txt</c> 选中 → <c>a</c>、<c>a/c</c> 可重建，
+    /// <c>x</c> 与选中文件无交集则跳过）。
+    /// </summary>
+    private static List<string> FilterEmptyDirs(
+        IReadOnlyList<string> emptyDirs,
+        IReadOnlyList<FileEntry> selected,
+        IReadOnlyCollection<string>? includeRelativePaths)
+    {
+        if (includeRelativePaths is not { Count: > 0 })
+        {
+            return emptyDirs as List<string> ?? emptyDirs.ToList();
+        }
+
+        var ancestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (FileEntry f in selected)
+        {
+            string[] segments = (f.RelativePath ?? "").Replace('\\', '/').Split('/');
+            for (int i = 1; i < segments.Length; i++)
+            {
+                ancestors.Add(string.Join("/", segments[..i]));
+            }
+        }
+
+        return emptyDirs
+            .Where(d => ancestors.Contains((d ?? "").Replace('\\', '/')))
+            .ToList();
+    }
 
     /// <summary>
     /// 判断路径是否指向系统关键目录（Windows/Program Files/系统盘根）。

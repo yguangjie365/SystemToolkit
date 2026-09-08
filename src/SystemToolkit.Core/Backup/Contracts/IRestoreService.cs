@@ -20,7 +20,11 @@ public interface IRestoreService
     /// 篡改 manifest 单独一处无法扩大写入范围；为 null 时回退 manifest 白名单（弱信任，留痕）。
     /// </param>
     /// <returns>恢复结果报告（计数汇总与失败/跳过明细）。</returns>
-    Task<RestoreReport> RestoreSnapshotAsync(SnapshotInfo info, string? targetRoot, ConflictPolicy policy, Func<IReadOnlyList<string>, ConflictPolicy>? userChoice = null, IProgressReporter? reporter = null, CancellationToken ct = default(CancellationToken), IReadOnlyList<string>? trustedRoots = null);
+    /// <param name="includeRelativePaths">
+    /// 部分恢复（BKP-3）：仅恢复 RelativePath 命中（忽略大小写精确匹配）的文件；
+    /// null 或空集合 = 整快照恢复。空目录只重建选中文件祖先链内的。
+    /// </param>
+    Task<RestoreReport> RestoreSnapshotAsync(SnapshotInfo info, string? targetRoot, ConflictPolicy policy, Func<IReadOnlyList<string>, ConflictPolicy>? userChoice = null, IProgressReporter? reporter = null, CancellationToken ct = default(CancellationToken), IReadOnlyList<string>? trustedRoots = null, IReadOnlyCollection<string>? includeRelativePaths = null);
 }
 
 /// <summary>冲突预演提供者（批次二恢复向导第 3 步数据源）。</summary>
