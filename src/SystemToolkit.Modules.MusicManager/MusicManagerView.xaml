@@ -1021,6 +1021,15 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              VirtualizingPanel.IsVirtualizing="False"
                              VirtualizingPanel.VirtualizationMode="Standard">
+                        <!-- 上下边缘渐隐遮罩（对照 NexBox maskImage 12%/88%） -->
+                        <ListBox.OpacityMask>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                <GradientStop Color="#FFFFFFFF" Offset="0.12"/>
+                                <GradientStop Color="#FFFFFFFF" Offset="0.88"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </ListBox.OpacityMask>
                         <!-- 🔴 虚拟化已关闭（2026-09-09 实测）：可变行高（换行+字号可调）+像素虚拟化+回收
                              会让偏移估算漂移 → 列表中部出现空白块且不回填。歌词量级（≤200 行）全量渲染零压力 -->
                         <ListBox.ItemContainerStyle>
@@ -1043,10 +1052,13 @@
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <!-- 非当前行淡显（对照 NexBox opacity 0.55） -->
+                                            <Setter Property="Opacity" Value="0.55"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
                                                     <Setter Property="Foreground" Value="{Binding DataContext.PlayerAccentBrush, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    <Setter Property="Opacity" Value="1"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -1212,6 +1224,15 @@
                              VirtualizingPanel.IsVirtualizing="False"
                              VirtualizingPanel.VirtualizationMode="Standard">
                         <!-- 🔴 同 FullLyricsList：虚拟化对可变行高产生空白块，关闭（2026-09-09） -->
+                        <!-- 上下边缘渐隐遮罩（对照 NexBox maskImage） -->
+                        <ListBox.OpacityMask>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                <GradientStop Color="#FFFFFFFF" Offset="0.12"/>
+                                <GradientStop Color="#FFFFFFFF" Offset="0.88"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </ListBox.OpacityMask>
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Focusable" Value="False"/>
@@ -1233,10 +1254,13 @@
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <!-- 非当前行淡显（对照 NexBox opacity 0.55） -->
+                                            <Setter Property="Opacity" Value="0.55"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsActive, Mode=OneWay}" Value="True">
                                                     <Setter Property="Foreground" Value="{Binding DataContext.PlayerAccentBrush, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    <Setter Property="Opacity" Value="1"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>

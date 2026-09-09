@@ -727,6 +727,26 @@ public partial class MusicManagerViewModel : ObservableObject
             return; // 拖动中：不回写进度，避免 Slider 与引擎轮询互相拉扯
         }
 
+        // 🔴 切歌防瞬移闸（对照 NexBox checkActive 的 waitingForNewSong 处理，2026-09-09 实测瞬移根修）：
+        // 歌词重载后，若引擎 position 仍是旧歌的大值（>2s 且没有明显回落），
+        // 用它对新歌词算行号会得到巨行号 → 歌词列表狂奔瞬移。冻结推进直到时间回落。
+        if (_waitingForNewSong)
+        {
+            double t = position.TotalSeconds;
+            if (Math.Abs(t - _lastPosBeforeReload) < 0.5)
+            {
+                _waitingForNewSong = false; // 同一首重新加载（位置几乎没变）：直接恢复推进
+            }
+            else if (t > 2.0 && t >= _lastPosBeforeReload - 1)
+            {
+                return; // 仍在旧歌位置：本轮跳过
+            }
+            else
+            {
+                _waitingForNewSong = false; // 新歌已从 0 附近开始：恢复推进
+            }
+        }
+
         PositionCurrentText = FormatTime(position);
         PositionDurationText = FormatTime(duration);
         ProgressValue = duration.TotalMilliseconds <= 0
@@ -1051,7 +1071,21 @@ public partial class MusicManagerViewModel : ObservableObject
         LyricsHint = HasLyrics
             ? string.Empty
             : "未找到歌词（同名 .lrc 与内嵌歌词均无）";
+
+        // 🔴 切歌防瞬移闸（对照 NexBox KaraokeLyricsView.waitingForNewSongRef）：
+        // 新歌词就位时引擎 position 往往还停在旧歌的大值，用它算新歌词会得到巨行号 →
+        // 平滑滚动狂奔（用户实测"歌词整段上下瞬移"）。冻结推进，等 position 回落再恢复。
+        _waitingForNewSong = true;
+        _lastPosBeforeReload = ResolveEngine()?.Position.TotalSeconds ?? 0;
+        LyricsVersion++; // 通知 View：列表滚回顶部 + 取消进行中的滚动动画
     }
+
+    private bool _waitingForNewSong;
+    private double _lastPosBeforeReload;
+
+    /// <summary>歌词重载代数（每次 ApplyLyrics 自增；View 监听后重置滚动位置）。</summary>
+    [ObservableProperty]
+    private int _lyricsVersion;
 
     private bool MatchesFilter(MusicSong s)
     {

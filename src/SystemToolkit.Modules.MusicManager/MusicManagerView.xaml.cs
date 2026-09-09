@@ -450,6 +450,11 @@ public partial class MusicManagerView : UserControl
             UpdateImmersionFontSizes(); // 沉浸前景字号跟随 A± 设置（下限钳制内）
         }
 
+        if (e.PropertyName == nameof(MusicManagerViewModel.LyricsVersion))
+        {
+            ResetLyricScrollToTop(); // 切歌/歌词重载：列表回顶（对照 NexBox scrollTo top:0 auto）
+        }
+
         if (e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
@@ -887,6 +892,23 @@ public partial class MusicManagerView : UserControl
         }
 
         _scrollTimer.Start();
+    }
+
+    /// <summary>歌词重载后：取消进行中的滚动动画并把两个歌词列表瞬时归零（对照 NexBox scrollTo top:0 auto）。</summary>
+    private void ResetLyricScrollToTop()
+    {
+        _scrollTimer?.Stop();
+        _scrollAnimTarget = null;
+        foreach (System.Windows.Controls.ListBox? list in new[] { FullLyricsList, ModernLyricsList })
+        {
+            if (list is null)
+            {
+                continue;
+            }
+
+            System.Windows.Controls.ScrollViewer? sv = FindFirstVisualChild<System.Windows.Controls.ScrollViewer>(list);
+            sv?.ScrollToVerticalOffset(0);
+        }
     }
 
     private void OnSmoothScrollTick(object? sender, EventArgs e)
