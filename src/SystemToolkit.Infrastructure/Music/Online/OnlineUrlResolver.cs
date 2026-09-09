@@ -18,8 +18,8 @@ public sealed class OnlineUrlResolver : IOnlineUrlResolver
     public delegate Task<OnlineSongUrlResult> NetEaseUrlFetcher(
         string id, string preferredQuality, string cookie, CancellationToken ct);
 
-    /// <summary>QQ URL 客户端委托：(songMid, cookie, ct) → 结果。</summary>
-    public delegate Task<OnlineSongUrlResult> QqUrlFetcher(string songMid, string cookie, CancellationToken ct);
+    /// <summary>QQ URL 客户端委托：(songMid, mediaMid, cookie, ct) → 结果。</summary>
+    public delegate Task<OnlineSongUrlResult> QqUrlFetcher(string songMid, string? mediaMid, string cookie, CancellationToken ct);
 
     private readonly NetEaseUrlFetcher _netEase;
     private readonly QqUrlFetcher _qq;
@@ -52,7 +52,7 @@ public sealed class OnlineUrlResolver : IOnlineUrlResolver
 
                 case OnlineProvider.QQMusic:
                     string mid = string.IsNullOrEmpty(track.Mid) ? track.Id : track.Mid;
-                    return await _qq(mid, _credentials.GetCookie(OnlineProvider.QQMusic) ?? string.Empty, ct)
+                    return await _qq(mid, track.MediaMid, _credentials.GetCookie(OnlineProvider.QQMusic) ?? string.Empty, ct)
                         .ConfigureAwait(true);
 
                 default:

@@ -625,6 +625,12 @@ public partial class MusicManagerView : UserControl
     }
 
     /// <summary>彩胶盘入场（对照 vinylDiscIn）：translate(6%,-6%) scale0.94 → 原位，0.7s。</summary>
+    /// <remarks>
+    /// 🔴 不能在 Completed 里把 RenderTransform 归位 Identity（2026-09-09 实测事故）：
+    /// XAML 里 DiscHost 的主变换是 TranslateTransform（右上伸出偏移 X+0.36/Y-0.30），
+    /// Identity 会把它覆盖丢失 → 每次切风格回彩胶，入场动画结束碟片位置突变。
+    /// 正确做法：入场动画只挂在「基础变换之后」的附加层，结束后还原基础变换。
+    /// </remarks>
     private void PlayVinylDiscEntrance()
     {
         if (DiscHost is null)
@@ -632,9 +638,13 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
+        // 基础变换 = XAML 定义的 TranslateTransform（绑定右上偏移）；缓存引用，动画后还原
+        TranslateTransform baseTranslate = DiscHost.RenderTransform as TranslateTransform
+            ?? new TranslateTransform(0, 0);
         var group = new TransformGroup();
-        group.Children.Add(new TranslateTransform(6, -6));
-        group.Children.Add(new ScaleTransform(0.94, 0.94));
+        group.Children.Add(baseTranslate);                 // [0] 基础：XAML 右上偏移（动画不动它）
+        group.Children.Add(new TranslateTransform(6, -6)); // [1] 入场位移
+        group.Children.Add(new ScaleTransform(0.94, 0.94));// [2] 入场缩放
         DiscHost.RenderTransform = group;
         DiscHost.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
         var storyboard = new System.Windows.Media.Animation.Storyboard
@@ -649,7 +659,7 @@ public partial class MusicManagerView : UserControl
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
             };
             System.Windows.Media.Animation.Storyboard.SetTarget(anim, DiscHost);
-            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath($"RenderTransform.Children[0].{prop}"));
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath("RenderTransform.Children[1]." + prop));
             storyboard.Children.Add(anim);
         }
 
@@ -661,14 +671,14 @@ public partial class MusicManagerView : UserControl
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
             };
             System.Windows.Media.Animation.Storyboard.SetTarget(anim, DiscHost);
-            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath($"RenderTransform.Children[1].{prop}"));
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath("RenderTransform.Children[2]." + prop));
             storyboard.Children.Add(anim);
         }
 
         storyboard.Completed += (_, _) =>
         {
-            // 归位为主变换（尺寸绑定实时变化，入场用完即弃）
-            DiscHost.RenderTransform = Transform.Identity;
+            // 归位为基础变换（保住 XAML 右上偏移；尺寸绑定实时变化不受影响）
+            DiscHost.RenderTransform = baseTranslate;
         };
         storyboard.Begin(DiscHost);
     }
@@ -838,6 +848,12 @@ public partial class MusicManagerView : UserControl
         // VerticalOffset 是只读依赖属性，Storyboard.Begin 即抛"路径包含非动画属性"，
         // 异常顶掉状态行且滚动跟随整体失效（seek 后歌词错位/列表空白）。
         // 改为 350ms 手动帧插值（cubic ease-out），与 NexBox 行为一致。
+        // 📋 瞬移诊断（用户实测反馈"整段上下瞬移"）：每次滚动触发全量留痕，复现日志一锤定音
+        SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Info, "musicmanager",
+            $"[ScrollDiag] idx={_vm.ActiveLyricIndex} offset={sv.VerticalOffset:F1} itemTop={itemTop:F1} " +
+            $"target={target:F1} viewport={sv.ViewportHeight:F1} scrollable={sv.ScrollableHeight:F1} " +
+            $"itemH={item.ActualHeight:F1} rows={_vm.LyricRows.Count}"));
         StartSmoothScroll(sv, target);
     }
 

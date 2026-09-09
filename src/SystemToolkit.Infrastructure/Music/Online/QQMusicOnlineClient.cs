@@ -89,28 +89,68 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     }
 
     /// <summary>获取播放地址（通过 vkey 请求）。</summary>
-    public async Task<OnlineSongUrlResult> GetSongUrlAsync(string songMid, string cookie = "", CancellationToken ct = default)
+    /// <remarks>
+    /// 2026-09-09 对照 NexBox song_url 重写（此前"无 data"恒失败，歌单能看不能播）：
+    /// ① module 必须是 <c>vkey.GetVkeyServer</c>——旧实现写 <c>music.vkey.GetVkeyServer</c>，
+    ///    该模块名不存在（与 PlaylistBaseRead 同类坑），musicu 对未知模块恒不回 data；
+    /// ② param 必须带 filename 候选（质量模板前缀 + mediaMid/songmid + 扩展名），否则空 purl；
+    /// ③ comm 带 uin（cookie 提取，缺省 0），有 qm_keyst 时作 authst。
+    /// </remarks>
+    public async Task<OnlineSongUrlResult> GetSongUrlAsync(string songMid, string? mediaMid = null, string cookie = "", CancellationToken ct = default)
     {
         try
         {
-            // 通过 musicu.fcg 获取播放链接
+            if (string.IsNullOrWhiteSpace(songMid))
+            {
+                return Fail("songMid 为空");
+            }
+
+            string uin = ExtractUin(cookie);
+            if (string.IsNullOrEmpty(uin))
+            {
+                uin = "0";
+            }
+
+            // authst：cookie 里的 qm_keyst/music_key（NexBox auth.music_key 同源）；缺失走 ct=24 兜底
+            string authSt = ExtractCookieValue(cookie, "qm_keyst");
+            if (string.IsNullOrEmpty(authSt))
+            {
+                authSt = ExtractCookieValue(cookie, "music_key");
+            }
+
+            // 质量模板（对照 NexBox QQ_QUALITY_TEMPLATES；mediaMid 缺省用 songMid 兜底——NexBox 同策略）
+            string mediaId = !string.IsNullOrWhiteSpace(mediaMid) ? mediaMid : songMid;
+            (string Prefix, string Ext)[] templates =
+            [
+                ("RS01", ".flac"), ("F000", ".flac"), ("M800", ".mp3"), ("M500", ".mp3"), ("C400", ".m4a"),
+            ];
+            var filenames = templates
+                .Select(t => $"{t.Prefix}{mediaId}{t.Ext}")
+                .ToList();
+
+            object comm = string.IsNullOrEmpty(authSt)
+                ? new { uin, format = "json", ct = 24, cv = 0 }
+                : new { uin, format = "json", ct = 19, cv = 0, authst = authSt };
+
+            string guid = Random.Shared.Next(10_000_000, 99_999_999).ToString();
             var payload = new
             {
+                comm,
                 req_0 = new
                 {
-                    module = "music.vkey.GetVkeyServer",
+                    module = "vkey.GetVkeyServer", // 🔴 对照 NexBox：不是 music.vkey.GetVkeyServer
                     method = "CgiGetVkey",
                     param = new
                     {
-                        guid = "10000",
+                        guid,
                         songmid = new[] { songMid },
                         songtype = new[] { 0 },
-                        uin = "",
+                        uin,
                         loginflag = 1,
                         platform = "20",
+                        filename = filenames,
                     },
                 },
-                comm = new { ct = 24, cv = 0 },
             };
 
             string body = JsonSerializer.Serialize(payload);
@@ -118,7 +158,9 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             req.Headers.Add("Referer", Referer);
             req.Headers.Add("User-Agent", HeadersUa);
             if (!string.IsNullOrEmpty(cookie))
+            {
                 req.Headers.Add("Cookie", cookie);
+            }
             req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
             using HttpResponseMessage resp = await _http.SendAsync(req, ct);
@@ -126,41 +168,66 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             JsonElement json = JsonDocument.Parse(ParseJsonp(text)).RootElement;
 
             if (!json.TryGetProperty("req_0", out JsonElement req0))
+            {
                 return Fail("无 req_0");
+            }
             if (!req0.TryGetProperty("data", out JsonElement data))
-                return Fail("无 data");
+            {
+                string? code = req0.TryGetProperty("code", out JsonElement cEl) ? cEl.ToString() : null;
+                return Fail($"无 data（code={code}）");
+            }
 
             JsonElement midurlinfo = data.TryGetProperty("midurlinfo", out JsonElement mu) ? mu : default;
             if (midurlinfo.ValueKind != JsonValueKind.Array || midurlinfo.GetArrayLength() == 0)
-                return Fail("无 midurlinfo");
-
-            JsonElement info = midurlinfo[0];
-            string purl = info.GetStr("purl", "");
-            if (string.IsNullOrEmpty(purl))
-                return new OnlineSongUrlResult { Playable = false, Reason = "url_unavailable", Message = "该歌曲可能需要 VIP 或登录" };
-
-            string sip = data.TryGetProperty("sip", out JsonElement sipArr) && sipArr.ValueKind == JsonValueKind.Array && sipArr.GetArrayLength() > 0
-                ? sipArr[0].GetString() ?? "https://dl.stream.music.qq.com/"
-                : "https://dl.stream.music.qq.com/";
-
-            string fullUrl = sip + purl;
-            ulong br = info.GetULong("br");
-
-            return new OnlineSongUrlResult
             {
-                Url = fullUrl,
-                Playable = true,
-                Trial = false,
-                Level = "standard",
-                Quality = "标准",
-                Br = br,
-            };
+                return Fail("无 midurlinfo");
+            }
+
+            // 依次取第一个非空 purl（对应 filename 候选序 = 质量从高到低）
+            string sip = data.TryGetProperty("sip", out JsonElement sipArr) && sipArr.ValueKind == JsonValueKind.Array && sipArr.GetArrayLength() > 0
+                ? sipArr[0].GetString() ?? "https://ws.stream.qqmusic.qq.com/"
+                : "https://ws.stream.qqmusic.qq.com/";
+
+            foreach (JsonElement info in midurlinfo.EnumerateArray())
+            {
+                string purl = info.GetStr("purl", "");
+                if (string.IsNullOrEmpty(purl))
+                {
+                    continue;
+                }
+
+                return new OnlineSongUrlResult
+                {
+                    Url = sip + purl,
+                    Playable = true,
+                    Trial = false,
+                    Level = "standard",
+                    Quality = "标准",
+                    Br = info.GetULong("br"),
+                };
+            }
+
+            return new OnlineSongUrlResult { Playable = false, Reason = "url_unavailable", Message = "该歌曲可能需要 VIP 或登录" };
         }
         catch (Exception e)
         {
             _logger.Error("[QQMusic] 获取播放地址失败", e);
             return Fail(e.Message);
         }
+    }
+
+    /// <summary>从 Cookie 串提取指定键的值（不分大小写；无则空串）。</summary>
+    private static string ExtractCookieValue(string cookie, string key)
+    {
+        foreach (string part in (cookie ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int eq = part.IndexOf('=');
+            if (eq > 0 && part[..eq].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(eq + 1)..].Trim();
+            }
+        }
+        return "";
     }
 
     /// <summary>获取歌词。</summary>
@@ -696,6 +763,49 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                     if (len < PageSize)
                         break;
                 }
+            }
+
+            // ── ③ 「我喜欢」卡片置顶（对照 NexBox get_liked_playlist_card：dirid=201 的虚拟歌单，
+            //    不在任何 disslist 里返回，必须单独插卡——缺了它用户歌单里永远看不到"我喜欢"） ──
+            if (list.All(x => !IsQqLikedPlaylistId(x.Id)))
+            {
+                uint likedCount = 0;
+                try
+                {
+                    string likedPayload = JsonSerializer.Serialize(new
+                    {
+                        comm = new { ct = 24, cv = 0 },
+                        req_0 = new
+                        {
+                            module = "music.srfDissInfo.DissInfo",
+                            method = "CgiGetDiss",
+                            param = new { disstid = 0, dirid = 201, tag = 1, song_begin = 0, song_num = 1, userinfo = 1, orderlist = 1 },
+                        },
+                    });
+                    JsonElement likedJson = await PostMusicuAsync(likedPayload, cookie, ct);
+                    if (likedJson.TryGetProperty("req_0", out JsonElement lReq)
+                        && lReq.TryGetProperty("data", out JsonElement lData)
+                        && lData.TryGetProperty("total_song_num", out JsonElement lCnt)
+                        && lCnt.TryGetUInt32(out uint lv))
+                    {
+                        likedCount = lv;
+                    }
+                }
+                catch (Exception e)
+                {
+                    _logger.Warn($"[QQMusic] liked playlist card failed: {e.Message}"); // 拿不到计数也显示卡片（count=0）
+                }
+
+                list.Insert(0, new OnlinePlaylist
+                {
+                    Provider = OnlineProvider.QQMusic,
+                    Id = "liked",
+                    Name = "我喜欢的音乐",
+                    Cover = "https://y.gtimg.cn/mediastyle/global/img/cover_like.png",
+                    TrackCount = likedCount,
+                    Creator = string.IsNullOrEmpty(uin) ? "QQ 音乐" : uin,
+                    PlayCount = 0,
+                });
             }
 
             return (list, list.Count);

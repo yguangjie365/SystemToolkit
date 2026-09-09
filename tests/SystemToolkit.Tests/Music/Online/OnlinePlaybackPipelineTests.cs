@@ -102,7 +102,7 @@ public class OnlineUrlResolverTests
                 seenCookie = cookie;
                 return Task.FromResult(new OnlineSongUrlResult { Playable = true, Url = "https://audio", Level = quality });
             },
-            (_, _, _) => throw new InvalidOperationException("QQ 客户端不应被调用"),
+            (_, _, _, _) => throw new InvalidOperationException("QQ 客户端不应被调用"),
             store,
             new NoopLogger());
 
@@ -123,7 +123,7 @@ public class OnlineUrlResolverTests
         string? seenMid = null, seenCookie = null;
         var resolver = new OnlineUrlResolver(
             (_, _, _, _) => throw new InvalidOperationException("网易客户端不应被调用"),
-            (mid, cookie, _) =>
+            (mid, mediaMid, cookie, _) =>
             {
                 seenMid = mid;
                 seenCookie = cookie;
@@ -144,7 +144,7 @@ public class OnlineUrlResolverTests
     {
         var resolver = new OnlineUrlResolver(
             (_, _, _, _) => throw new HttpRequestException("网络断开"),
-            (_, _, _) => throw new InvalidOperationException(),
+            (_, _, _, _) => throw new InvalidOperationException(),
             new MemoryCredentialStore(),
             new NoopLogger());
 
@@ -161,7 +161,7 @@ public class OnlineUrlResolverTests
     {
         var resolver = new OnlineUrlResolver(
             (_, _, _, _) => throw new InvalidOperationException(),
-            (_, _, _) => throw new InvalidOperationException(),
+            (_, _, _, _) => throw new InvalidOperationException(),
             new MemoryCredentialStore(),
             new NoopLogger());
 

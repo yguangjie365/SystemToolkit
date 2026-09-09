@@ -159,6 +159,11 @@ public class MusicModernLyricsReproTests
 
                 // 位图留证
                 view.UpdateLayout();
+                string? pngDir = Path.GetDirectoryName(Path.GetFullPath(pngPath));
+                if (pngDir is not null)
+                {
+                    Directory.CreateDirectory(pngDir);
+                }
                 var rtb = new RenderTargetBitmap(1600, 900, 96, 96, PixelFormats.Pbgra32);
                 rtb.Render(view);
                 var encoder = new BmpBitmapEncoder();
