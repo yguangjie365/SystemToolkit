@@ -31,7 +31,12 @@ public partial class App : Application
 
         // ── 单实例守卫（2026-09-07 补齐旧版能力）：防两个实例并发写 rules.json ──
         // 必须在日志初始化之前尝试，但提示需要日志——故先取互斥量，拿到后再建日志。
-        if (!TryAcquireSingleInstance())
+        // 审查 O12（2026-09-10）：仅交互式 GUI 受此守卫。headless（--export-diag 只读导出 /
+        // --backup-worker 定时补做）是短命单责进程、rules.json 写走 AtomicFile 原子替换；
+        // 若被 GUI 持有的互斥挡下，会弹模态框 + 退出 → 定时备份静默永不执行（且无头弹窗会挂起）。
+        bool headless = e.Args.Contains("--export-diag", StringComparer.OrdinalIgnoreCase)
+            || Array.IndexOf(e.Args, "--backup-worker") >= 0;
+        if (!headless && !TryAcquireSingleInstance())
         {
             System.Windows.MessageBox.Show(
                 "SystemToolkit 已经在运行中。\n\n为避免两个实例同时读写配置与备份规则造成数据损坏，本次启动已退出。",
@@ -375,6 +380,10 @@ public partial class App : Application
         if (_swallowCount == 0)
         {
             CrashLog.Write("DispatcherUnhandledException（窗口首条）", e.Exception);
+            // 审查 O11：同时推 AppLog 总线 → 应用内「日志」视图即时可见（此前只落 CrashLog 文件，
+            // 运行期用户零感知，违反"异常必须有用户可见出口"）。完整堆栈仍在 CrashLog
+            AppLog.Write(LogEntry.Create(LogLevel.Error, "shell",
+                $"发生未处理异常（已安全拦截，详见「日志」页与诊断包）：{e.Exception?.Message}"));
         }
 
         _swallowCount++;

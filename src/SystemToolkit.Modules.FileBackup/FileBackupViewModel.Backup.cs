@@ -120,6 +120,13 @@ public partial class FileBackupViewModel
             var reporter = new UiProgressReporter(OnProgress, phase => ProgressText = phase, Log, _dispatcher);
             Log($"[备份] ▶ 开始备份：{rule.RuleName}（{rule.Sources().Count} 个源）");
             BackupResult result = await _backup.BackupRuleAsync(rule, reporter, _backupCts!.Token).ConfigureAwait(true);
+            // 审查 O1：服务层把取消咽成 Canceled 返回（headless 记账依赖返回值），此处在 VM 侧恢复
+            // 本方法"取消以 OCE 上抛"的契约，令上层"备份全部"取消的 break 真正生效
+            if (result.Canceled)
+            {
+                throw new OperationCanceledException();
+            }
+
             Log(result.Success
                 ? $"[备份] ✅ {result.Message}（{result.FileCount} 个文件，{FormatSize(result.TotalSize)}，校验 {result.ChecksumStatus}）"
                 : $"[备份] ⚠️ {result.Message}（失败 {result.Failures.Count} 项，详见日志）");
