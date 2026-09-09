@@ -84,6 +84,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         _provider = provider;
 
+        // 审查 Y1（2026-09-10）：版本由程序集驱动（Directory.Build.props <Version>），不再硬编码 v0.2 漂移
+        Version? asmVer = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        if (asmVer is not null)
+        {
+            ToolkitVersionText.Text = $"DESKTOP TOOLKIT · v{asmVer.Major}.{asmVer.Minor}";
+        }
+
         // 审查 2026-09-04（P2）：重复模块 Id 不再抛异常炸启动（后来者忽略，取首个）
         var byId = modules.GroupBy(m => m.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);

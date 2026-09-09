@@ -9,6 +9,8 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- M14（全面代码审查 2026-09-05）：.editorconfig 规则参与编译判定（01 §一）——存量已于本轮 dotnet format 收敛 -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- 审查 Y1（2026-09-10）：版本单一来源，对齐路线图 V0.6（AGENTS §一）；主窗口运行时读程序集版本，不再硬编码漂移 -->
+    <Version>0.6.0</Version>
   </PropertyGroup>
 
   <!-- 旧工程纪律：Release 开启警告即错误（验收清单：Release 零警告零错误） -->

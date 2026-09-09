@@ -31,7 +31,7 @@
                                    Foreground="{StaticResource Brush_TextPrimary}"
                                    VerticalAlignment="Center" Margin="8,0,0,0"/>
                     </StackPanel>
-                    <TextBlock Text="DESKTOP TOOLKIT · v0.2-dev" FontSize="{DynamicResource Font_SizeMicro}"
+                    <TextBlock x:Name="ToolkitVersionText" Text="DESKTOP TOOLKIT" FontSize="{DynamicResource Font_SizeMicro}"
                                Style="{StaticResource MonoText}" Margin="0,6,0,0"/>
                 </StackPanel>
 
@@ -42,7 +42,7 @@
                 <StackPanel DockPanel.Dock="Bottom" Margin="14,0,14,12">
                     <Line X1="0" X2="1" Y1="0" Y2="0"
                           Stroke="{StaticResource Brush_Border}" Margin="0,0,0,10"/>
-                    <TextBlock Text="非商业开源 · MIT" FontSize="{DynamicResource Font_SizeMicro}" Style="{StaticResource MonoText}"/>
+                    <TextBlock Text="非商业开源 · GPL-3.0" FontSize="{DynamicResource Font_SizeMicro}" Style="{StaticResource MonoText}"/>
                 </StackPanel>
 
                 <!-- 导航项（UI 审计采纳：分组层级 + 图标文字收紧） -->
