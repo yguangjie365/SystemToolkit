@@ -302,6 +302,9 @@
                                 <TextBlock Text="{Binding IsLoadingPlaylists, Mode=OneWay}" Visibility="Collapsed"/>
                                 <TextBlock Style="{StaticResource InlineLoadingHint}" Text="加载中…" Margin="0,0,6,0"
                                            Visibility="{Binding IsLoadingPlaylists, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text="网易云" VerticalAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,0,4,0"/>
                                 <TextBlock Text="{Binding NetEaseLoginText, Mode=OneWay}" VerticalAlignment="Center"
                                            FontSize="{DynamicResource Font_SizeCaption}"
                                            Foreground="{StaticResource Brush_TextMuted}"/>
@@ -320,6 +323,9 @@
                                         <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
                                     </Button.Style>
                                 </Button>
+                                <TextBlock Text="QQ音乐" VerticalAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,0,4,0"/>
                                 <TextBlock Text="{Binding QqLoginText, Mode=OneWay}" VerticalAlignment="Center"
                                            FontSize="{DynamicResource Font_SizeCaption}"
                                            Foreground="{StaticResource Brush_TextMuted}"/>
@@ -1179,7 +1185,7 @@
                         </TextBlock.RenderTransform>
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <!-- 音乐UI评审 P2：删失效 FontWeight Setter（元素本地 FontWeight="Black" 恒压过 Style Setter） -->
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding CurrentLyricText, Mode=OneWay}" Value="">
                                         <Setter Property="Text" Value="♪"/>
@@ -1271,7 +1277,10 @@
                                            FontSize="{Binding DataContext.LyricFontSize, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                            <!-- 音乐UI评审 P0：现代动态底可深可浅，非活动行改 bg-aware PlayerMutedBrush
+                                                 （浅底→#4A4A5E、深底→#B0B0B0，均不透明，Opacity 0.55 仍负责淡显），
+                                                 不再用浅色静态 Brush_TextMuted（深底上叠 0.55 对比度约 1.7:1 读不清） -->
+                                            <Setter Property="Foreground" Value="{Binding DataContext.PlayerMutedBrush, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
                                             <!-- 非当前行淡显（对照 NexBox opacity 0.55） -->
                                             <Setter Property="Opacity" Value="0.55"/>
                                             <Style.Triggers>
