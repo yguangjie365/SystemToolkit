@@ -10,6 +10,10 @@
     <PackageReference Include="Microsoft.Web.WebView2" />
   </ItemGroup>
   <ItemGroup>
+    <!-- 沉浸歌词字体（对照 NexBox NotoSerifSC-900，OFL 许可）：pack URI 由 code-behind 加载 -->
+    <Resource Include="Assets\Fonts\NotoSerifSC-Black.otf" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
     <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
     <ProjectReference Include="..\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />

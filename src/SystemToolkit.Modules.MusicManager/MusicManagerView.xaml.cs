@@ -24,6 +24,48 @@ public partial class MusicManagerView : UserControl
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        ApplyImmersionFontFamily(); // 思源宋体 Black（对照 NexBox LYRIC_FONT），失败静默回退系统字体
+        if (ImmersionRoot is not null)
+        {
+            ImmersionRoot.SizeChanged += OnImmersionRootSizeChanged; // 字号随窗口缩放（NexBox viewH*0.11）
+        }
+    }
+
+    /// <summary>沉浸歌词字体（对照 NexBox "NotoSerifSC-900"）：模块内置思源宋体 Black，加载失败回退雅黑。</summary>
+    private void ApplyImmersionFontFamily()
+    {
+        try
+        {
+            var serif = new System.Windows.Media.FontFamily(
+                "pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/NotoSerifSC-Black.otf#Noto Serif SC");
+            ImmersionLyricText.FontFamily = serif;
+            ImmersionGhostText.FontFamily = serif;
+        }
+        catch (Exception ex)
+        {
+            // 字体资源缺失只降级观感，不影响功能（测试宿主/精简发布场景）
+            System.Diagnostics.Debug.WriteLine($"[Music] 沉浸歌词字体加载失败：{ex.Message}");
+        }
+    }
+
+    private void OnImmersionRootSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateImmersionFontSizes();
+    }
+
+    /// <summary>沉浸字号（对照 NexBox）：前景 = max(视口高 11%, 字号设置×1.7) 钳 30–84；重影 = 前景 ×2.6。</summary>
+    private void UpdateImmersionFontSizes()
+    {
+        if (ImmersionLyricText is null || ImmersionRoot is null)
+        {
+            return;
+        }
+
+        double fromView = ImmersionRoot.ActualHeight * 0.11;
+        double fromSetting = _vm.LyricFontSize * 1.7;
+        double fg = Math.Clamp(Math.Max(fromView, fromSetting), 30, 84);
+        ImmersionLyricText.FontSize = fg;
+        ImmersionGhostText.FontSize = fg * 2.6;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -403,6 +445,11 @@ public partial class MusicManagerView : UserControl
             UpdateImmersionLyric();
         }
 
+        if (e.PropertyName == nameof(MusicManagerViewModel.LyricFontSize))
+        {
+            UpdateImmersionFontSizes(); // 沉浸前景字号跟随 A± 设置（下限钳制内）
+        }
+
         if (e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
             && _vm.ActiveLyricIndex >= 0
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
@@ -647,7 +694,11 @@ public partial class MusicManagerView : UserControl
 
         string display = PaletteMath.SplitLyricIntoTwoLines(raw);
         ImmersionLyricText.Text = display;
-        ImmersionGhostText.Text = display;
+        // 重影只取句首 2-4 字（对照 NexBox：contentLen*0.35 钳 2..4，去空白），放大置于前景正后方
+        string compact = display.Replace(" ", string.Empty).Replace("\n", string.Empty);
+        int ghostCount = Math.Clamp((int)Math.Round(compact.Length * 0.35), 2, 4);
+        ImmersionGhostText.Text = compact.Length <= ghostCount ? compact : compact[..ghostCount];
+        UpdateImmersionFontSizes();
 
         // 入场动画：随机 rotate / spread
         bool rotate = _rippleRandom.Next(2) == 0;
@@ -783,19 +834,63 @@ public partial class MusicManagerView : UserControl
             0,
             Math.Max(0, sv.ScrollableHeight));
 
-        var anim = new System.Windows.Media.Animation.DoubleAnimation(
-            sv.VerticalOffset, target, new System.Windows.Duration(TimeSpan.FromMilliseconds(350)))
+        // 🔴 不能用 Storyboard 动画 ScrollViewer.VerticalOffset（2026-09-09 实测事故）：
+        // VerticalOffset 是只读依赖属性，Storyboard.Begin 即抛"路径包含非动画属性"，
+        // 异常顶掉状态行且滚动跟随整体失效（seek 后歌词错位/列表空白）。
+        // 改为 350ms 手动帧插值（cubic ease-out），与 NexBox 行为一致。
+        StartSmoothScroll(sv, target);
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _scrollTimer;
+    private System.Windows.Controls.ScrollViewer? _scrollAnimTarget;
+    private double _scrollAnimFrom;
+    private double _scrollAnimTo;
+    private DateTime _scrollAnimStart;
+
+    /// <summary>滚动动画单帧时长（与原 350ms 缓动一致）。</summary>
+    private static readonly TimeSpan ScrollAnimDuration = TimeSpan.FromMilliseconds(350);
+
+    private void StartSmoothScroll(System.Windows.Controls.ScrollViewer sv, double target)
+    {
+        if (Math.Abs(target - sv.VerticalOffset) < 0.5)
         {
-            EasingFunction = new System.Windows.Media.Animation.CubicEase
+            return;
+        }
+
+        _scrollAnimTarget = sv;
+        _scrollAnimFrom = sv.VerticalOffset;
+        _scrollAnimTo = target;
+        _scrollAnimStart = DateTime.UtcNow;
+        if (_scrollTimer is null)
+        {
+            _scrollTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render)
             {
-                EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut,
-            },
-        };
-        System.Windows.Media.Animation.Storyboard.SetTarget(anim, sv);
-        System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath("VerticalOffset"));
-        var storyboard = new System.Windows.Media.Animation.Storyboard();
-        storyboard.Children.Add(anim);
-        storyboard.Begin(sv, true);
+                Interval = TimeSpan.FromMilliseconds(16),
+            };
+            _scrollTimer.Tick += OnSmoothScrollTick;
+        }
+
+        _scrollTimer.Start();
+    }
+
+    private void OnSmoothScrollTick(object? sender, EventArgs e)
+    {
+        if (_scrollAnimTarget is null)
+        {
+            _scrollTimer?.Stop();
+            return;
+        }
+
+        double t = (DateTime.UtcNow - _scrollAnimStart) / ScrollAnimDuration;
+        if (t >= 1.0)
+        {
+            _scrollAnimTarget.ScrollToVerticalOffset(_scrollAnimTo);
+            _scrollTimer?.Stop();
+            return;
+        }
+
+        double eased = 1 - Math.Pow(1 - t, 3); // cubic ease-out
+        _scrollAnimTarget.ScrollToVerticalOffset(_scrollAnimFrom + (_scrollAnimTo - _scrollAnimFrom) * eased);
     }
 
     private static T? FindFirstVisualChild<T>(System.Windows.DependencyObject from)

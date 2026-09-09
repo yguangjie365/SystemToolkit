@@ -376,6 +376,14 @@ public partial class MusicManagerViewModel : ObservableObject
     private string _modeText = "列表循环";
     public string ModeText { get => _modeText; private set => SetProperty(ref _modeText, value); }
 
+    /// <summary>播放模式图标态（list/shuffle/one，图3 反馈：模式切换必须看得见）。</summary>
+    public string ModeIconKind => _queue.Mode switch
+    {
+        PlayMode.Shuffle => "shuffle",
+        PlayMode.One => "one",
+        _ => "list",
+    };
+
     private bool _isPlaying;
     public bool IsPlaying { get => _isPlaying; private set => SetProperty(ref _isPlaying, value); }
 
@@ -502,6 +510,7 @@ public partial class MusicManagerViewModel : ObservableObject
             PlayMode.One => "单曲循环",
             _ => "列表循环",
         };
+        OnPropertyChanged(nameof(ModeIconKind));
     }
 
     [RelayCommand]

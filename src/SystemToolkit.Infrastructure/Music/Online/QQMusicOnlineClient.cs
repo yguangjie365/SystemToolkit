@@ -382,7 +382,7 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     }
 
     /// <summary>
-    /// 从 QQ 歌单行提取字段（字段名候选链对照 NexBox map_playlist_row）：
+    /// 从 QQ 歌单行提取字段（字段名候选链对照 NexBox map_qq_playlist）：
     /// id = dissid|tid|dissId|id|diss_id|dirid；name = diss_name|dissname|name|title；
     /// cover = diss_cover|dissCover|logo|picurl|cover；count = song_cnt|songCnt|songnum|songNum|total_song_num|song_count|songCount；
     /// creator = hostname|nick|creator|nickname。
@@ -396,6 +396,22 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                     return v.GetString()!;
             return "";
         }
+        // 🔴 id 候选链必须同时接受数字值（2026-09-09 实测事故）：自建歌单行的 tid（全局 disstid，
+        // 十位数大数）是 JSON number，只收字符串会跳过它落到 dirid（用户本地位小数字，如 3），
+        // 拿 dirid 当 disstid 请求曲目 → cdlist_len=0 → 歌单永远空白（日志 id=3/205 实证）。
+        static string FirstId(JsonElement e, params string[] keys)
+        {
+            foreach (string k in keys)
+            {
+                if (!e.TryGetProperty(k, out JsonElement v))
+                    continue;
+                if (v.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(v.GetString()))
+                    return v.GetString()!;
+                if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out long l))
+                    return l.ToString();
+            }
+            return "";
+        }
         static long FirstInt(JsonElement e, params string[] keys)
         {
             foreach (string k in keys)
@@ -404,7 +420,7 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             return 0;
         }
 
-        string id = FirstStr(item, "dissid", "tid", "dissId", "id", "diss_id");
+        string id = FirstId(item, "dissid", "tid", "dissId", "id", "diss_id");
         if (string.IsNullOrEmpty(id) && item.TryGetProperty("dirid", out JsonElement diridEl) && diridEl.ValueKind == JsonValueKind.Number)
             id = diridEl.GetInt64().ToString();
         string name = FirstStr(item, "diss_name", "dissname", "name", "title");

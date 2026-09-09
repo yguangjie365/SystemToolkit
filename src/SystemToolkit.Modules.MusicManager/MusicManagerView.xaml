@@ -45,6 +45,9 @@
         <Geometry x:Key="IconPrev">M6,6 H8 V18 H6 Z M20,6 L9,12 L20,18 Z</Geometry>
         <Geometry x:Key="IconNext">M18,6 H16 V18 H18 Z M4,6 L15,12 L4,18 Z</Geometry>
         <Geometry x:Key="IconLoop">M17,2 L21,6 L17,10 M21,6 H8 A5,5 0 0 0 3,11 M7,22 L3,18 L7,14 M3,18 H16 A5,5 0 0 0 21,13</Geometry>
+        <!-- 播放模式三态图标（图3 反馈：模式切换要看得见）：shuffle 交叉箭头 / one 循环+中置1 -->
+        <Geometry x:Key="IconModeShuffle">M16,3 H21 V8 M21,3 L3,21 M21,16 V21 H16 M14,14 L21,21 M3,3 L9,9</Geometry>
+        <Geometry x:Key="IconModeOne">M17,2 L21,6 L17,10 M21,6 H8 A5,5 0 0 0 3,11 M7,22 L3,18 L7,14 M3,18 H16 A5,5 0 0 0 21,13 M11,10 L13,9 V15</Geometry>
         <Geometry x:Key="IconRefresh">M21,12 A9,9 0 1 1 18.36,5.64 M21,3 V9 H15</Geometry>
         <Geometry x:Key="IconNote">M9,3 V13.55 A4,4 0 1 0 11,17 V7 H17 V3 Z</Geometry>
         <Geometry x:Key="IconExpandUp">M7,14 L12,9 L17,14</Geometry>
@@ -716,17 +719,26 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <!-- 封面（在线曲异步加载/本地曲内嵌；无封面音符占位） -->
-                    <Border Grid.Column="0" Width="46" Height="46"
-                            Background="{StaticResource Brush_AccentSoft}" CornerRadius="{DynamicResource Radius_MD}">
-                        <Grid>
-                            <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
-                                  Width="16" Height="16" Stretch="Uniform"
-                                  Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
-                            <Image Source="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"
-                                   Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
-                        </Grid>
-                    </Border>
+                    <!-- 封面（在线曲异步加载/本地曲内嵌；无封面音符占位）。
+                         图3 反馈：点封面进入播放器（替代原右下 ^ 展开钮） -->
+                    <Button Grid.Column="0" Width="46" Height="46"
+                            Command="{Binding OpenFullPlayerCommand}"
+                            Cursor="Hand" Focusable="False"
+                            AutomationProperties.Name="打开播放器" ToolTip="打开播放器">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{StaticResource Brush_AccentSoft}" CornerRadius="{DynamicResource Radius_MD}">
+                                    <Grid>
+                                        <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
+                                              Width="16" Height="16" Stretch="Uniform"
+                                              Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
+                                        <Image Source="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                               Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
+                                    </Grid>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                     <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding CurrentTitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBody}"
                                    Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis"/>
@@ -760,24 +772,45 @@
                             <Path Data="{StaticResource IconNext}" Fill="{StaticResource Brush_TextPrimary}"
                                   Width="16" Height="16" Stretch="Uniform"/>
                         </Button>
-                        <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
-                                Background="Transparent" BorderThickness="0"
-                                Command="{Binding ToggleMuteCommand}" AutomationProperties.Name="音量静音切换"
-                                ToolTip="音量（点击静音/取消静音）">
-                            <Grid>
-                                <Rectangle Width="14" Height="14" RadiusX="3" RadiusY="3"
-                                           Fill="{Binding PlayerAccentBrush, Mode=OneWay}"
-                                           Visibility="{Binding Muted, Converter={StaticResource InverseToVis}}"/>
-                                <Rectangle Width="14" Height="14" RadiusX="3" RadiusY="3"
-                                           Stroke="{Binding PlayerMutedBrush, Mode=OneWay}" StrokeThickness="1.5"
-                                           Visibility="{Binding Muted, Converter={StaticResource BoolToVis}}"/>
-                            </Grid>
-                        </Button>
+                        <!-- 图3 反馈：黄方块静音钮去掉——音量喇叭（右侧）点击即静音切换 -->
                         <Button Width="32" Height="32" Padding="0"
-                                Command="{Binding ToggleModeCommand}" ToolTip="{Binding ModeText, Mode=OneWay}">
-                            <Path Data="{StaticResource IconLoop}" StrokeLineJoin="Round"
-                                  Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
-                                  Width="15" Height="15" Stretch="Uniform"/>
+                                Command="{Binding ToggleModeCommand}" ToolTip="{Binding ModeText, Mode=OneWay}"
+                                AutomationProperties.Name="播放模式" Cursor="Hand">
+                            <!-- 图3 反馈：模式切换必须可见——三态图标 + 非列表循环时强调色 -->
+                            <Grid>
+                                <Path Data="{StaticResource IconLoop}" StrokeLineJoin="Round"
+                                      Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
+                                      Width="15" Height="15" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Converter={StaticResource StrEqToVis}, ConverterParameter=list}"/>
+                                <Path Data="{StaticResource IconModeShuffle}" StrokeLineJoin="Round" StrokeThickness="1.6"
+                                      Width="15" Height="15" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Converter={StaticResource StrEqToVis}, ConverterParameter=shuffle}">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Stroke" Value="{StaticResource Brush_TextSecondary}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ModeIconKind, Mode=OneWay}" Value="shuffle">
+                                                    <Setter Property="Stroke" Value="{Binding PlayerAccentBrush, Mode=OneWay}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                                <Path Data="{StaticResource IconModeOne}" StrokeLineJoin="Round" StrokeThickness="1.6"
+                                      Width="15" Height="15" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Converter={StaticResource StrEqToVis}, ConverterParameter=one}">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Stroke" Value="{StaticResource Brush_TextSecondary}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ModeIconKind, Mode=OneWay}" Value="one">
+                                                    <Setter Property="Stroke" Value="{Binding PlayerAccentBrush, Mode=OneWay}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                            </Grid>
                         </Button>
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
@@ -892,13 +925,7 @@
                                 </StackPanel>
                             </Border>
                         </Popup>
-                        <Button Width="28" Height="28" Padding="0"
-                                Background="Transparent" BorderThickness="0"
-                                Command="{Binding OpenFullPlayerCommand}" ToolTip="展开完整播放器">
-                            <Path Data="{StaticResource IconExpandUp}" StrokeLineJoin="Round"
-                                  Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"
-                                  Width="14" Height="14" Stretch="Uniform"/>
-                        </Button>
+                        <!-- 图3 反馈：^ 展开钮去掉——点左侧封面进入播放器 -->
                         <TextBlock Text="播放引擎未就绪" Margin="8,0,0,0" VerticalAlignment="Center"
                                    FontSize="{DynamicResource Font_SizeCaption}"
                                    Foreground="{StaticResource Brush_Warning}"
@@ -992,9 +1019,10 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.IsVirtualizing="True"
-                             VirtualizingPanel.ScrollUnit="Pixel"
-                             VirtualizingPanel.VirtualizationMode="Recycling">
+                             VirtualizingPanel.IsVirtualizing="False"
+                             VirtualizingPanel.VirtualizationMode="Standard">
+                        <!-- 🔴 虚拟化已关闭（2026-09-09 实测）：可变行高（换行+字号可调）+像素虚拟化+回收
+                             会让偏移估算漂移 → 列表中部出现空白块且不回填。歌词量级（≤200 行）全量渲染零压力 -->
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Focusable" Value="False"/>
@@ -1100,24 +1128,20 @@
                 </Grid>
 
                 <!-- 模板② 沉浸：深主色三段渐变底 + 全屏水波场 + 中央当前句（重影双层 + 双行拆分） -->
-                <Grid Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}">
+                <Grid x:Name="ImmersionRoot" ClipToBounds="True"
+                      Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}">
                     <!-- 水波场：左右两个发射点的同心波环（背景色自身深/浅），铺满模板区（审查 F-02 报告对照 NexBox ImmersiveRippleField） -->
                     <Canvas x:Name="RippleHost" IsHitTestVisible="False"/>
-                    <!-- 重影层：当前句放大灰色（背景重影，对照前景正后方） -->
+                    <!-- 背景重影层（对照 NexBox ImmersiveLyricsView）：只取句首 2-4 字，
+                         前景字号 ×2.6、白 0.16、居中 nowrap（字号/文本均由 code-behind 管理） -->
                     <TextBlock x:Name="ImmersionGhostText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
-                               RenderTransformOrigin="0.5,0.5"
-                               FontSize="{DynamicResource Font_SizeTitleLg}"
-                               Foreground="#9CA3AF" Opacity="0.18">
-                        <TextBlock.RenderTransform>
-                            <ScaleTransform ScaleX="1.12" ScaleY="1.12"/>
-                        </TextBlock.RenderTransform>
-                    </TextBlock>
-                    <!-- 前景主歌词：完整当前句，亮色居中 -->
+                               TextAlignment="Center"
+                               Foreground="#29FFFFFF"/>
+                    <!-- 前景主歌词：完整当前句，亮色居中（字体/字号 code-behind 对照 NexBox：思源宋体 Black，字号=视口高 11% 钳 30-84） -->
                     <TextBlock x:Name="ImmersionLyricText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
                                RenderTransformOrigin="0.5,0.5"
-                               FontSize="{Binding LyricFontSize, Mode=OneWay, Converter={StaticResource Ratio}, ConverterParameter=1.7}"
+                               FontWeight="Black"
                                Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}">
                         <TextBlock.RenderTransform>
                             <RotateTransform Angle="0"/>
@@ -1185,9 +1209,9 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.IsVirtualizing="True"
-                             VirtualizingPanel.ScrollUnit="Pixel"
-                             VirtualizingPanel.VirtualizationMode="Recycling">
+                             VirtualizingPanel.IsVirtualizing="False"
+                             VirtualizingPanel.VirtualizationMode="Standard">
+                        <!-- 🔴 同 FullLyricsList：虚拟化对可变行高产生空白块，关闭（2026-09-09） -->
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Focusable" Value="False"/>
