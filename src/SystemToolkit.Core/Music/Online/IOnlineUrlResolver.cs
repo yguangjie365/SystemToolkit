@@ -19,7 +19,7 @@ public interface IOnlineUrlResolver
     /// <param name="track">在线曲目（Provider 决定走哪个平台客户端）。</param>
     /// <param name="preferredQuality">
     /// 期望音质（网易：jymaster/hires/lossless/exhigh/standard，未知值回退 exhigh；
-    /// QQ 当前忽略此参数——vkey 接口按登录态返回）。
+    /// QQ：同档语义，按 RS01/F000/M800/M500/C400 模板从请求档起降级，实际可播档受登录态/VIP 限制）。
     /// </param>
     /// <param name="ct">取消令牌。</param>
     Task<OnlineSongUrlResult> ResolveAsync(OnlineTrack track, string preferredQuality, CancellationToken ct = default);
