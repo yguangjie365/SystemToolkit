@@ -211,13 +211,15 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
     private void StartPositionTimer()
     {
         StopPositionTimer();
+        // 100ms：进度条/行高亮对 500ms 不敏感，但逐字卡拉OK填充需要 ≥10Hz 才不显格子感
+        // （NexBox 前端以 RAF 60fps 直读 audio.currentTime；100ms 轮询成本极低——读 CurrentTime 属性）
         _positionTimer = new System.Threading.Timer(_ =>
         {
             if (_reader is not null && _state == PlayState.Playing)
             {
                 PositionChanged?.Invoke(Position, Duration);
             }
-        }, null, 0, 500);
+        }, null, 0, 100);
     }
 
     private void StopPositionTimer()
