@@ -1039,9 +1039,60 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
     }
 
-    /// <summary>获取推荐歌单（RecommendFeed.GetRecommendPlaylist）。</summary>
+    /// <summary>
+    /// 获取推荐歌单。主路径对照 NexBox recommend_playlists：CGI fcg_get_diss_by_tag.fcg
+    /// （categoryId=10000000, order=play, size=20，解析 data.list：dissid/dissname/imgurl/songnum）；
+    /// 旧 musicu RecommendFeed 路径保留为降级。
+    /// </summary>
     public async Task<List<OnlinePlaylist>> LoadRecommendationsAsync(string cookie = "", CancellationToken ct = default)
     {
+        // ── 主路径：NexBox 现役 CGI ──
+        try
+        {
+            string url = "https://c.y.qq.com/splcloud/fcgi-bin/fcg_get_diss_by_tag.fcg" +
+                "?g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8" +
+                "&notice=0&platform=yqq&needNewCode=0" +
+                "&categoryId=10000000&sin=0&size=20&order=play&format=json";
+            JsonElement json = await QqGetJsonAsync(url, cookie, Referer, ct);
+            if (json.TryGetProperty("data", out JsonElement data)
+                && data.TryGetProperty("list", out JsonElement listArr)
+                && listArr.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<OnlinePlaylist>();
+                foreach (JsonElement item in listArr.EnumerateArray())
+                {
+                    string id = item.GetStr("dissid", "");
+                    string name = item.GetStr("dissname", "");
+                    if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name))
+                        continue;
+                    string creator = item.TryGetProperty("creator", out JsonElement cEl)
+                        ? (cEl.ValueKind == JsonValueKind.String ? cEl.GetString() ?? "" : cEl.GetStr("name", ""))
+                        : "";
+                    list.Add(new OnlinePlaylist
+                    {
+                        Provider = OnlineProvider.QQMusic,
+                        Id = id,
+                        Name = name,
+                        Cover = item.GetStr("imgurl", ""),
+                        TrackCount = (uint)Math.Max(0, item.GetInt("songnum", 0)),
+                        Creator = string.IsNullOrEmpty(creator) ? "QQ 音乐" : creator,
+                        PlayCount = 0,
+                    });
+                }
+
+                if (list.Count > 0)
+                {
+                    _logger.Info($"[QQMusic] 推荐歌单 {list.Count} 个（diss_by_tag）");
+                    return list;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.Warn($"[QQMusic] 推荐歌单 diss_by_tag 路径失败，降级 musicu：{e.Message}");
+        }
+
+        // ── 降级：旧 musicu RecommendFeed ──
         try
         {
             var payload = new
@@ -1083,6 +1134,7 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                     PlayCount = item.GetInt("listennum", item.GetInt("playCount", 0)),
                 });
             }
+            _logger.Info($"[QQMusic] 推荐歌单 {list.Count} 个（musicu 降级）");
             return list;
         }
         catch (Exception e)
