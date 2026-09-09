@@ -699,26 +699,37 @@ public partial class MusicManagerViewModel : ObservableObject
             return;
         }
 
-        OnPropertyChanged(nameof(IsEngineReady));
         // 🔴 全部经 RunOnUi 编组：引擎事件可能在 NAudio 回调/Timer 线程触发，
         // 处理器会改 ObservableCollection（LyricRows/UpNext）与触发绑定刷新
-        engine.StateChanged += (state, song) => RunOnUi(() => OnEngineStateChanged(state, song));
-        engine.PositionChanged += (position, duration) => RunOnUi(() => OnEnginePositionChanged(position, duration));
-        engine.TrackEnded += song => RunOnUi(() => OnTrackEnded(song));
-        engine.PlaybackFailed += msg => RunOnUi(() =>
+        try
         {
-            // 🔴 播放失败显式可见，不静默跳曲
-            ScanStatusText = $"播放失败：{msg}";
-            _log.Warn($"[Music] 播放失败：{msg}");
-
-            // 在线曲目：引擎侧失败（断流/格式不支持）并入统一跳过策略（OM-4）；
-            // 本地曲目维持原语义——只提示不自动跳（用户文件可修复）
-            if (QueueCurrent?.IsOnline == true)
+            engine.StateChanged += (state, song) => RunOnUi(() => OnEngineStateChanged(state, song));
+            engine.PositionChanged += (position, duration) => RunOnUi(() => OnEnginePositionChanged(position, duration));
+            engine.TrackEnded += song => RunOnUi(() => OnTrackEnded(song));
+            engine.PlaybackFailed += msg => RunOnUi(() =>
             {
-                _ = AutoSkipOrStopOnlineAsync(ResolveEngine(), msg);
-            }
-        });
-        _log.Info("[Music] 播放引擎已接通");
+                // 🔴 播放失败显式可见，不静默跳曲
+                ScanStatusText = $"播放失败：{msg}";
+                _log.Warn($"[Music] 播放失败：{msg}");
+
+                // 在线曲目：引擎侧失败（断流/格式不支持）并入统一跳过策略（OM-4）；
+                // 本地曲目维持原语义——只提示不自动跳（用户文件可修复）
+                if (QueueCurrent?.IsOnline == true)
+                {
+                    _ = AutoSkipOrStopOnlineAsync(ResolveEngine(), msg);
+                }
+            });
+            _log.Info("[Music] 播放引擎已接通");
+        }
+        catch (Exception ex)
+        {
+            // 审查 O22：接线抛异常必须回滚抢占标记，否则引擎永久失联（后续入口再无从重试接线）
+            Interlocked.Exchange(ref _engineWired, 0);
+            _log.Error("[Music] 播放引擎接线失败（稍后经入口重试）：" + ex.Message);
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsEngineReady));
     }
 
     private void OnEngineStateChanged(PlayState state, MusicSong? song)

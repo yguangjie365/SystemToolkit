@@ -31,13 +31,22 @@ public partial class NetManagerView : UserControl
         }
 
         _loaded = true;
-        Vm.ConfirmRequest = (title, message) =>
-            System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
-            == MessageBoxResult.OK;
-        Settings.ConfirmRequest = Vm.ConfirmRequest;
-        Repair.ConfirmRequest = Vm.ConfirmRequest;
-        Optimize.ConfirmRequest = Vm.ConfirmRequest;
-        await Vm.LoadAsync().ConfigureAwait(true);
+        // 审查 O9（2026-09-10）：async void 不受命令 catch 守卫覆盖，异常会直冲 Dispatcher → 整体兜底并落日志
+        try
+        {
+            Vm.ConfirmRequest = (title, message) =>
+                System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
+                == MessageBoxResult.OK;
+            Settings.ConfirmRequest = Vm.ConfirmRequest;
+            Repair.ConfirmRequest = Vm.ConfirmRequest;
+            Optimize.ConfirmRequest = Vm.ConfirmRequest;
+            await Vm.LoadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Error, "netmanager", "网络页初始化失败：" + ex.Message));
+        }
     }
 
     private NetSettingsTabViewModel Settings => Vm.Settings;

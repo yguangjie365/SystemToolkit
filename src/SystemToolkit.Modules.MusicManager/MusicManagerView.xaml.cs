@@ -131,7 +131,7 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    /// <summary>列表双击取行 VM：SelectedItem 优先，行 DataContext 兜底（同曲库双击的实测教训）。</summary>
+    /// <summary>列表选中事件取行 VM：SelectedItem 语义（SelectionChanged 用它正确）。</summary>
     private static T? RowOf<T>(object sender)
         where T : class
     {
@@ -140,8 +140,22 @@ public partial class MusicManagerView : UserControl
             : (sender as ListBox)?.SelectedItem as T;
     }
 
+    /// <summary>审查 O8：双击定位行必须沿可视树取 ListBoxItem.DataContext（勿依赖 SelectedItem——
+    /// 双击未选中行时 SelectedItem 可能滞后；ItemsControlFromItemContainer 对容器内部元素返回 null）。</summary>
+    private static T? RowFromClick<T>(object sender, MouseButtonEventArgs e)
+        where T : class
+    {
+        if (e.OriginalSource is System.Windows.DependencyObject d
+            && FindAncestor<System.Windows.Controls.ListBoxItem>(d)?.DataContext is T row)
+        {
+            return row;
+        }
+
+        return (sender as ListBox)?.SelectedItem as T; // 兜底
+    }
+
     private void OnSearchListDoubleClick(object sender, MouseButtonEventArgs e)
-        => _vm.PlayFromSearchCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+        => _vm.PlayFromSearchCommand.Execute(RowFromClick<MusicManagerViewModel.OnlineResultRowVm>(sender, e));
 
     /// <summary>行内播放钮单击（反馈1：单击即播，与双击等效）。</summary>
     /// <summary>在线封面加载失败（审查 P4-24）：回退行 VM 的音符占位，防破图。</summary>
@@ -190,7 +204,7 @@ public partial class MusicManagerView : UserControl
     }
 
     private void OnPlaylistListDoubleClick(object sender, MouseButtonEventArgs e)
-        => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
+        => _vm.OpenPlaylistCommand.Execute(RowFromClick<MusicManagerViewModel.PlaylistRowVm>(sender, e));
 
     /// <summary>我的歌单胶囊单击即打开（2026-09-09 横向胶囊化；选中态不保持，防重复触发看这条判断）。</summary>
     private void OnPlaylistListSelection(object sender, SelectionChangedEventArgs e)
@@ -208,13 +222,13 @@ public partial class MusicManagerView : UserControl
     }
 
     private void OnPlaylistTrackDoubleClick(object sender, MouseButtonEventArgs e)
-        => _vm.PlayFromPlaylistCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+        => _vm.PlayFromPlaylistCommand.Execute(RowFromClick<MusicManagerViewModel.OnlineResultRowVm>(sender, e));
 
     private void OnPlaylistRowPlayClick(object sender, RoutedEventArgs e)
         => _vm.PlayFromPlaylistCommand.Execute(RowFromButton<MusicManagerViewModel.OnlineResultRowVm>(sender));
 
     private void OnDailyRecommendDoubleClick(object sender, MouseButtonEventArgs e)
-        => _vm.PlayFromDailyRecommendCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+        => _vm.PlayFromDailyRecommendCommand.Execute(RowFromClick<MusicManagerViewModel.OnlineResultRowVm>(sender, e));
 
     // OnRecommendedPlaylistDoubleClick 已随右卡「推荐歌单」分区移除（2026-09-09 实机反馈）
 
