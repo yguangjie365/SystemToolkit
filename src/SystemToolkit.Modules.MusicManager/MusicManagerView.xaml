@@ -1174,12 +1174,6 @@
                     <TextBlock x:Name="ImmersionGhostText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center"
                                Foreground="#29FFFFFF"/>
-                    <!-- P1 退场层：换行时旧句在此淡出（对照 NexBox enter/hold/exit 的并行退场），
-                         用 opacity 近似（§6.3 禁动画中改 BlurEffect），字号/文本/可见性由 code-behind 管理 -->
-                    <TextBlock x:Name="ImmersionOutgoingText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
-                               FontWeight="Black" Opacity="0" IsHitTestVisible="False"
-                               Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}"/>
                     <!-- 前景主歌词：完整当前句，亮色居中（字体/字号 code-behind 对照 NexBox：思源宋体 Black，字号=视口高 11% 钳 30-84） -->
                     <TextBlock x:Name="ImmersionLyricText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"

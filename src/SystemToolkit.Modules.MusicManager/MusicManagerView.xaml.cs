@@ -740,31 +740,10 @@ public partial class MusicManagerView : UserControl
         {
             ImmersionLyricText.Text = "♪";
             ImmersionGhostText.Text = string.Empty;
-            ImmersionOutgoingText.Opacity = 0; // 无词：清退场层
             return;
         }
 
         string display = PaletteMath.SplitLyricIntoTwoLines(raw);
-
-        // P1：换行时旧句在退场层并行淡出（对照 NexBox enter/hold/exit；用 opacity 近似，§6.3 禁 blur 动画）
-        string prev = ImmersionLyricText.Text;
-        if (!string.IsNullOrEmpty(prev) && prev != "♪" && prev != display && ImmersionOutgoingText is not null)
-        {
-            ImmersionOutgoingText.Text = prev;
-            ImmersionOutgoingText.FontSize = ImmersionLyricText.FontSize;
-            ImmersionOutgoingText.Opacity = 1;
-            var exit = new System.Windows.Media.Animation.DoubleAnimation(
-                1, 0, new System.Windows.Duration(TimeSpan.FromSeconds(0.52)))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn },
-            };
-            System.Windows.Media.Animation.Storyboard.SetTarget(exit, ImmersionOutgoingText);
-            System.Windows.Media.Animation.Storyboard.SetTargetProperty(exit, new System.Windows.PropertyPath("Opacity"));
-            var exitBoard = new System.Windows.Media.Animation.Storyboard();
-            exitBoard.Children.Add(exit);
-            exitBoard.Begin(ImmersionOutgoingText, true);
-        }
-
         ImmersionLyricText.Text = display;
         // 重影只取句首 2-4 字（对照 NexBox：contentLen*0.35 钳 2..4，去空白），放大置于前景正后方
         string compact = display.Replace(" ", string.Empty).Replace("\n", string.Empty);
