@@ -103,6 +103,8 @@ public static class TokenKeys
         public const string Font_Mono = "Font_Mono";
         public const string Font_TitleZh = "Font_TitleZh";
         public const string Font_TitleEn = "Font_TitleEn";
+        /// <summary>沉浸歌词大字（Noto Serif SC Black，对齐 NexBox 思源宋体；回退霞鹜文楷）。</summary>
+        public const string Font_ImmersiveLyric = "Font_ImmersiveLyric";
         public const string Font_WeightRegular = "Font_WeightRegular";
         public const string Font_WeightMedium = "Font_WeightMedium";
         public const string Font_WeightBold = "Font_WeightBold";

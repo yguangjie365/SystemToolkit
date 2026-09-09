@@ -66,6 +66,17 @@
 | 可否子集化 | ✅ 可以 |
 | 获取 | https://github.com/JetBrains/JetBrainsMono |
 
+### 1.6 Noto Serif SC（思源宋体）
+
+| 项 | 内容 |
+|---|---|
+| 用途 | 沉浸歌词大字（`Font_ImmersiveLyric`，对齐参照项目 NexBox 的思源宋体 Black） |
+| 许可证 | **SIL Open Font License 1.1** |
+| 版权 | Noto 由 Google 主导，字形源自 Adobe 的 Source Han Serif（思源宋体）；两者同设计、同 OFL |
+| 分发文件 | `Resources/Fonts/NotoSerifCJKsc/NotoSerifSC-Black.otf`（SubsetOTF/SC 简体中文子集，Black/900 单字重，约 11.8MB）+ 同目录 `LICENSE.txt` |
+| 可否子集化 | ✅ 可以（本次已取 SC 区域子集） |
+| 获取 | https://github.com/notofonts/noto-cjk |
+
 ---
 
 ## 二、图标

@@ -116,6 +116,8 @@
     <FontFamily x:Key="Font_TitleZh">pack://application:,,,/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
     <!-- 西文字标（Cormorant Garamond）：仅限大字号品牌场合（≥20px，小字号笔画发虚） -->
     <FontFamily x:Key="Font_TitleEn">pack://application:,,,/Resources/Fonts/CormorantGaramond/#Cormorant Garamond, pack://application:,,,/Resources/Fonts/Inter/#Inter</FontFamily>
+    <!-- 沉浸歌词大字（Noto Serif SC Black，对齐 NexBox 思源宋体）；回退霞鹜文楷（衬线）→ 雅黑兜底 -->
+    <FontFamily x:Key="Font_ImmersiveLyric">pack://application:,,,/Resources/Fonts/NotoSerifCJKsc/#Noto Serif SC, pack://application:,,,/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
 
     <!-- ===== 字号（07 分册定档；展示名即令牌，禁字面量；棘轮只减不增。
          M-UI-2（2026-09-06）：12.5/12/11.5 三档 0.5px 间距肉眼不可辨（审查核验属实）——
