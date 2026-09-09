@@ -877,7 +877,7 @@ public partial class MusicManagerViewModel : ObservableObject
     /// WaveOutEvent 输出缓冲。歌词活动行/逐字填充统一回拨此值以对齐听感；进度条不受影响。
     /// 真机若仍偏快/偏慢，调此常量即可（0 = 不补偿）。
     /// </summary>
-    private const double LyricLatencyCompensationSeconds = 0.25;
+    private const double LyricLatencyCompensationSeconds = 0.5;
 
     /// <summary>
     /// P0（NexBox 对齐）：供视图以 CompositionTarget.Rendering（~60fps）高频采样当前卡拉OK行填充进度。
