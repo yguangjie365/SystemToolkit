@@ -397,25 +397,36 @@ public static partial class LyricParser
     }
 
     /// <summary>排序 + 由下一行推断时长 + clamp 到 0.45–12s。</summary>
+    /// <summary>零宽/不可见字符（网易/QQ 歌词的时间轴占位，Trim 与 \s 均不匹配）。</summary>
+    private static readonly System.Text.RegularExpressions.Regex InvisibleCharsRegex =
+        new("[\u200b\u200c\u200d\u2060\ufeff]", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// 收口：剥离零宽不可见字符 → 丢弃清理后为空的行（🔴 空行渲染成 ~40px 空白容器，
+    /// 连续多个在列表中形成大块空白——2026-09-09 截图实证）→ 排序 → 推断时长。
+    /// </summary>
     private static List<LyricLine> FinalizeLineDurations(List<LyricLine> lines)
     {
+        lines.RemoveAll(l => string.IsNullOrWhiteSpace(InvisibleCharsRegex.Replace(l.Text, "")));
         lines.Sort((a, b) => a.Time.CompareTo(b.Time));
 
         for (int i = 0; i < lines.Count; i++)
         {
+            // 剥离零宽字符后的文本才代表实际渲染宽度，CharCount 以清理后的为准
+            LyricLine cleaned = lines[i] with { Text = InvisibleCharsRegex.Replace(lines[i].Text, "") };
             LyricLine? next = i + 1 < lines.Count ? lines[i + 1] : null;
-            double inferred = next is not null && next.Time > lines[i].Time
-                ? next.Time - lines[i].Time
+            double inferred = next is not null && next.Time > cleaned.Time
+                ? next.Time - cleaned.Time
                 : DefaultDuration;
-            double dur = lines[i].Duration;
+            double dur = cleaned.Duration;
             if (!double.IsFinite(dur) || dur <= 0)
             {
                 dur = inferred;
             }
 
             dur = Math.Max(MinDuration, Math.Min(MaxDuration, dur));
-            int charCount = Math.Max(1, Math.Max(lines[i].CharCount, lines[i].Text.Length));
-            lines[i] = lines[i] with { Duration = dur, CharCount = charCount };
+            int charCount = Math.Max(1, Math.Max(cleaned.CharCount, cleaned.Text.Length));
+            lines[i] = cleaned with { Duration = dur, CharCount = charCount };
         }
 
         return lines;

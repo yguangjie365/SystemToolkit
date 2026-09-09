@@ -248,4 +248,29 @@ public class LyricParserTests
 
         Assert.InRange(p, 0.49, 0.51); // smoothstep 在 50% 处 ≈ 0.5
     }
+
+    // ════════ 零宽不可见字符（2026-09-09 截图实证：纯零宽行渲染成空白容器堆积成大块空白） ════════
+
+    [Fact]
+    public void Parse_ZeroWidthOnlyLine_IsDropped()
+    {
+        // 纯零宽字符行（Trim/\s 都不匹配它们）必须被丢弃，否则渲染为空白行容器
+        string lrc = "[00:01.00]\u200b\u200b\n[00:05.00]真实歌词\n[00:09.00]\u200b";
+
+        List<LyricLine> lines = LyricParser.ParseTimedLines(lrc);
+
+        LyricLine line = Assert.Single(lines);
+        Assert.Equal("真实歌词", line.Text);
+    }
+
+    [Fact]
+    public void Parse_ZeroWidthCharsInsideText_AreStripped()
+    {
+        string lrc = "[00:01.00]歌\u200b词\u200b行";
+
+        List<LyricLine> lines = LyricParser.ParseTimedLines(lrc);
+
+        LyricLine line = Assert.Single(lines);
+        Assert.Equal("歌词行", line.Text);
+    }
 }
