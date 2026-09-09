@@ -95,7 +95,7 @@ internal static class NetworkTestFakes
             Current = target;
             HasSnapshotValue = true;
             return Task.FromResult(new TcpApplyResult(
-                Array.Empty<string>(), Array.Empty<string>()));
+                Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
         }
 
         public Task RestoreAsync(Action<string> onLine, CancellationToken ct = default)

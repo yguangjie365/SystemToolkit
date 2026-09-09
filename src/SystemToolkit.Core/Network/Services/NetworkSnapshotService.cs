@@ -208,6 +208,7 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
         // ① 适配器 IPv4 / DNS（只回放快照里当前仍存在的适配器）
         IReadOnlyList<NetAdapterInfo> current = await _info.GetAdaptersAsync().ConfigureAwait(false);
         var failedExits = new List<int>(); // 审查 O4（2026-09-10）：聚合各步非零退出码，补 Verify 红线
+        int tcpRestoreFailed = 0; // 审查 O4/O10：TCP 还原 ApplyAsync 失败项计数（跨 if 块累加）
         foreach (NetAdapterInfo adapter in record.Content.Adapters)
         {
             if (current.FirstOrDefault(a => a.Name == adapter.Name) is null)
@@ -243,7 +244,9 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
                 RscState: null,
                 Rfc1323Timestamps: null);
             TcpApplyResult result = await _tuning.ApplyAsync(target, onLine, ct).ConfigureAwait(false);
-            onLine($"[快照] TCP 还原完成：应用 {result.Applied.Count} 项、跳过 {result.Skipped.Count} 项");
+            tcpRestoreFailed += result.Failed.Count; // 审查 O4/O10：TCP 写失败并入还原结局判定
+            onLine($"[快照] TCP 还原完成：应用 {result.Applied.Count} 项、跳过 {result.Skipped.Count} 项"
+                + (result.Failed.Count > 0 ? $"、失败 {result.Failed.Count} 项（{string.Join("、", result.Failed)}）" : ""));
         }
 
         // ③ 接口跃点数（ApplyInterfaceMetricAsync 自带「接口不存在跳过 / 同值不写」）
@@ -255,15 +258,17 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
         // ④ 系统代理
         _info.SetSystemProxy(record.Content.Proxy.Enabled, record.Content.Proxy.Server, onLine);
 
-        // 审查 O4：按各步退出码给出真实结局，不再无条件 ✅
-        if (failedExits.Count == 0)
+        // 审查 O4/O10：按各步退出码 + TCP 失败项给出真实结局，不再无条件 ✅
+        int failedTotal = failedExits.Count + tcpRestoreFailed;
+        if (failedTotal == 0)
         {
             onLine("[快照] ✅ 还原完成。若结果不符合预期，可再还原本次还原前自动保存的快照（RestoreSnapshot）");
         }
         else
         {
-            onLine($"[快照] ⚠️ 还原完成，但有 {failedExits.Count} 步失败（退出码 {string.Join("、", failedExits)}）——" +
-                "可用 RestoreSnapshot 回滚本次还原前自动保存的快照");
+            onLine($"[快照] ⚠️ 还原完成，但有 {failedTotal} 步失败" +
+                (failedExits.Count > 0 ? $"（退出码 {string.Join("、", failedExits)}）" : "") +
+                "——可用 RestoreSnapshot 回滚本次还原前自动保存的快照");
         }
     }
 

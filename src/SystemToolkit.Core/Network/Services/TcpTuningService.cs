@@ -81,6 +81,7 @@ public sealed class TcpTuningService : ITcpTuningService
         // 「确认 4 项、实际写 2 项」的不一致在 UI 可见。
         var applied = new List<string>();
         var skipped = new List<string>();
+        var failed = new List<string>(); // 审查 O4/O10：写入失败项单独聚合，不再假计入 applied
 
         if (target.AutoTuningLevel is not null)
         {
@@ -96,8 +97,14 @@ public sealed class TcpTuningService : ITcpTuningService
             }
             else if (!string.Equals(target.AutoTuningLevel, current.AutoTuningLevel, StringComparison.OrdinalIgnoreCase))
             {
-                await SetGlobalAsync($"autotuninglevel={target.AutoTuningLevel}", onLine, ct).ConfigureAwait(false);
-                applied.Add($"自动调谐级别 → {target.AutoTuningLevel}");
+                if (await SetGlobalAsync($"autotuninglevel={target.AutoTuningLevel}", onLine, ct).ConfigureAwait(false))
+                {
+                    applied.Add($"自动调谐级别 → {target.AutoTuningLevel}");
+                }
+                else
+                {
+                    failed.Add("自动调谐级别");
+                }
             }
         }
 
@@ -110,8 +117,14 @@ public sealed class TcpTuningService : ITcpTuningService
             }
             else if (current.RssEnabled != target.RssEnabled)
             {
-                await SetGlobalAsync($"rss={(target.RssEnabled == true ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false);
-                applied.Add($"RSS → {(target.RssEnabled == true ? "启用" : "禁用")}");
+                if (await SetGlobalAsync($"rss={(target.RssEnabled == true ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false))
+                {
+                    applied.Add($"RSS → {(target.RssEnabled == true ? "启用" : "禁用")}");
+                }
+                else
+                {
+                    failed.Add("RSS");
+                }
             }
         }
 
@@ -124,8 +137,14 @@ public sealed class TcpTuningService : ITcpTuningService
             }
             else if (current.EcnEnabled != target.EcnEnabled)
             {
-                await SetGlobalAsync($"ecncapability={(target.EcnEnabled == true ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false);
-                applied.Add($"ECN → {(target.EcnEnabled == true ? "启用" : "禁用")}");
+                if (await SetGlobalAsync($"ecncapability={(target.EcnEnabled == true ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false))
+                {
+                    applied.Add($"ECN → {(target.EcnEnabled == true ? "启用" : "禁用")}");
+                }
+                else
+                {
+                    failed.Add("ECN");
+                }
             }
         }
 
@@ -150,7 +169,7 @@ public sealed class TcpTuningService : ITcpTuningService
             }
         }
 
-        return new TcpApplyResult(applied, skipped);
+        return new TcpApplyResult(applied, skipped, failed);
     }
 
     /// <inheritdoc cref="ITcpTuningService.RestoreAsync"/>
@@ -348,13 +367,14 @@ public sealed class TcpTuningService : ITcpTuningService
         return false;
     }
 
-    private async Task SetGlobalAsync(string setting, Action<string> onLine, CancellationToken ct = default)
+    private async Task<bool> SetGlobalAsync(string setting, Action<string> onLine, CancellationToken ct = default)
     {
         onLine($"$ netsh interface tcp set global {setting}");
         int exit = await _runner.RunAsync("netsh", $"interface tcp set global {setting}", onLine, ct, timeout: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
         onLine(exit == 0
             ? $"[调优] ✅ {setting} 已应用"
             : $"[调优] ❌ {setting} 应用失败（退出码 {exit}）——若提示拒绝访问，请以管理员身份运行");
+        return exit == 0; // 审查 O4/O10：回传成功与否供聚合
     }
 
     private void SaveSnapshot(TcpGlobalSettings current, IReadOnlyList<InterfaceMetricInfo> metrics, Action<string> onLine)

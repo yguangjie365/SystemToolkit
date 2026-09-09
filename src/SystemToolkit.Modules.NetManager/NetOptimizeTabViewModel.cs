@@ -154,7 +154,13 @@ public partial class NetOptimizeTabViewModel : ObservableObject
         try
         {
             TcpApplyResult result = await _tuning.ApplyAsync(target, _log).ConfigureAwait(true);
-            _log(result.Applied.Count == 0 && result.Skipped.Count == 0
+            if (result.Failed.Count > 0)
+            {
+                // 审查 O4/O10：写入失败项显式可见，不再仅报"应用完成"
+                _log($"[优化] ⚠️ {result.Failed.Count} 项写入失败（{string.Join("、", result.Failed)}）——提权被拒或命令失败，详见上方退出码");
+            }
+
+            _log(result.Applied.Count == 0 && result.Skipped.Count == 0 && result.Failed.Count == 0
                 ? "[优化] 无变化项，未发送任何命令"
                 : $"[优化] 应用完成：写入 {result.Applied.Count} 项（{string.Join("、", result.Applied)}），"
                   + $"跳过 {result.Skipped.Count} 项（{string.Join("、", result.Skipped)}）");
