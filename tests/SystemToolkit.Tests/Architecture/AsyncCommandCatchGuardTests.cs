@@ -114,7 +114,7 @@ public class AsyncCommandCatchGuardTests
                 }
 
                 string body = string.Join("\n", lines[cursor..(bodyEnd + 1)]);
-                string methodName = sig.Groups[2].Value;
+                string methodName = sig.Groups[1].Value; // 审查 O6：单组正则取 Groups[1]（此前 [2] 恒空 → 基线退化文件级、集合 Except 掩盖同文件新增）
 
                 bool hasCatch = body.Contains("catch", StringComparison.Ordinal);
                 bool exempt = body.Contains("guard-exempt: catch", StringComparison.Ordinal);
