@@ -182,7 +182,7 @@ public sealed partial class SteamService
         if (src?.GetObjEntries() is null)
             return null;
         uint appId = ParseUInt(src.GetStr("appid"));
-        string name = src.GetStr("name") ?? Path.GetFileNameWithoutExtension(file);
+        string name = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(src.GetStr("name")) ?? Path.GetFileNameWithoutExtension(file);
         string installDir = src.GetStr("installdir") ?? string.Empty;
         return new SteamGame
         {

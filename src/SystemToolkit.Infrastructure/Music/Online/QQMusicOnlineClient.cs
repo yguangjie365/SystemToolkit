@@ -393,10 +393,10 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             ? album.GetStr("mid", album.GetStr("pmid", ""))
             : track.GetStr("albummid", "");
 
-        string songName = track.GetStr("name", track.GetStr("title", track.GetStr("songname", "")));
-        string albumName = album.ValueKind == JsonValueKind.Object
+        string songName = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(track.GetStr("name", track.GetStr("title", track.GetStr("songname", "")))) ?? "";
+        string albumName = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(album.ValueKind == JsonValueKind.Object
             ? album.GetStr("name", album.GetStr("title", track.GetStr("albumname", "")))
-            : track.GetStr("albumname", "");
+            : track.GetStr("albumname", "")) ?? "";
 
         long interval = track.GetLong("interval");
         long? qqSongId = track.TryGetProperty("id", out JsonElement idEl) && idEl.ValueKind == JsonValueKind.Number

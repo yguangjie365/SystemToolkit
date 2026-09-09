@@ -217,9 +217,10 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         {
             Provider = OnlineProvider.NetEase,
             Id = id,
-            Name = s.GetStr("name", ""),
-            Artist = string.Join(" / ", artists),
-            Album = album.GetStr("name", album.GetStr("title", "")),
+            // 审查 O20（2026-09-10）：在线目录名/歌手/专辑剥零宽（搜索去重/排序按实际字宽）
+            Name = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(s.GetStr("name", "")) ?? "",
+            Artist = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(string.Join(" / ", artists)) ?? "",
+            Album = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(album.GetStr("name", album.GetStr("title", ""))) ?? "",
             Cover = album.GetStr("picUrl", album.GetStr("coverUrl", "")),
             DurationMs = (ulong)s.GetLong("dt", s.GetLong("duration")),
             Fee = s.GetInt("fee"),

@@ -306,7 +306,8 @@ public sealed class DeviceDiscoveryService : IDeviceDiscoveryService, IDisposabl
         var device = new DiscoveredDevice
         {
             DeviceId = announce.Did,
-            Name = string.IsNullOrWhiteSpace(announce.Dn) ? announce.Did : announce.Dn,
+            // 审查 O20（2026-09-10）：对端广播名剥零宽，剥空回退 Did
+            Name = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(announce.Dn) is { Length: > 0 } cleanDn ? cleanDn : announce.Did,
             IPAddress = remoteEp.Address,
             TransferPort = announce.Tp,
             WebPort = announce.Wp,
@@ -337,11 +338,19 @@ public sealed class DeviceDiscoveryService : IDeviceDiscoveryService, IDisposabl
             reportedDevice = device;
         }
 
-        DeviceChanged?.Invoke(this, new DeviceChangeEventArgs
+        // 审查 O19（2026-09-10）：订阅者在 UDP 接收线程同步抛异常会杀死发现循环 → 隔离，单个订阅者失败不影响发现
+        try
         {
-            Device = reportedDevice,
-            ChangeType = changeType,
-        });
+            DeviceChanged?.Invoke(this, new DeviceChangeEventArgs
+            {
+                Device = reportedDevice,
+                ChangeType = changeType,
+            });
+        }
+        catch
+        {
+            // 订阅者异常已由其自身处理链路负责；此处仅防其击穿 UDP 接收循环
+        }
     }
 
     /// <summary>
@@ -369,11 +378,19 @@ public sealed class DeviceDiscoveryService : IDeviceDiscoveryService, IDisposabl
                         if (_devices.TryRemove(key, out DiscoveredDevice? removed))
                         {
                             _logger.Info($"设备离线：{removed.Name}（{removed.DisplayAddress}）——超过 {_offlineTimeout.TotalSeconds:F0}s 未收到心跳。");
-                            DeviceChanged?.Invoke(this, new DeviceChangeEventArgs
+                            try
                             {
-                                Device = removed,
-                                ChangeType = DeviceChangeType.Offline,
-                            });
+                                DeviceChanged?.Invoke(this, new DeviceChangeEventArgs
+                                {
+                                    Device = removed,
+                                    ChangeType = DeviceChangeType.Offline,
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                // 审查 O19：订阅者异常不得击穿后台清理循环
+                                _logger.Warn($"DeviceChanged(Offline) 订阅者异常：{ex.Message}");
+                            }
                         }
                     }
                 }
