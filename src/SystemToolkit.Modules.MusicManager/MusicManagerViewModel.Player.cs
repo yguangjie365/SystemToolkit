@@ -75,25 +75,23 @@ public partial class MusicManagerViewModel
         private set => SetProperty(ref _lyricFontSize, value);
     }
 
-    /// <summary>字号按钮文案（A 小/中/大）。</summary>
-    public string LyricFontScaleText => _lyricFontSize switch
-    {
-        15 => "A 小",
-        21 => "A 大",
-        _ => "A 中",
-    };
+    [RelayCommand]
+    private void IncreaseLyricFont() => LyricFontSize = Math.Min(28, _lyricFontSize + 1);
 
     [RelayCommand]
-    private void CycleLyricFont()
+    private void DecreaseLyricFont() => LyricFontSize = Math.Max(12, _lyricFontSize - 1);
+
+    private bool _isDynamicBackground;
+
+    /// <summary>动态流动背景开关（对照 NexBox 现代模板"动态"toggle）。</summary>
+    public bool IsDynamicBackground
     {
-        LyricFontSize = _lyricFontSize switch
-        {
-            15 => 17,
-            17 => 21,
-            _ => 15,
-        };
-        OnPropertyChanged(nameof(LyricFontScaleText));
+        get => _isDynamicBackground;
+        private set => SetProperty(ref _isDynamicBackground, value);
     }
+
+    [RelayCommand]
+    private void ToggleDynamicBackground() => IsDynamicBackground = !IsDynamicBackground;
 
     [RelayCommand]
     private void SwitchPlayerStyle(string? style)
@@ -236,7 +234,7 @@ public partial class MusicManagerViewModel
                 PlayerMutedBrush = light
                     ? CoverColorFactory.FromRgb(0x4A, 0x4A, 0x5E)
                     : CoverColorFactory.FromRgb(0xB0, 0xB0, 0xB0);
-                PlayerAccentBrush = CoverColorFactory.AccentDeep(CurrentAccentBrush);
+                PlayerAccentBrush = CoverColorFactory.AccentLight(CurrentAccentBrush.Color);
                 break;
             default: // 沉浸（深底恒浅字）
                 PlayerForegroundBrush = ThemeBrush.Find("Brush_OnDark", "#F5F5F4");

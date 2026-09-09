@@ -926,6 +926,10 @@ public partial class MusicManagerViewModel : ObservableObject
         ScanStatusText = message;
     }
 
+    /// <summary>队列快照诊断（反馈2"二次点击变空"定位用；写入模块日志）。</summary>
+    public void LogQueueSnapshot(string where)
+        => _log.Info($"[Music] 队列快照({where}): UpNext={UpNext.Count}, Queue={_queue.Queue.Count}, Current={QueueCurrent?.Name ?? "无"}");
+
     private void RebuildUpNext()
     {
         UpNext.Clear();

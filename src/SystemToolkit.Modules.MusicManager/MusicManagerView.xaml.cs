@@ -104,6 +104,36 @@ public partial class MusicManagerView : UserControl
     private void OnSearchListDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.PlayFromSearchCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
 
+    /// <summary>行内播放钮单击（反馈1：单击即播，与双击等效）。</summary>
+    private void OnSearchRowPlayClick(object sender, RoutedEventArgs e)
+        => _vm.PlayFromSearchCommand.Execute(RowFromButton<MusicManagerViewModel.OnlineResultRowVm>(sender));
+
+    /// <summary>沿可视树上溯找 ListBoxItem 取行数据（按钮不在 ListBox.SelectedItem 语义内）。</summary>
+    private static T? RowFromButton<T>(object sender)
+        where T : class
+    {
+        return sender is System.Windows.DependencyObject d
+            && FindAncestor<System.Windows.Controls.ListBoxItem>(d)?.DataContext is T row
+            ? row
+            : null;
+    }
+
+    private static T? FindAncestor<T>(System.Windows.DependencyObject? from)
+        where T : System.Windows.DependencyObject
+    {
+        while (from is not null)
+        {
+            if (from is T match)
+            {
+                return match;
+            }
+
+            from = System.Windows.Media.VisualTreeHelper.GetParent(from);
+        }
+
+        return null;
+    }
+
     private void OnPlaylistListDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.OpenPlaylistCommand.Execute(RowOf<MusicManagerViewModel.PlaylistRowVm>(sender));
 
@@ -124,6 +154,9 @@ public partial class MusicManagerView : UserControl
 
     private void OnPlaylistTrackDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.PlayFromPlaylistCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
+
+    private void OnPlaylistRowPlayClick(object sender, RoutedEventArgs e)
+        => _vm.PlayFromPlaylistCommand.Execute(RowFromButton<MusicManagerViewModel.OnlineResultRowVm>(sender));
 
     private void OnDailyRecommendDoubleClick(object sender, MouseButtonEventArgs e)
         => _vm.PlayFromDailyRecommendCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
@@ -169,6 +202,9 @@ public partial class MusicManagerView : UserControl
         if (QueuePopup is not null && sender is System.Windows.UIElement target)
         {
             QueuePopup.PlacementTarget = target;
+            // 反馈2：高度不超主窗口（底栏在窗口底部，上弹空间=窗口高-状态行余量）
+            QueuePopup.MaxHeight = Math.Max(180, ActualHeight - 130);
+            _vm.LogQueueSnapshot("打开队列弹窗");
             QueuePopup.IsOpen = true;
         }
     }
@@ -359,12 +395,18 @@ public partial class MusicManagerView : UserControl
             && _vm.ActiveLyricIndex < _vm.LyricRows.Count)
         {
             // OM-6：沉浸=中央单行大字（属性驱动无需滚动）；彩胶/现代各持列表——只滚可见的
-            MusicManagerViewModel.LyricRowVm row = _vm.LyricRows[_vm.ActiveLyricIndex];
             ListBox? activeList = _vm.IsModernStyle ? ModernLyricsList : FullLyricsList;
             if (activeList is { IsVisible: true })
             {
-                activeList.ScrollIntoView(row);
+                SmoothScrollLyricToActive(activeList);
             }
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.IsDynamicBackground)
+            || e.PropertyName == nameof(MusicManagerViewModel.IsModernStyle)
+            || e.PropertyName == nameof(MusicManagerViewModel.ModernBackgroundBrush))
+        {
+            ApplyDynamicBackground();
         }
     }
 
@@ -700,5 +742,120 @@ public partial class MusicManagerView : UserControl
         }
 
         return null;
+    }
+
+    // ════════ 歌词平滑滚动 + 现代动态背景（反馈3/5，对照 NexBox） ════════
+
+    /// <summary>NexBox 式歌词跟随：当前行平滑滚动到视口垂直居中（350ms 缓动），seek 跳转同样生效。</summary>
+    private void SmoothScrollLyricToActive(System.Windows.Controls.ListBox list)
+    {
+        list.UpdateLayout();
+        if (list.ItemContainerGenerator.ContainerFromIndex(_vm.ActiveLyricIndex) is not System.Windows.Controls.ListBoxItem item)
+        {
+            list.ScrollIntoView(_vm.LyricRows[_vm.ActiveLyricIndex]); // 虚拟化未实现：先粗滚到位，下一拍精调
+            return;
+        }
+
+        System.Windows.Controls.ScrollViewer? sv = FindAncestor<System.Windows.Controls.ScrollViewer>(item)
+            ?? FindFirstVisualChild<System.Windows.Controls.ScrollViewer>(list);
+        if (sv is null)
+        {
+            list.ScrollIntoView(item);
+            return;
+        }
+
+        double itemTop = item.TranslatePoint(new System.Windows.Point(0, 0), list).Y;
+        double target = Math.Clamp(
+            sv.VerticalOffset + itemTop - (sv.ViewportHeight / 2) + (item.ActualHeight / 2),
+            0,
+            Math.Max(0, sv.ScrollableHeight));
+
+        var anim = new System.Windows.Media.Animation.DoubleAnimation(
+            sv.VerticalOffset, target, new System.Windows.Duration(TimeSpan.FromMilliseconds(350)))
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase
+            {
+                EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut,
+            },
+        };
+        System.Windows.Media.Animation.Storyboard.SetTarget(anim, sv);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath("VerticalOffset"));
+        var storyboard = new System.Windows.Media.Animation.Storyboard();
+        storyboard.Children.Add(anim);
+        storyboard.Begin(sv, true);
+    }
+
+    private static T? FindFirstVisualChild<T>(System.Windows.DependencyObject from)
+        where T : System.Windows.Media.Visual
+    {
+        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(from);
+        for (int i = 0; i < count; i++)
+        {
+            if (System.Windows.Media.VisualTreeHelper.GetChild(from, i) is not System.Windows.Media.Visual child)
+            {
+                continue;
+            }
+
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindFirstVisualChild<T>(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 现代模板动态流动背景（对照 NexBox"动态"开关）：渐变随时间缓旋（16s/圈，往复）。
+    /// 关闭/离开现代态时还原为 VM 渐变刷。
+    /// </summary>
+    private void ApplyDynamicBackground()
+    {
+        if (ModernBgHost is null)
+        {
+            return;
+        }
+
+        StopDynamicBackground();
+
+        if (!_vm.IsModernStyle || !_vm.IsDynamicBackground
+            || _vm.ModernBackgroundBrush is not System.Windows.Media.LinearGradientBrush source)
+        {
+            return;
+        }
+
+        System.Windows.Media.LinearGradientBrush brush = source.Clone();
+        // 🔴 RotateTransform 是 Freezable 不是 FrameworkElement——不能作 Storyboard 可控目标，
+        // 直接 BeginAnimation（保留引用以便停止）
+        _dynamicBgTransform = new System.Windows.Media.RotateTransform(0, 0.5, 0.5);
+        brush.RelativeTransform = _dynamicBgTransform;
+        ModernBgHost.Background = brush;
+
+        var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 360, new System.Windows.Duration(TimeSpan.FromSeconds(16)))
+        {
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+        };
+        _dynamicBgTransform.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, anim);
+    }
+
+    private System.Windows.Media.RotateTransform? _dynamicBgTransform;
+
+    private void StopDynamicBackground()
+    {
+        _dynamicBgTransform?.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, null);
+        _dynamicBgTransform = null;
+        if (ModernBgHost is not null)
+        {
+            ModernBgHost.SetBinding(System.Windows.Controls.Border.BackgroundProperty, new System.Windows.Data.Binding
+            {
+                Path = new System.Windows.PropertyPath(nameof(MusicManagerViewModel.ModernBackgroundBrush)),
+                Mode = System.Windows.Data.BindingMode.OneWay,
+            });
+        }
     }
 }

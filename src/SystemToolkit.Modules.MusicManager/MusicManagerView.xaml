@@ -497,10 +497,14 @@
                                                FontSize="{DynamicResource Font_SizeCaption}"
                                                Foreground="{StaticResource Brush_TextMuted}"
                                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <Path Grid.Column="3" Data="{StaticResource IconPlaySolid}"
-                                          Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
-                                          Stretch="Uniform" VerticalAlignment="Center"
-                                          ToolTip="双击播放"/>
+                                    <Button Grid.Column="3" Width="20" Height="20" Padding="0"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Click="OnSearchRowPlayClick" AutomationProperties.Name="播放"
+                                            ToolTip="播放">
+                                        <Path Data="{StaticResource IconPlaySolid}"
+                                              Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
+                                              Stretch="Uniform"/>
+                                    </Button>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -579,10 +583,14 @@
                                                FontSize="{DynamicResource Font_SizeCaption}"
                                                Foreground="{StaticResource Brush_TextMuted}"
                                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <Path Grid.Column="3" Data="{StaticResource IconPlaySolid}"
-                                          Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
-                                          Stretch="Uniform" VerticalAlignment="Center"
-                                          ToolTip="双击播放"/>
+                                    <Button Grid.Column="3" Width="20" Height="20" Padding="0"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Click="OnSearchRowPlayClick" AutomationProperties.Name="播放"
+                                            ToolTip="播放">
+                                        <Path Data="{StaticResource IconPlaySolid}"
+                                              Fill="{StaticResource Brush_TextMuted}" Width="13" Height="13"
+                                              Stretch="Uniform"/>
+                                    </Button>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -916,7 +924,7 @@
                         Visibility="{Binding IsVinylStyle, Converter={StaticResource BoolToVis}}"/>
                 <Border Background="{Binding ImmersionBackgroundBrush, Mode=OneWay}"
                         Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}"/>
-                <Border Background="{Binding ModernBackgroundBrush, Mode=OneWay}"
+                <Border x:Name="ModernBgHost" Background="{Binding ModernBackgroundBrush, Mode=OneWay}"
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
             </Grid>
 
@@ -979,7 +987,7 @@
                             <DataTemplate>
                                 <TextBlock Text="{Binding Text, Mode=OneWay}"
                                            TextWrapping="Wrap"
-                                           FontSize="{Binding LyricFontSize, Mode=OneWay}">
+                                           FontSize="{Binding DataContext.LyricFontSize, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
@@ -1169,7 +1177,7 @@
                                 <TextBlock Text="{Binding Text, Mode=OneWay}"
                                            TextWrapping="Wrap"
                                            TextAlignment="Center"
-                                           FontSize="{Binding LyricFontSize, Mode=OneWay}">
+                                           FontSize="{Binding DataContext.LyricFontSize, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
@@ -1248,6 +1256,27 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <ToggleButton Height="26" Padding="8,0" Margin="8,0,0,0"
+                                      IsChecked="{Binding IsDynamicBackground, Mode=OneWay}" Command="{Binding ToggleDynamicBackgroundCommand}"
+                                      AutomationProperties.Name="动态背景" ToolTip="动态流动背景">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton">
+                                    <!-- 🔴 不能 BasedOn RowActionButton（其 TargetType=Button，跨基类即抛） -->
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Foreground" Value="{Binding PlayerMutedBrush, Mode=OneWay}"/>
+                                    <Setter Property="Visibility" Value="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter Property="Foreground" Value="{Binding PlayerAccentBrush, Mode=OneWay}"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ToggleButton.Style>
+                            <TextBlock Text="动态" FontSize="{DynamicResource Font_SizeCaption}"/>
+                        </ToggleButton>
                         <Button x:Name="PlayerQualityButton" Height="26" Padding="9,0" Margin="12,0,0,0"
                                 Click="OnQualityButtonClick" MouseRightButtonUp="OnQualityButtonRightClick"
                                 AutomationProperties.Name="音质" Cursor="Hand"
@@ -1290,15 +1319,23 @@
                 </StackPanel>
                     <!-- 右：歌词字号（反馈4）+ 播放队列（反馈6） -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Height="26" Padding="8,0" Command="{Binding CycleLyricFontCommand}"
-                                AutomationProperties.Name="歌词字号" ToolTip="歌词字号（小/中/大）">
+                        <Button Height="26" Padding="7,0" Content="A−" Command="{Binding DecreaseLyricFontCommand}"
+                                AutomationProperties.Name="减小歌词字号" ToolTip="减小歌词字号"
+                                FontSize="{DynamicResource Font_SizeCaption}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                     <Setter Property="Foreground" Value="{Binding PlayerMutedBrush, Mode=OneWay}"/>
                                 </Style>
                             </Button.Style>
-                            <TextBlock Text="{Binding LyricFontScaleText, Mode=OneWay}"
-                                       FontSize="{DynamicResource Font_SizeCaption}"/>
+                        </Button>
+                        <Button Height="26" Padding="7,0" Content="A+" Command="{Binding IncreaseLyricFontCommand}"
+                                AutomationProperties.Name="增大歌词字号" ToolTip="增大歌词字号"
+                                FontSize="{DynamicResource Font_SizeCaption}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                    <Setter Property="Foreground" Value="{Binding PlayerMutedBrush, Mode=OneWay}"/>
+                                </Style>
+                            </Button.Style>
                         </Button>
                         <Button x:Name="PlayerQueueButton" Height="26" Width="30" Padding="0" Margin="10,0,0,0"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand"
