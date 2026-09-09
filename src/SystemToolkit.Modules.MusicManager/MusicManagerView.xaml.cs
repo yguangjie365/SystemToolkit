@@ -636,6 +636,8 @@ public partial class MusicManagerView : UserControl
     /// Identity 会把它覆盖丢失 → 每次切风格回彩胶，入场动画结束碟片位置突变。
     /// 正确做法：入场动画只挂在「基础变换之后」的附加层，结束后还原基础变换。
     /// </remarks>
+    private bool _vinylEntranceRunning;
+
     private void PlayVinylDiscEntrance()
     {
         if (DiscHost is null)
@@ -643,9 +645,22 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
+        // 审查 O17：动画进行中重入会二次改 RenderTransform → 丢 XAML 绑定。直接跳过
+        if (_vinylEntranceRunning)
+        {
+            return;
+        }
+
+        _vinylEntranceRunning = true;
+
         // 基础变换 = XAML 定义的 TranslateTransform（绑定右上偏移）；缓存引用，动画后还原
-        TranslateTransform baseTranslate = DiscHost.RenderTransform as TranslateTransform
-            ?? new TranslateTransform(0, 0);
+        // 审查 O17：重入时 RenderTransform 可能已是上次未完成的 TransformGroup，取其首个子项找回绑定
+        TranslateTransform baseTranslate = DiscHost.RenderTransform switch
+        {
+            TranslateTransform t => t,
+            TransformGroup g when g.Children.Count > 0 && g.Children[0] is TranslateTransform t0 => t0,
+            _ => new TranslateTransform(0, 0),
+        };
         var group = new TransformGroup();
         group.Children.Add(baseTranslate);                 // [0] 基础：XAML 右上偏移（动画不动它）
         group.Children.Add(new TranslateTransform(6, -6)); // [1] 入场位移
@@ -684,6 +699,7 @@ public partial class MusicManagerView : UserControl
         {
             // 归位为基础变换（保住 XAML 右上偏移；尺寸绑定实时变化不受影响）
             DiscHost.RenderTransform = baseTranslate;
+            _vinylEntranceRunning = false; // 审查 O17：复位重入闸
         };
         storyboard.Begin(DiscHost);
     }
@@ -759,7 +775,9 @@ public partial class MusicManagerView : UserControl
     {
         if (block is not null)
         {
-            block.Foreground = null; // 清本地值 → 样式（静音色/高亮触发器）恢复生效
+            // 审查 O2（2026-09-10）：Foreground=null 是写入"值为 null 的本地值"，本地值压过
+            // Style/Trigger → 该行永久失去静音色与高亮回退（"歌词空白块"疑似残余根因）。只有 ClearValue 才移除本地值
+            block.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);
             block = null;
         }
     }
@@ -858,31 +876,6 @@ public partial class MusicManagerView : UserControl
         {
             return;
         }
-
-        // 📋 瞬移诊断（用户实测反馈"整段上下瞬移"）：每次滚动触发全量留痕，复现日志一锤定音
-        SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-            SystemToolkit.Core.Logging.LogLevel.Info, "musicmanager",
-            $"[ScrollDiag] idx={_vm.ActiveLyricIndex} offset={sv.VerticalOffset:F1} itemTop={itemTop:F1} " +
-            $"target={target:F1} viewport={sv.ViewportHeight:F1} scrollable={sv.ScrollableHeight:F1} " +
-            $"itemH={item.ActualHeight:F1} rows={_vm.LyricRows.Count}"));
-
-        // 🔍 空白块排查：视口内可见行清单（索引:y/高）——直接暴露空白位置对应的行数据形态
-        var vis = new System.Text.StringBuilder();
-        for (int i = 0; i < list.Items.Count; i++)
-        {
-            if (list.ItemContainerGenerator.ContainerFromIndex(i) is System.Windows.Controls.ListBoxItem row)
-            {
-                double y = row.TranslatePoint(new System.Windows.Point(0, 0), list).Y;
-                if (y + row.ActualHeight >= 0 && y <= sv.ViewportHeight)
-                {
-                    vis.Append(i).Append(":y=").Append(y.ToString("F0"))
-                       .Append(",h=").Append(row.ActualHeight.ToString("F0")).Append(' ');
-                }
-            }
-        }
-
-        SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-            SystemToolkit.Core.Logging.LogLevel.Info, "musicmanager", $"[VisRows] {vis}"));
 
         StartSmoothScroll(sv, target);
     }
