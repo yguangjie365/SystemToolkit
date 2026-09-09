@@ -82,6 +82,11 @@ public partial class NetRepairTabViewModel : ObservableObject
                 SafeSequenceCompleted?.Invoke();
             }
         }
+        catch (Exception ex)
+        {
+            // 审查 🟠-2（2026-09-10）：写命令必须用户可见（AsyncRelayCommand 会吞）
+            _log("[修复] ❌ 安全修复异常：" + ex.Message);
+        }
         finally
         {
             IsBusy = false;
@@ -124,6 +129,11 @@ public partial class NetRepairTabViewModel : ObservableObject
                 : exit == 1223
                     ? $"[修复] ⚠️ {vm.Title}：用户拒绝了 UAC 提权，操作安全终止（无副作用）"
                     : $"[修复] ❌ {vm.Title} 失败（退出码 {exit}）");
+        }
+        catch (Exception ex)
+        {
+            // 审查 🟠-2（2026-09-10）：进程被杀/网络断流等非预期异常必须用户可见（AsyncRelayCommand 会吞）
+            _log($"[修复] ❌ {vm.Title} 异常：{ex.Message}");
         }
         finally
         {

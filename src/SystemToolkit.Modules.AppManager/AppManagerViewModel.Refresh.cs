@@ -273,8 +273,23 @@ public partial class AppManagerViewModel
             }
             else
             {
-                _ = RefreshStatesAsync();
+                // 审查 🟡-4（2026-09-10）：fire-and-forget 也必须带兜底（AsyncRelayCommand/UTE 会吞）
+                _ = RefreshStatesSafeAsync();
             }
+        }
+    }
+
+    /// <summary>后台刷新状态（异常落日志与状态栏，不静默）。</summary>
+    private async Task RefreshStatesSafeAsync()
+    {
+        try
+        {
+            await RefreshStatesAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("后台刷新安装状态异常", ex);
+            AddLog("后台刷新状态失败：" + ex.Message);
         }
     }
 

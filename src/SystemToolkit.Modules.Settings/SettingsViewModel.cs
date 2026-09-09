@@ -103,14 +103,24 @@ public partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        _config.Settings.BackupRoot = root;
-        _config.Settings.MaxSnapshots = maxSnapshots;
-        _config.Settings.MaxWorkers = maxWorkers;
-        _config.Settings.DefaultConflictPolicy = DefaultConflictPolicy;
-        _config.Save();
+        try
+        {
+            _config.Settings.BackupRoot = root;
+            _config.Settings.MaxSnapshots = maxSnapshots;
+            _config.Settings.MaxWorkers = maxWorkers;
+            _config.Settings.DefaultConflictPolicy = DefaultConflictPolicy;
+            _config.Save();
 
-        StatusText = "✅ 设置已保存（下次备份/恢复生效）。";
-        _logger.Info($"备份设置已保存：root={root} maxSnapshots={maxSnapshots} maxWorkers={maxWorkers} policy={DefaultConflictPolicy}");
+            StatusText = "✅ 设置已保存（下次备份/恢复生效）。";
+            _logger.Info($"备份设置已保存：root={root} maxSnapshots={maxSnapshots} maxWorkers={maxWorkers} policy={DefaultConflictPolicy}");
+        }
+        catch (Exception ex)
+        {
+            // 审查 🟠-3（2026-09-10）：同步命令无 AsyncRelayCommand 兜底层，磁盘满/权限丢失/杀软拦截
+            // 抛 IOException/UnauthorizedAccessException 会直冲 UI 线程——必须就地落用户可见
+            StatusText = "❌ 保存失败：" + ex.Message;
+            _logger.Error("备份设置保存失败", ex);
+        }
     }
 
     /// <summary>解析整数并校验区间；非法返回 -1（由调用方报错，避免静默钳制）。</summary>

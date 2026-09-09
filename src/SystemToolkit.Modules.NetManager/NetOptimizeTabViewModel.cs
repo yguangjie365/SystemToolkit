@@ -160,6 +160,12 @@ public partial class NetOptimizeTabViewModel : ObservableObject
                   + $"跳过 {result.Skipped.Count} 项（{string.Join("、", result.Skipped)}）");
             await LoadAsync().ConfigureAwait(true);
         }
+        catch (Exception ex)
+        {
+            // 审查 🟠-2（2026-09-10）：写命令必须用户可见（AsyncRelayCommand 会吞）
+            _log("[优化] ❌ 应用失败：" + ex.Message);
+            _ = LoadAsync(); // 重新拉取实际状态，避免 UI 残留"未应用"的旧值
+        }
         finally
         {
             IsBusy = false;
@@ -226,6 +232,13 @@ public partial class NetOptimizeTabViewModel : ObservableObject
         {
             await _tuning.ApplyInterfaceMetricAsync(adapter, metric, _log).ConfigureAwait(true);
             await LoadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // 审查 🟠-2（2026-09-10）：写命令必须用户可见（AsyncRelayCommand 会吞）
+            MetricError = "设置跃点数失败：" + ex.Message;
+            _log("[优化] ❌ " + MetricError);
+            _ = LoadAsync();
         }
         finally
         {

@@ -32,7 +32,8 @@ public partial class OverviewViewModel
             }
 
             string markdown = OverviewReportBuilder.Build(_data, System.Environment.MachineName, DateTimeOffset.Now);
-            System.IO.File.WriteAllText(path, markdown, System.Text.Encoding.UTF8);
+            // 审查 🔴-1（2026-09-10）：改走原子写——裸 File.WriteAllText 断电/被杀会留半截文件
+            SystemToolkit.Core.Utilities.AtomicFile.WriteAllText(path, markdown);
             _logger.Info($"报告已导出：{path}");
             NotifyUser?.Invoke("报告已导出到：\n" + path, "导出成功");
         }
