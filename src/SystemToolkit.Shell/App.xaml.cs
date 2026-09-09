@@ -217,8 +217,8 @@ public partial class App : Application
             return new SystemToolkit.Infrastructure.Music.Online.OnlineUrlResolver(
                 (id, quality, cookie, ct) => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.NetEaseOnlineClient>()
                     .GetSongUrlAsync(id, quality, cookie, ct),
-                (mid, mediaMid, cookie, ct) => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient>()
-                    .GetSongUrlAsync(mid, mediaMid, cookie, ct),
+                (mid, mediaMid, quality, cookie, ct) => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.QQMusicOnlineClient>()
+                    .GetSongUrlAsync(mid, mediaMid, quality, cookie, ct),
                 sp.GetRequiredService<SystemToolkit.Core.Music.Online.IOnlineCredentialStore>(),
                 onlineLog);
         });

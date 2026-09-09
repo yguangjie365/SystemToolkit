@@ -94,9 +94,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     /// ① module 必须是 <c>vkey.GetVkeyServer</c>——旧实现写 <c>music.vkey.GetVkeyServer</c>，
     ///    该模块名不存在（与 PlaylistBaseRead 同类坑），musicu 对未知模块恒不回 data；
     /// ② param 必须带 filename 候选（质量模板前缀 + mediaMid/songmid + 扩展名），否则空 purl；
-    /// ③ comm 带 uin（cookie 提取，缺省 0），有 qm_keyst 时作 authst。
+    /// ③ comm 带 uin（cookie 提取，缺省 0），有凭据时作 authst（ct=19）。
+    /// 2026-09-09b：filename 候选从请求音质起降级（对齐 NexBox normalize_quality 起点），
+    /// 无绿钻账号带 RS01/F000 等高音质候选可能污染整个响应。
     /// </remarks>
-    public async Task<OnlineSongUrlResult> GetSongUrlAsync(string songMid, string? mediaMid = null, string cookie = "", CancellationToken ct = default)
+    public async Task<OnlineSongUrlResult> GetSongUrlAsync(string songMid, string? mediaMid = null, string preferredQuality = "standard", string cookie = "", CancellationToken ct = default)
     {
         try
         {
@@ -116,13 +118,21 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             string authSt = ExtractCookieValueChain(cookie, "qm_keyst", "qqmusic_key", "music_key",
                 "p_skey", "skey", "psrf_qqaccess_token", "psrf_qqrefresh_token", "wxrefresh_token", "wxskey");
 
-            // 质量模板（对照 NexBox QQ_QUALITY_TEMPLATES；mediaMid 缺省用 songMid 兜底——NexBox 同策略）
+            // 质量模板（对照 NexBox QQ_QUALITY_TEMPLATES；mediaMid 缺省用 songMid 兜底——NexBox 同策略）。
+            // 从请求音质所在档起降级尝试（与 NexBox templates = &TEMPLATES[quality_start..] 一致）
             string mediaId = !string.IsNullOrWhiteSpace(mediaMid) ? mediaMid : songMid;
-            (string Prefix, string Ext)[] templates =
+            (string Prefix, string Ext, string Level)[] templates =
             [
-                ("RS01", ".flac"), ("F000", ".flac"), ("M800", ".mp3"), ("M500", ".mp3"), ("C400", ".m4a"),
+                ("RS01", ".flac", "hires"), ("F000", ".flac", "lossless"),
+                ("M800", ".mp3", "exhigh"), ("M500", ".mp3", "standard"), ("C400", ".m4a", "aac"),
             ];
-            var filenames = templates
+            int start = Array.FindIndex(templates, t => t.Level == NormalizeQqQuality(preferredQuality));
+            if (start < 0)
+            {
+                start = templates.Length - 2; // standard（M500）兜底
+            }
+
+            var filenames = templates[start..]
                 .Select(t => $"{t.Prefix}{mediaId}{t.Ext}")
                 .ToList();
 
@@ -218,6 +228,16 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             return Fail(e.Message);
         }
     }
+
+    /// <summary>QQ 音质名归一（对照 NexBox normalize_quality；未知回退 standard）。</summary>
+    private static string NormalizeQqQuality(string quality) => quality?.Trim().ToLowerInvariant() switch
+    {
+        "hires" or "jymaster" => "hires",
+        "lossless" => "lossless",
+        "exhigh" => "exhigh",
+        "aac" => "aac",
+        _ => "standard",
+    };
 
     /// <summary>从 Cookie 串按候选键链提取第一个非空值（不分大小写；全缺返回空串）。</summary>
     private static string ExtractCookieValueChain(string cookie, params string[] keys)
