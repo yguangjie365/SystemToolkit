@@ -861,6 +861,30 @@ public partial class MusicManagerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// P0（NexBox 对齐）：供视图以 CompositionTarget.Rendering（~60fps）高频采样当前卡拉OK行填充进度。
+    /// 直读引擎 <see cref="IMusicPlaybackEngine.Position"/>，对"已由 100ms 事件选定的 <see cref="ActiveLyricIndex"/> 行"
+    /// 重算 <see cref="LyricParser.GetLineProgress"/>，返回 0-1，<b>不写任何属性</b>（不触发 INPC，避免 60fps 通知风暴）。
+    /// 活动行切换/滚动仍由 100ms 事件负责（对照 NexBox：active-line 250ms 粗、fill RAF 60fps 细）。
+    /// </summary>
+    public double SampleLyricFillProgress()
+    {
+        if (_seeking)
+        {
+            return LyricProgress; // 拖动中冻结，避免与 Slider 互拉
+        }
+
+        int idx = ActiveLyricIndex;
+        if (idx < 0 || idx >= _lyricLineSource.Count || ResolveEngine() is not { } engine)
+        {
+            return LyricProgress;
+        }
+
+        LyricLine line = _lyricLineSource[idx];
+        LyricLine? next = idx + 1 < _lyricLineSource.Count ? _lyricLineSource[idx + 1] : null;
+        return Math.Clamp(LyricParser.GetLineProgress(line, next, engine.Position.TotalSeconds), 0, 1);
+    }
+
     private async Task PlayCurrentCoreAsync(IMusicPlaybackEngine engine)
     {
         MusicSong? song = _queue.Current;

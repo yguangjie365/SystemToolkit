@@ -96,6 +96,7 @@ public partial class MusicManagerView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        SetKaraokeRenderHook(false); // P0：静态 CompositionTarget.Rendering 必须随卸载解绑，防视图泄漏
         _discSpin?.Pause(DiscHost); // 切走页面：黑胶暂停，避免不可见空转（审查 🟠-1 采纳——修正其论据后落地）
     }
 
@@ -442,6 +443,11 @@ public partial class MusicManagerView : UserControl
             UpdateRippleFieldActive();
         }
 
+        if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
+        {
+            SetKaraokeRenderHook(_vm.IsPlaying); // P0：播放→挂 60fps 填充钩子；暂停/停→摘
+        }
+
         if (e.PropertyName == nameof(MusicManagerViewModel.LyricProgress)
             || e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
             || e.PropertyName == nameof(MusicManagerViewModel.PlayerAccentBrush))
@@ -781,8 +787,58 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
-        ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock);
-        ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock);
+        ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock, _vm.LyricProgress);
+        ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock, _vm.LyricProgress);
+    }
+
+    // ── P0：逐字填充 60fps 渲染钩子（对照 NexBox RAF 直读 currentTime，替代 100ms 事件的"格子感"）──
+    private bool _karaokeRenderHooked;
+    private double _lastFillP = -1;
+
+    /// <summary>幂等挂接/摘除 CompositionTarget.Rendering（静态事件，必须成对，防视图泄漏）。</summary>
+    private void SetKaraokeRenderHook(bool on)
+    {
+        if (on == _karaokeRenderHooked)
+        {
+            return;
+        }
+
+        if (on)
+        {
+            EventHandler h = OnKaraokeRender;
+            _karaokeRenderHandler = h;
+            System.Windows.Media.CompositionTarget.Rendering += h;
+        }
+        else
+        {
+            if (_karaokeRenderHandler is not null)
+            {
+                System.Windows.Media.CompositionTarget.Rendering -= _karaokeRenderHandler;
+                _karaokeRenderHandler = null;
+            }
+        }
+
+        _karaokeRenderHooked = on;
+    }
+
+    private EventHandler? _karaokeRenderHandler;
+
+    private void OnKaraokeRender(object? sender, EventArgs e)
+    {
+        if (!_vm.IsPlaying || _vm.ActiveLyricIndex < 0)
+        {
+            return;
+        }
+
+        double p = _vm.SampleLyricFillProgress();
+        if (Math.Abs(p - _lastFillP) < 0.0015)
+        {
+            return; // 抑制无实质变化的帧（暂停/静止时不重绘）
+        }
+
+        _lastFillP = p;
+        ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock, p);
+        ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock, p);
     }
 
     private static void ResetKaraokeRow(ref System.Windows.Controls.TextBlock? block)
@@ -796,7 +852,7 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    private void ApplyKaraokeToRow(System.Windows.Controls.ListBox? list, ref System.Windows.Controls.TextBlock? tracked)
+    private void ApplyKaraokeToRow(System.Windows.Controls.ListBox? list, ref System.Windows.Controls.TextBlock? tracked, double progress)
     {
         if (list is null
             || _vm.ActiveLyricIndex < 0
@@ -817,7 +873,7 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
-        double p = Math.Clamp(_vm.LyricProgress, 0, 1);
+        double p = Math.Clamp(progress, 0, 1);
         var fill = new LinearGradientBrush
         {
             StartPoint = new System.Windows.Point(0, 0.5),
