@@ -20,6 +20,15 @@ namespace SystemToolkit.Infrastructure.Music.Online;
 /// </remarks>
 public sealed class AudioProxyService : IAudioProxyService
 {
+    /// <summary>host 校验器（生产默认白名单；测试注入放行假上游）。null = 默认白名单。</summary>
+    private readonly Func<string, bool> _hostValidator;
+
+    /// <summary>hostValidator：注入自定义校验器（测试放行假上游用）；缺省走白名单。</summary>
+    public AudioProxyService(Func<string, bool>? hostValidator = null)
+    {
+        _hostValidator = hostValidator ?? IsAllowedProxyHost;
+    }
+
     private const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -92,14 +101,52 @@ public sealed class AudioProxyService : IAudioProxyService
         => url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
            || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 代理目标 host 白名单（审查 Y5，2026-09-10）：仅放行已支持平台的直链/CDN 域，
+    /// 防止本机网页把代理当读内网/localhost 的中转（开放代理）。
+    /// 域清单与 <see cref="RefererFor"/> 的平台域一致。
+    /// </summary>
+    private static bool IsAllowedProxyHost(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        string host = uri.Host.ToLowerInvariant();
+        return host.EndsWith("music.163.com", StringComparison.Ordinal)
+            || host.EndsWith(".music.126.net", StringComparison.Ordinal) || host.EndsWith("music.126.net", StringComparison.Ordinal)
+            || host.EndsWith(".126.net", StringComparison.Ordinal)
+            || host.EndsWith("qq.com", StringComparison.Ordinal)
+            || host.EndsWith("qqmusic.qq.com", StringComparison.Ordinal)
+            || host.EndsWith("gtimg.cn", StringComparison.Ordinal) || host.EndsWith("gtimg.com", StringComparison.Ordinal)
+            || host.EndsWith("qpic.cn", StringComparison.Ordinal)
+            || host.EndsWith("kugou.com", StringComparison.Ordinal)
+            || host.EndsWith("migu.cn", StringComparison.Ordinal) || host.EndsWith("miguvideo.com", StringComparison.Ordinal);
+    }
+
+    private TaskCompletionSource<int>? _startGate;
+
     /// <inheritdoc />
     public async Task<int> StartAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_started < 0, this);
         if (Interlocked.CompareExchange(ref _started, 1, 0) == 1)
         {
-            return _port; // 幂等：已启动/启动中
+            // 审查 Y4（2026-09-10）：并发首启时胜者尚未赋 _port，直接返回会拿到 0——
+            // 经 TCS 门等待胜者的真实端口
+            TaskCompletionSource<int>? gate = _startGate;
+            if (gate is not null)
+            {
+                return await gate.Task.ConfigureAwait(false);
+            }
+
+            return _port; // 已完全启动
         }
+
+        var startGate = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _startGate = startGate;
 
         try
         {
@@ -122,11 +169,15 @@ public sealed class AudioProxyService : IAudioProxyService
                 .Select(u => new Uri(u).Port)
                 .FirstOrDefault();
             _app = app;
+            _startGate = null;
+            startGate.TrySetResult(_port);
             return _port;
         }
-        catch
+        catch (Exception startEx)
         {
             Interlocked.Exchange(ref _started, 0); // 失败回滚，允许重试
+            _startGate = null;
+            startGate.TrySetException(startEx); // 等待方与胜者同败（审查 Y4）
             throw;
         }
     }
@@ -200,11 +251,12 @@ public sealed class AudioProxyService : IAudioProxyService
         return client;
     }
 
-    private static async Task ProxyAudioAsync(HttpRequest request, HttpResponse response)
+    private async Task ProxyAudioAsync(HttpRequest request, HttpResponse response)
     {
         string? audioUrl = request.Query["url"];
-        if (string.IsNullOrWhiteSpace(audioUrl) || !NeedsProxy(audioUrl))
+        if (string.IsNullOrWhiteSpace(audioUrl) || !NeedsProxy(audioUrl) || !_hostValidator(audioUrl))
         {
+            // 审查 Y5：非白名单域一律拒绝（防开放代理中转内网/localhost）
             response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
@@ -250,10 +302,10 @@ public sealed class AudioProxyService : IAudioProxyService
         }
     }
 
-    private static async Task ProxyCoverAsync(HttpRequest request, HttpResponse response)
+    private async Task ProxyCoverAsync(HttpRequest request, HttpResponse response)
     {
         string? coverUrl = request.Query["url"];
-        if (string.IsNullOrWhiteSpace(coverUrl) || !NeedsProxy(coverUrl))
+        if (string.IsNullOrWhiteSpace(coverUrl) || !NeedsProxy(coverUrl) || !_hostValidator(coverUrl))
         {
             response.StatusCode = StatusCodes.Status400BadRequest;
             return;

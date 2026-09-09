@@ -64,6 +64,27 @@ public sealed class OnlineLoginWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 审查 Y3（2026-09-10）：async void 异常直冲 Dispatcher（WebView2 Runtime 缺席、
+        // 用户在 await 期间关窗都会抛）——async void 必须整体兜底，失败落错误提示并安全关闭
+        try
+        {
+            await InitLoginWebViewAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[Music] 登录窗初始化失败：{ex.Message}");
+            Content = new System.Windows.Controls.TextBlock
+            {
+                Text = "登录组件初始化失败：\n" + ex.Message + "\n\n（请确认已安装 Microsoft Edge WebView2 Runtime）",
+                Margin = new Thickness(16),
+                TextWrapping = TextWrapping.Wrap,
+            };
+            _cookieTcs.TrySetResult(null);
+        }
+    }
+
+    private async Task InitLoginWebViewAsync()
+    {
         (string loginUrl, string cookieUri, string[] targetCookies) = Profile();
         var webView = new Microsoft.Web.WebView2.Wpf.WebView2
         {

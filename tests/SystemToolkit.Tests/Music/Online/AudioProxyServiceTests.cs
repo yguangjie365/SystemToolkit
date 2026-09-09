@@ -10,7 +10,8 @@ namespace SystemToolkit.Tests.Music.Online;
 /// </summary>
 public class AudioProxyServiceTests : IDisposable
 {
-    private readonly AudioProxyService _sut = new();
+    // 测试假上游在 127.0.0.1：注入放行校验器（生产默认走白名单，审查 Y5）
+    private readonly AudioProxyService _sut = new(hostValidator: _ => true);
     private HttpListener? _fakeUpstream;
     private string? _fakeUpstreamPrefix;
     private string? _lastRangeHeader;
