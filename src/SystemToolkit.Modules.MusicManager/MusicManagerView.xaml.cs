@@ -865,6 +865,25 @@ public partial class MusicManagerView : UserControl
             $"[ScrollDiag] idx={_vm.ActiveLyricIndex} offset={sv.VerticalOffset:F1} itemTop={itemTop:F1} " +
             $"target={target:F1} viewport={sv.ViewportHeight:F1} scrollable={sv.ScrollableHeight:F1} " +
             $"itemH={item.ActualHeight:F1} rows={_vm.LyricRows.Count}"));
+
+        // 🔍 空白块排查：视口内可见行清单（索引:y/高）——直接暴露空白位置对应的行数据形态
+        var vis = new System.Text.StringBuilder();
+        for (int i = 0; i < list.Items.Count; i++)
+        {
+            if (list.ItemContainerGenerator.ContainerFromIndex(i) is System.Windows.Controls.ListBoxItem row)
+            {
+                double y = row.TranslatePoint(new System.Windows.Point(0, 0), list).Y;
+                if (y + row.ActualHeight >= 0 && y <= sv.ViewportHeight)
+                {
+                    vis.Append(i).Append(":y=").Append(y.ToString("F0"))
+                       .Append(",h=").Append(row.ActualHeight.ToString("F0")).Append(' ');
+                }
+            }
+        }
+
+        SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Info, "musicmanager", $"[VisRows] {vis}"));
+
         StartSmoothScroll(sv, target);
     }
 
