@@ -1327,59 +1327,6 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
     }
 
-    // ════════════ 评论 ════════════
-
-    /// <summary>获取歌曲评论（fcg_get_comment.fcg，GET 请求）。</summary>
-    public async Task<OnlineCommentPage> LoadCommentsAsync(string songId, int page = 1, string cookie = "", CancellationToken ct = default)
-    {
-        try
-        {
-            string url = $"https://c.y.qq.com/base/fcgi-bin/fcg_get_comment.fcg?cid=205360772&songid={Uri.EscapeDataString(songId)}&pagenum={page - 1}&pagesize=20&g_tk=5381&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0";
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Add("Referer", Referer);
-            req.Headers.Add("User-Agent", HeadersUa);
-            if (!string.IsNullOrEmpty(cookie))
-                req.Headers.Add("Cookie", cookie);
-
-            using HttpResponseMessage resp = await _http.SendAsync(req, ct);
-            string text = await resp.Content.ReadAsStringAsync(ct);
-            JsonElement json = JsonDocument.Parse(ParseJsonp(text)).RootElement;
-
-            JsonElement comment = json.GetElement("comment");
-            int total = comment.GetInt("commenttotal");
-            var comments = new List<OnlineComment>();
-
-            if (comment.TryGetProperty("commentlist", out JsonElement cl) && cl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (JsonElement c in cl.EnumerateArray())
-                {
-                    comments.Add(new OnlineComment
-                    {
-                        UserId = c.GetStr("encrypt_uin", ""),
-                        UserName = c.GetStr("username", c.GetStr("nick", "")),
-                        Avatar = c.GetStr("avatar", c.GetStr("avatarurl", "")),
-                        Content = c.GetStr("middlecommentcontent", c.GetStr("rootcommentcontent", "")),
-                        Timestamp = c.GetLong("time", c.GetLong("createtime", 0)),
-                        LikedCount = c.GetInt("praisenum"),
-                    });
-                }
-            }
-
-            return new OnlineCommentPage
-            {
-                Total = total,
-                Page = page,
-                HasMore = comment.GetInt("hasmore") == 1,
-                Comments = comments,
-            };
-        }
-        catch (Exception e)
-        {
-            _logger.Error("[QQMusic] 获取评论失败", e);
-            return new OnlineCommentPage();
-        }
-    }
-
     // ════════════ 登录 ════════════
 
     /// <summary>获取登录状态（从 Cookie 解析 uin 并尝试拉取用户信息）。</summary>
@@ -1486,51 +1433,6 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         catch (Exception e)
         {
             _logger.Error("[QQMusic] 退出登录失败", e);
-            return false;
-        }
-    }
-
-    // ════════════ 发送评论 ════════════
-
-    /// <summary>发表歌曲评论（fcg_upload_comment_css.fcg，需登录 Cookie）。</summary>
-    public async Task<bool> SendCommentAsync(string songId, string content, string cookie = "", CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(cookie))
-        {
-            _logger.Warn("[QQMusic] 发送评论失败：需要登录");
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(content))
-            return false;
-        try
-        {
-            string qs = string.Join("&",
-                "outCharset=utf-8",
-                "inCharset=utf-8",
-                "needNewCode=0",
-                "platform=yqq.json",
-                "g_tk=5381",
-                "loginUin=" + ExtractUin(cookie),
-                "cid=205360772",
-                "sid=" + Uri.EscapeDataString(songId),
-                "reqtype=1",
-                "content=" + Uri.EscapeDataString(content),
-                "topid=" + Uri.EscapeDataString(songId));
-            string url = $"https://c.y.qq.com/base/fcgi-bin/fcg_upload_comment_css.fcg?{qs}";
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Add("Referer", Referer);
-            req.Headers.Add("User-Agent", HeadersUa);
-            if (!string.IsNullOrEmpty(cookie))
-                req.Headers.Add("Cookie", cookie);
-            using HttpResponseMessage resp = await _http.SendAsync(req, ct);
-            string text = await resp.Content.ReadAsStringAsync(ct);
-            JsonElement json = JsonDocument.Parse(ParseJsonp(text)).RootElement;
-            int code = json.GetInt("code", -1);
-            return code == 0;
-        }
-        catch (Exception e)
-        {
-            _logger.Error("[QQMusic] 发送评论异常", e);
             return false;
         }
     }

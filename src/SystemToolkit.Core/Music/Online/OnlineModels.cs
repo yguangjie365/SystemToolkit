@@ -203,44 +203,6 @@ public sealed record OnlineLyrics
     public string? Yrc { get; init; }
 }
 
-/// <summary>评论分页。</summary>
-public sealed record OnlineCommentPage
-{
-    /// <summary>评论总数。</summary>
-    public int Total { get; init; }
-
-    /// <summary>当前页码。</summary>
-    public int Page { get; init; }
-
-    /// <summary>是否还有下一页。</summary>
-    public bool HasMore { get; init; }
-
-    /// <summary>本页评论（热评在前，平台排序原样）。</summary>
-    public List<OnlineComment> Comments { get; init; } = [];
-}
-
-/// <summary>单条评论。</summary>
-public sealed record OnlineComment
-{
-    /// <summary>评论者用户 ID。</summary>
-    public string? UserId { get; init; }
-
-    /// <summary>评论者昵称。</summary>
-    public string? UserName { get; init; }
-
-    /// <summary>评论者头像 URL。</summary>
-    public string? Avatar { get; init; }
-
-    /// <summary>评论内容。</summary>
-    public string Content { get; init; } = string.Empty;
-
-    /// <summary>评论时间戳（毫秒）。</summary>
-    public long Timestamp { get; init; }
-
-    /// <summary>点赞数。</summary>
-    public int LikedCount { get; init; }
-}
-
 /// <summary>登录信息（单平台）。</summary>
 public sealed record OnlineLoginInfo
 {

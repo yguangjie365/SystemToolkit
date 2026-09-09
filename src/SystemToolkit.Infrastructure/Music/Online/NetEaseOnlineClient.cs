@@ -793,61 +793,6 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
     }
 
-    /// <summary>
-    /// 加载歌曲评论（分页，每页 20 条）。
-    /// 2026-09-04 对齐 NexBox（netease.rs:1246-1308）：该接口要求 WEAPI 签名，明文 GET 拿不到数据。
-    /// </summary>
-    public async Task<OnlineCommentPage> LoadCommentsAsync(string songId, int page = 1, string cookie = "", CancellationToken ct = default)
-    {
-        if (page < 1)
-            page = 1;
-        try
-        {
-            int offset = (page - 1) * 20;
-            JsonElement json = await PostWeapiAsync($"/api/v1/resource/comments/R_SO_4_{songId}",
-                new { rid = songId, offset, limit = 20 }, cookie, ct);
-
-            int total = json.TryGetProperty("total", out JsonElement totalEl) && totalEl.ValueKind == JsonValueKind.Number && totalEl.TryGetInt32(out int totV2) ? totV2 : 0;
-            bool hasMore = json.TryGetProperty("hasMore", out JsonElement hmEl) && hmEl.ValueKind == JsonValueKind.True;
-            JsonElement commentsEl = json.TryGetProperty("comments", out JsonElement ce) && ce.ValueKind == JsonValueKind.Array
-                ? ce : default;
-
-            var list = new List<OnlineComment>();
-            if (commentsEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (JsonElement c in commentsEl.EnumerateArray())
-                {
-                    JsonElement user = c.GetElement("user");
-                    string userId = user.TryGetProperty("userId", out JsonElement uIdEl)
-                        ? (uIdEl.ValueKind == JsonValueKind.Number ? uIdEl.GetInt64().ToString() : uIdEl.GetString() ?? "")
-                        : "";
-                    list.Add(new OnlineComment
-                    {
-                        UserId = userId,
-                        UserName = user.GetStr("nickname", ""),
-                        Avatar = user.GetStr("avatarUrl", ""),
-                        Content = c.GetStr("content", ""),
-                        Timestamp = c.GetLong("time"),
-                        LikedCount = c.GetInt("likedCount"),
-                    });
-                }
-            }
-
-            return new OnlineCommentPage
-            {
-                Total = total,
-                Page = page,
-                HasMore = hasMore,
-                Comments = list,
-            };
-        }
-        catch (Exception e)
-        {
-            _logger.Error("[NetEase] 加载评论失败", e);
-            return new OnlineCommentPage { Page = page };
-        }
-    }
-
     /// <summary>获取登录状态（从 cookie 验证）。</summary>
     /// <summary>
     /// 网易云登录态判定（对照 NexBox login_status，2026-09-03 重写）。
@@ -1603,39 +1548,6 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         catch (Exception e)
         {
             _logger.Error("[NetEase] 退出登录失败", e);
-            return false;
-        }
-    }
-
-    // ════════════ 发送评论 ════════════
-
-    /// <summary>发表歌曲评论（对照 NexBox send_comment → weapi 加密 /v1/resource/comments/add）。</summary>
-    public async Task<bool> SendCommentAsync(string songId, string content, string cookie = "", CancellationToken ct = default)
-    {
-        if (string.IsNullOrEmpty(cookie))
-        {
-            _logger.Warn("[NetEase] 发送评论失败：需要登录");
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(content))
-            return false;
-        try
-        {
-            // 2026-09-04 对齐 NexBox（netease.rs:1290-1308）：WEAPI /api/resource/comments/add（threadId/content）
-            JsonElement json = await PostWeapiAsync("/api/resource/comments/add",
-                new { threadId = $"R_SO_4_{songId}", content }, cookie, ct);
-            int code = json.GetInt("code", -1);
-            if (code == 200 || code == 0)
-            {
-                _logger.Info($"[NetEase] 评论发送成功: song={songId}");
-                return true;
-            }
-            _logger.Warn($"[NetEase] 评论发送失败: code={code} song={songId}");
-            return false;
-        }
-        catch (Exception e)
-        {
-            _logger.Error("[NetEase] 发送评论异常", e);
             return false;
         }
     }
