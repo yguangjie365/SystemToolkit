@@ -154,7 +154,6 @@ public partial class MusicManagerViewModel : ObservableObject
         // 一律经 RunOnUi 编组后再碰 ObservableCollection / 触发绑定刷新
         _queue.QueueChanged += () => RunOnUi(RebuildUpNext);
         _queue.CurrentChanged += () => RunOnUi(OnQueueCurrentChanged);
-        InitEqBands(); // OM-7：10 段滑条行（构造期一次；不依赖任何异步初始化）
 
         // 引擎事件在 InitializeAsync 里解析引擎后接线（引擎实现可能晚于本模块合入）
     }
@@ -346,6 +345,15 @@ public partial class MusicManagerViewModel : ObservableObject
 
     private double _progressValue;
     public double ProgressValue { get => _progressValue; private set => SetProperty(ref _progressValue, value); }
+
+    private double _lyricProgress;
+
+    /// <summary>当前歌词行内进度 0–1（反馈 4：卡拉OK渐变填充按行推进；无歌词/间奏为 0）。</summary>
+    public double LyricProgress
+    {
+        get => _lyricProgress;
+        private set => SetProperty(ref _lyricProgress, value);
+    }
 
     private string _modeText = "列表循环";
     public string ModeText { get => _modeText; private set => SetProperty(ref _modeText, value); }
@@ -595,8 +603,6 @@ public partial class MusicManagerViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(IsEngineReady));
-        // OM-7：EQ 可选能力探测（引擎不支持时 EQ UI 禁用——与引擎可选同一隔离哲学）
-        IsEqAvailable = engine is IEqualizerEngine;
         // 🔴 全部经 RunOnUi 编组：引擎事件可能在 NAudio 回调/Timer 线程触发，
         // 处理器会改 ObservableCollection（LyricRows/UpNext）与触发绑定刷新
         engine.StateChanged += (state, song) => RunOnUi(() => OnEngineStateChanged(state, song));
@@ -704,6 +710,22 @@ public partial class MusicManagerViewModel : ObservableObject
         if (_lyricLineSource.Count > 0)
         {
             ActiveLyricIndex = LyricParser.CalcActiveIndex(_lyricLineSource, position.TotalSeconds);
+
+            // 卡拉OK行内进度（反馈 4）：行 Time→Time+Duration 线性推进
+            if (ActiveLyricIndex >= 0 && ActiveLyricIndex < _lyricLineSource.Count)
+            {
+                LyricLine line = _lyricLineSource[ActiveLyricIndex];
+                double span = line.Duration > 0.05 ? line.Duration : 4.0;
+                LyricProgress = Math.Clamp((position.TotalSeconds - line.Time) / span, 0, 1);
+            }
+            else
+            {
+                LyricProgress = 0;
+            }
+        }
+        else if (LyricProgress != 0)
+        {
+            LyricProgress = 0;
         }
     }
 

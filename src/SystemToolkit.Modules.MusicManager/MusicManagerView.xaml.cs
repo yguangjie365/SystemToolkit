@@ -150,11 +150,25 @@ public partial class MusicManagerView : UserControl
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
 
-    /// <summary>队列按钮（图3 对齐）：弹出 Up Next 面板（Up Next 已从右卡移除）。</summary>
+    /// <summary>
+    /// 队列按钮按下（反馈2）：弹层开着时先关掉并吞掉事件——
+    /// StaysOpen=False 会在鼠标按下阶段关闭弹层，若只靠 Click 切换会"关了又开"永远关不上。
+    /// </summary>
+    private void OnQueueButtonPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (QueuePopup is { IsOpen: true })
+        {
+            QueuePopup.IsOpen = false;
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>队列按钮（主栏/播放器共用）：弹 Up Next 面板（锚定到实际按下的按钮）。</summary>
     private void OnQueueButtonClick(object sender, RoutedEventArgs e)
     {
-        if (QueuePopup is not null)
+        if (QueuePopup is not null && sender is System.Windows.UIElement target)
         {
+            QueuePopup.PlacementTarget = target;
             QueuePopup.IsOpen = true;
         }
     }
@@ -170,17 +184,31 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    /// <summary>
-    /// 音质按钮左键弹出菜单（2026-09-09 修复"点击无反应"）：
-    /// ContextMenu 默认只响应右键，左键需代码显式打开；Placement 锚定按钮底部。
-    /// </summary>
-    private void OnQualityMenuButtonClick(object sender, RoutedEventArgs e)
+    /// <summary>音质按钮左键（主栏/播放器共用）：弹音质菜单（锚定到实际按下的按钮）。</summary>
+    private void OnQualityButtonClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { ContextMenu: { } menu } button)
+        if (QualityPopup is not null && sender is System.Windows.UIElement target)
         {
-            menu.PlacementTarget = button;
-            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-            menu.IsOpen = true;
+            QualityPopup.PlacementTarget = target;
+            QualityPopup.IsOpen = true;
+        }
+    }
+
+    /// <summary>音质按钮右键（反馈2/3：右键也要能切换）。</summary>
+    private void OnQualityButtonRightClick(object sender, MouseButtonEventArgs e)
+        => OnQualityButtonClick(sender, e);
+
+    /// <summary>音质菜单点选：执行切换并收起（Popup 在独立可视树，命令走 VM、关闭走本地）。</summary>
+    private void OnQualityOptionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button { Tag: string key })
+        {
+            _vm.SetQualityCommand.Execute(key);
+        }
+
+        if (QualityPopup is not null)
+        {
+            QualityPopup.IsOpen = false;
         }
     }
 
@@ -307,6 +335,13 @@ public partial class MusicManagerView : UserControl
         if (e.PropertyName == nameof(MusicManagerViewModel.IsImmersionStyle))
         {
             UpdateRippleFieldActive();
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.LyricProgress)
+            || e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
+            || e.PropertyName == nameof(MusicManagerViewModel.PlayerAccentBrush))
+        {
+            UpdateKaraokeFill();
         }
 
         if (e.PropertyName == nameof(MusicManagerViewModel.IsVinylStyle) && _vm.IsVinylStyle)
@@ -577,5 +612,93 @@ public partial class MusicManagerView : UserControl
         System.Windows.Media.Animation.Storyboard.SetTargetProperty(enter, new System.Windows.PropertyPath(path));
         storyboard.Children.Add(enter);
         storyboard.Begin(ImmersionLyricText, true);
+    }
+
+    // ════════ 卡拉OK渐变填充（反馈4：当前行按行内进度左→右点亮；行级近似，无逐字时间轴） ════════
+
+    private System.Windows.Controls.TextBlock? _karaokeVinylBlock;
+    private System.Windows.Controls.TextBlock? _karaokeModernBlock;
+
+    /// <summary>按 LyricProgress 刷新两处歌词列表当前行的渐变填充；进度归零/无行时还原。</summary>
+    private void UpdateKaraokeFill()
+    {
+        ResetKaraokeRow(ref _karaokeVinylBlock);
+        ResetKaraokeRow(ref _karaokeModernBlock);
+
+        if (_vm.LyricProgress <= 0 || _vm.ActiveLyricIndex < 0)
+        {
+            return;
+        }
+
+        ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock);
+        ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock);
+    }
+
+    private static void ResetKaraokeRow(ref System.Windows.Controls.TextBlock? block)
+    {
+        if (block is not null)
+        {
+            block.Foreground = null; // 清本地值 → 样式（静音色/高亮触发器）恢复生效
+            block = null;
+        }
+    }
+
+    private void ApplyKaraokeToRow(System.Windows.Controls.ListBox? list, ref System.Windows.Controls.TextBlock? tracked)
+    {
+        if (list is null
+            || _vm.ActiveLyricIndex < 0
+            || list.ItemContainerGenerator.ContainerFromIndex(_vm.ActiveLyricIndex) is not System.Windows.Controls.ListBoxItem container)
+        {
+            return; // 虚拟化未实现该行：跳过本帧（滚动到位后由下一次进度刷新接管）
+        }
+
+        if (FindFirstTextBlock(container) is not { } text)
+        {
+            return;
+        }
+
+        Brush? baseBrush = text.Foreground; // 本地值未设 → 样式静音色
+        if (_vm.PlayerAccentBrush is not SolidColorBrush accent
+            || baseBrush is not SolidColorBrush muted)
+        {
+            return;
+        }
+
+        double p = Math.Clamp(_vm.LyricProgress, 0, 1);
+        var fill = new LinearGradientBrush
+        {
+            StartPoint = new System.Windows.Point(0, 0.5),
+            EndPoint = new System.Windows.Point(1, 0.5),
+        };
+        fill.GradientStops.Add(new GradientStop(accent.Color, 0.0));
+        fill.GradientStops.Add(new GradientStop(accent.Color, p));
+        fill.GradientStops.Add(new GradientStop(muted.Color, Math.Min(1.0, p + 0.001)));
+        fill.GradientStops.Add(new GradientStop(muted.Color, 1.0));
+        fill.Freeze();
+        text.Foreground = fill;
+        tracked = text;
+    }
+
+    private static System.Windows.Controls.TextBlock? FindFirstTextBlock(System.Windows.Media.Visual root)
+    {
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            if (System.Windows.Media.VisualTreeHelper.GetChild(root, i) is not System.Windows.Media.Visual child)
+            {
+                continue;
+            }
+
+            if (child is System.Windows.Controls.TextBlock tb)
+            {
+                return tb;
+            }
+
+            if (FindFirstTextBlock(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }

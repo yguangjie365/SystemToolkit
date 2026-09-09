@@ -600,15 +600,6 @@ public class ViewLoadSmokeGuardTests
                     view.UpdateLayout();
                 }
 
-                stage = "eq panel open + preset + slider refresh";
-                vm.ToggleEqPanelCommand.Execute(null); // 弹出 EQ 面板（模板求值）
-                vm.ApplyEqPresetCommand.Execute("流行"); // 预设 → 滑条 RefreshFrom + 高亮
-                vm.EqBands[0].Gain = 3; // 手动拖动 → 清预设高亮 + 热更
-                view.Measure(new Size(1600, 900));
-                view.Arrange(new Rect(0, 0, 1600, 900));
-                view.UpdateLayout();
-                vm.ToggleEqPanelCommand.Execute(null); // 收起
-
                 stage = "done";
             }
             catch (Exception ex)

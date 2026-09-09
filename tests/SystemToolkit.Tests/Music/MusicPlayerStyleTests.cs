@@ -114,67 +114,6 @@ public class MusicPlayerStyleTests
 
     // ════════ 风格状态机 ════════
 
-    /// <summary>支持 EQ 的假引擎：记录每次 ApplyEqualizer 收到的快照。</summary>
-    private sealed class FakeEqEngine : FakePlaybackEngine, IEqualizerEngine
-    {
-        public List<(bool Enabled, double Preamp, double[] Gains)> Applied { get; } = [];
-
-        public void ApplyEqualizer(EqProfile profile) =>
-            Applied.Add((profile.Enabled, profile.PreampDb, profile.GainsCopy()));
-    }
-
-    [Fact]
-    public void EqAvailability_False_WhenEngineLacksCapability()
-    {
-        MusicManagerViewModel vm = CreateVm(new FakePlaybackEngine());
-
-        Assert.False(vm.IsEqAvailable);
-        vm.ToggleEqCommand.Execute(null); // 不炸：ApplyEqToEngine 静默（UI 已禁用兜底）
-    }
-
-    [Fact]
-    public async Task ToggleEq_AppliesProfileToCapableEngine()
-    {
-        var engine = new FakeEqEngine();
-        MusicManagerViewModel vm = CreateVm(engine);
-
-        await WaitUntilAsync(() => vm.IsEqAvailable); // WireEngineOnce 异步挂 IsEqAvailable? 同步 WireEngineOnce 由 InitializeAsync 调——测试直接调 Toggle 前需接线
-        vm.ToggleEqCommand.Execute(null);
-
-        Assert.True(vm.Eq.Enabled);
-        (bool enabled, _, double[] gains) = engine.Applied.Single();
-        Assert.True(enabled);
-        Assert.All(gains, g => Assert.Equal(0, g));
-    }
-
-    [Fact]
-    public async Task ApplyEqPreset_SyncsBandSlidersAndEngine()
-    {
-        var engine = new FakeEqEngine();
-        MusicManagerViewModel vm = CreateVm(engine);
-        await WaitUntilAsync(() => vm.IsEqAvailable);
-
-        vm.ApplyEqPresetCommand.Execute("重低音");
-
-        (_, _, double[] gains) = engine.Applied.Single();
-        Assert.Equal(8.0, gains[0]); // 重低音首段 +8（2026-09-09 预设整体增强约一倍）
-        Assert.Equal(8.0, vm.EqBands[0].Gain); // 滑条同步
-        Assert.Equal(0.0, vm.EqBands[9].Gain);
-        Assert.Contains("重低音", vm.ScanStatusText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void EqBandGain_Setter_ClampsAndApplies()
-    {
-        var engine = new FakeEqEngine();
-        MusicManagerViewModel vm = CreateVm(engine);
-
-        vm.EqBands[2].Gain = 99;
-
-        Assert.Equal(EqProfile.MaxGainDb, vm.EqBands[2].Gain);
-        Assert.Equal(EqProfile.MaxGainDb, vm.Eq[2]);
-    }
-
     [Fact]
     public void PlayerStyle_DefaultsToVinyl()
     {

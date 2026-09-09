@@ -79,7 +79,7 @@ public static class CoverColorFactory
     }
 
     /// <summary>沉浸页背景（对照 immersiveBgGradient）：色板匹配色 90° 三段（深 0% → 本色 50% → 浅 100%）。</summary>
-    public static Brush ImmersionBackgroundGradient(SolidColorBrush accent)
+    public static (Color Base, Brush Gradient) ImmersionBackgroundGradient(SolidColorBrush accent)
     {
         (SolidColorBrush baseBrush, SolidColorBrush deep, SolidColorBrush light) = ImmersiveVivid(accent);
         var brush = new LinearGradientBrush
@@ -91,7 +91,24 @@ public static class CoverColorFactory
         brush.GradientStops.Add(new GradientStop(baseBrush.Color, 0.5));
         brush.GradientStops.Add(new GradientStop(light.Color, 1.0));
         brush.Freeze();
-        return brush;
+        return (baseBrush.Color, brush);
+    }
+
+    /// <summary>沉浸基色默认值（封面未装载前的中性深蓝；Color.FromRgb 唯一收敛点纪律）。</summary>
+    public static Color ImmersionDefaultVivid { get; } = Color.FromRgb(0x30, 0x36, 0x79);
+
+    /// <summary>高亮色·深档（亮底用：封面主色 HSL 亮度 −0.18，保持可读）。</summary>
+    public static SolidColorBrush AccentDeep(SolidColorBrush accent)
+    {
+        PaletteMath.Rgb rgb = PaletteMath.ShiftLightness(accent.Color.R, accent.Color.G, accent.Color.B, -0.18);
+        return FromRgb(rgb.R, rgb.G, rgb.B);
+    }
+
+    /// <summary>高亮色·浅档（深底用：主色 HSL 亮度 +0.35）。</summary>
+    public static SolidColorBrush AccentLight(Color accent)
+    {
+        PaletteMath.Rgb rgb = PaletteMath.ShiftLightness(accent.R, accent.G, accent.B, 0.35);
+        return FromRgb(rgb.R, rgb.G, rgb.B);
     }
 
     /// <summary>现代页背景（对照 modernBgGradient）：封面原色 135°，0–40% 平铺、100% 压暗 ×0.25。</summary>

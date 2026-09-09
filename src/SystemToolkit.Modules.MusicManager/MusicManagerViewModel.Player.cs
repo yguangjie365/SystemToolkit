@@ -66,6 +66,35 @@ public partial class MusicManagerViewModel
     };
 
     /// <summary>顶栏切换播放器风格（参数 Vinyl/Immersion/Modern）。</summary>
+    private double _lyricFontSize = 17;
+
+    /// <summary>歌词字号（反馈 4：三档可调；歌词列表/沉浸大字共用）。</summary>
+    public double LyricFontSize
+    {
+        get => _lyricFontSize;
+        private set => SetProperty(ref _lyricFontSize, value);
+    }
+
+    /// <summary>字号按钮文案（A 小/中/大）。</summary>
+    public string LyricFontScaleText => _lyricFontSize switch
+    {
+        15 => "A 小",
+        21 => "A 大",
+        _ => "A 中",
+    };
+
+    [RelayCommand]
+    private void CycleLyricFont()
+    {
+        LyricFontSize = _lyricFontSize switch
+        {
+            15 => 17,
+            17 => 21,
+            _ => 15,
+        };
+        OnPropertyChanged(nameof(LyricFontScaleText));
+    }
+
     [RelayCommand]
     private void SwitchPlayerStyle(string? style)
     {
@@ -152,8 +181,22 @@ public partial class MusicManagerViewModel
         private set => SetProperty(ref _vinylAccentBrush, value);
     }
 
+    private Color _immersionVividColor = CoverColorFactory.ImmersionDefaultVivid;
+
     /// <summary>沉浸水波基色（色板匹配本色；深/浅波环由其 HSL 派生）。</summary>
-    public Color ImmersionVividColor => ((SolidColorBrush)ImmersionBackgroundBrush).Color;
+    public Color ImmersionVividColor => _immersionVividColor;
+
+    private Brush _playerAccentBrush = ThemeBrush.Find("Brush_Accent", "#0F766E");
+
+    /// <summary>
+    /// 播放器高亮色（反馈 4：按钮/歌词当前行从专辑封面取色）——
+    /// 彩胶=胶片主色；现代=封面主色加深（亮底可读）；沉浸=色板色提亮（深底可读）。
+    /// </summary>
+    public Brush PlayerAccentBrush
+    {
+        get => _playerAccentBrush;
+        private set => SetProperty(ref _playerAccentBrush, value);
+    }
 
     private Brush _playerForegroundBrush = ThemeBrush.Find("Brush_TextPrimary", "#1F1F1F");
 
@@ -183,6 +226,7 @@ public partial class MusicManagerViewModel
                 // 55% 静音色：冻结刷不可改 Opacity（实测设置即抛只读异常），alpha 建在色里
                 PlayerForegroundBrush = CoverColorFactory.FromRgb(0x33, 0x33, 0x38);
                 PlayerMutedBrush = CoverColorFactory.FromRgbWithOpacity(0x33, 0x33, 0x38, 0.55);
+                PlayerAccentBrush = VinylAccentBrush;
                 break;
             case PlayerStyleKind.Modern:
                 bool light = CoverColorFactory.IsLight(CurrentAccentBrush);
@@ -192,10 +236,12 @@ public partial class MusicManagerViewModel
                 PlayerMutedBrush = light
                     ? CoverColorFactory.FromRgb(0x4A, 0x4A, 0x5E)
                     : CoverColorFactory.FromRgb(0xB0, 0xB0, 0xB0);
+                PlayerAccentBrush = CoverColorFactory.AccentDeep(CurrentAccentBrush);
                 break;
             default: // 沉浸（深底恒浅字）
                 PlayerForegroundBrush = ThemeBrush.Find("Brush_OnDark", "#F5F5F4");
                 PlayerMutedBrush = ThemeBrush.Find("Brush_OnDarkMuted", "#A8A29E");
+                PlayerAccentBrush = CoverColorFactory.AccentLight(_immersionVividColor);
                 break;
         }
     }
@@ -238,7 +284,8 @@ public partial class MusicManagerViewModel
             CurrentAccentBrush = accent;
 
             // NexBox 复刻：三风格背景渐变 + 彩胶主色（HSV 钳制）
-            ImmersionBackgroundBrush = CoverColorFactory.ImmersionBackgroundGradient(accent);
+            (_immersionVividColor, ImmersionBackgroundBrush) =
+                CoverColorFactory.ImmersionBackgroundGradient(accent);
             ModernBackgroundBrush = CoverColorFactory.ModernBackgroundGradient(accent);
             VinylAccentBrush = CoverColorFactory.VinylAccent(accent);
             RefreshPlayerChromeBrushes();
@@ -387,207 +434,5 @@ public partial class MusicManagerViewModel
             ScanStatusText = $"已切换音质：{SelectedQualityText}，正在重新获取…";
             await PlayCurrentCoreAsync(engine);
         }
-    }
-
-    // ════════ 播放器内 EQ（OM-7） ════════
-
-    /// <summary>EQ 用户配置（开关/preamp/10 段增益；钳制在模型内完成）。</summary>
-    public EqProfile Eq { get; } = EqProfile.Flat();
-
-    private bool _isEqAvailable;
-
-    /// <summary>当前引擎是否支持 EQ（可选能力接口探测；不支持时 EQ UI 禁用并提示）。</summary>
-    public bool IsEqAvailable
-    {
-        get => _isEqAvailable;
-        private set => SetProperty(ref _isEqAvailable, value);
-    }
-
-    private bool _isEqPanelOpen;
-
-    /// <summary>EQ 面板是否展开（完整播放器内弹出卡片）。</summary>
-    public bool IsEqPanelOpen
-    {
-        get => _isEqPanelOpen;
-        private set => SetProperty(ref _isEqPanelOpen, value);
-    }
-
-    /// <summary>顶栏「EQ」钮：弹出/收起面板。</summary>
-    [RelayCommand]
-    private void ToggleEqPanel() => IsEqPanelOpen = !IsEqPanelOpen;
-
-    private string _currentPresetName = string.Empty;
-
-    /// <summary>当前命中的预设名（手动拖滑条后清空 = 自定义态；按钮高亮据此）。</summary>
-    public string CurrentPresetName
-    {
-        get => _currentPresetName;
-        private set => SetProperty(ref _currentPresetName, value);
-    }
-
-    private string _eqStateText = "均衡器 · 关";
-
-    /// <summary>开关钮文案（随 Eq.Enabled 同步）。</summary>
-    public string EqStateText
-    {
-        get => _eqStateText;
-        private set => SetProperty(ref _eqStateText, value);
-    }
-
-    /// <summary>前置增益（dB，UI 双向；变更即热更）。</summary>
-    public double PreampDb
-    {
-        get => Eq.PreampDb;
-        set
-        {
-            double clamped = Math.Clamp(value, -EqProfile.MaxGainDb, EqProfile.MaxGainDb);
-            if (Eq.PreampDb != clamped)
-            {
-                Eq.PreampDb = clamped;
-                OnPropertyChanged();
-                ClearPresetHighlight();
-                ApplyEqToEngine();
-            }
-        }
-    }
-
-    /// <summary>手动调滑条 → 预设高亮清除（自定义态）。</summary>
-    private void ClearPresetHighlight() => CurrentPresetName = string.Empty;
-
-    /// <summary>EQ 滑条行（10 段；Gain 双向绑滑条，变更即热更引擎）。</summary>
-    public sealed class EqBandVm : ObservableObject
-    {
-        public int Index { get; }
-        public int Frequency { get; }
-
-        private readonly MusicManagerViewModel _owner;
-
-        public EqBandVm(MusicManagerViewModel owner, int index)
-        {
-            _owner = owner;
-            Index = index;
-            Frequency = EqProfile.Frequencies[index];
-        }
-
-        /// <summary>频段标签（Hz/kHz 自适应）。</summary>
-        public string Label => Frequency >= 1000 ? $"{Frequency / 1000.0:0.#}k" : $"{Frequency}";
-
-        private double _gain;
-
-        /// <summary>当前段增益（dB）。</summary>
-        public double Gain
-        {
-            get => _gain;
-            set
-            {
-                double clamped = Math.Clamp(value, -EqProfile.MaxGainDb, EqProfile.MaxGainDb);
-                if (SetProperty(ref _gain, clamped))
-                {
-                    OnPropertyChanged(nameof(GainText));
-                    _owner.Eq[Index] = clamped;
-                    _owner.ClearPresetHighlight();
-                    _owner.ApplyEqToEngine();
-                }
-            }
-        }
-
-        /// <summary>滑条下方 dB 值读数（+n / -n / 0）。</summary>
-        public string GainText => _gain == 0 ? "0" : _gain > 0 ? $"+{_gain:0.#}" : $"{_gain:0.#}";
-
-        /// <summary>重置显示值（预设应用/重置后同步滑条）。</summary>
-        internal void RefreshFrom(double gain)
-        {
-            if (SetProperty(ref _gain, gain))
-            {
-                OnPropertyChanged(nameof(GainText));
-            }
-        }
-    }
-
-    private readonly ObservableCollection<EqBandVm> _eqBands = [];
-
-    /// <summary>10 段滑条行（构造期初始化；滑条双向绑 Gain，变更即热更引擎）。</summary>
-    public IReadOnlyList<EqBandVm> EqBands => _eqBands;
-
-    private void InitEqBands()
-    {
-        if (_eqBands.Count > 0)
-        {
-            return;
-        }
-
-        foreach (int i in Enumerable.Range(0, EqProfile.BandCount))
-        {
-            _eqBands.Add(new EqBandVm(this, i));
-        }
-    }
-
-    /// <summary>把当前 <see cref="Eq"/> 推给引擎（引擎不支持时静默——UI 已按 IsEqAvailable 禁用）。</summary>
-    private void ApplyEqToEngine()
-    {
-        if (ResolveEngine() is IEqualizerEngine eqEngine)
-        {
-            try
-            {
-                eqEngine.ApplyEqualizer(Eq);
-            }
-            catch (Exception ex)
-            {
-                // 🔴 AsyncRelayCommand 吞异常已知坑的同步版——就地显式化
-                ScanStatusText = $"EQ 应用失败：{ex.Message}";
-                _log.Warn($"[Music] EQ 应用失败：{ex.Message}");
-            }
-        }
-    }
-
-    /// <summary>开关 EQ（开/关切换由引擎重建音频图，保持播放位置）。</summary>
-    [RelayCommand]
-    private void ToggleEq()
-    {
-        Eq.Enabled = !Eq.Enabled;
-        EqStateText = Eq.Enabled ? "均衡器 · 开" : "均衡器 · 关";
-        ApplyEqToEngine();
-        ScanStatusText = Eq.Enabled ? "均衡器已开启" : "均衡器已关闭";
-    }
-
-    /// <summary>应用内置预设（参数 = 预设名；未知名忽略）。</summary>
-    [RelayCommand]
-    private void ApplyEqPreset(string? name)
-    {
-        EqProfile.EqPreset? preset = EqProfile.FindPreset(name ?? string.Empty);
-        if (preset is null)
-        {
-            return;
-        }
-
-        Eq.Enabled = true;
-        Eq.PreampDb = preset.Preamp;
-        for (int i = 0; i < EqProfile.BandCount; i++)
-        {
-            Eq[i] = preset.Gains[i];
-            EqBands[i].RefreshFrom(Eq[i]); // 同步滑条显示
-        }
-
-        CurrentPresetName = preset.Name;
-        OnPropertyChanged(nameof(PreampDb)); // 滑条同步
-        ApplyEqToEngine();
-        ScanStatusText = $"已应用预设：{preset.Name}";
-    }
-
-    /// <summary>全部归零（保持开启）。</summary>
-    [RelayCommand]
-    private void ResetEq()
-    {
-        Eq.PreampDb = 0;
-        for (int i = 0; i < EqProfile.BandCount; i++)
-        {
-            Eq[i] = 0;
-            EqBands[i].RefreshFrom(0);
-        }
-
-        ClearPresetHighlight();
-        OnPropertyChanged(nameof(PreampDb));
-        ApplyEqToEngine();
-        ScanStatusText = "均衡器已归零";
     }
 }
