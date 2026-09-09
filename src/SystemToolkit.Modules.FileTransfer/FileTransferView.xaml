@@ -428,6 +428,7 @@
                             <TextBlock Text="{Binding Mobile.UrlText}" Style="{StaticResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
                             <Button Style="{StaticResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
                                     Content="打开网页" Click="OnOpenWebPage"
+                                    ToolTip="需先启动手机通道 Web 服务" ToolTipService.ShowOnDisabled="True"
                                     IsEnabled="{Binding Mobile.IsWebRunning}"/>
                         </StackPanel>
                     </Border>

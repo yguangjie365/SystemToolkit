@@ -61,7 +61,7 @@ public static class DriverBackupOrganizer
                 MaxNameLength);
             if (!string.IsNullOrWhiteSpace(pkg.Version))
             {
-                baseName += $"_{pkg.Version}";
+                baseName += $"_{Sanitize(pkg.Version, 40)}"; // 审查 Y10：Version 也须消毒，防分隔符/../越界
             }
 
             string groupDir = Path.Combine(driversRoot, category);

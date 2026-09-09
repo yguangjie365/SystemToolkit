@@ -55,7 +55,8 @@
                         <!-- 模块项：图标 + 文字（间距 7px，审计建议收紧） -->
                         <DataTemplate DataType="{x:Type local:NavItem}">
                             <StackPanel Orientation="Horizontal" Height="34"
-                                        HorizontalAlignment="Center">
+                                        HorizontalAlignment="Center"
+                                        AutomationProperties.Name="{Binding DisplayName}">
                                 <!-- 矢量图标优先（Icons.xaml）：不依赖系统字体；缺失时回退字形。
                                      ⚠️ 默认可见性必须写在 Style 的 Setter 里——
                                      直接写属性（本地值）优先级高于触发器，触发器会失效 -->

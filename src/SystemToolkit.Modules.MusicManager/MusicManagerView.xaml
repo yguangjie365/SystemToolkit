@@ -999,6 +999,7 @@
                 <Button HorizontalAlignment="Left" Margin="20,14,0,0"
                         Width="40" Height="40" Padding="0"
                         Background="Transparent" BorderThickness="0"
+                        AutomationProperties.Name="收起播放器"
                         Command="{Binding CloseFullPlayerCommand}" ToolTip="收起播放器">
                     <Path Data="M7,10 L13,16 L19,10" StrokeLineJoin="Round"
                           Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="2"/>

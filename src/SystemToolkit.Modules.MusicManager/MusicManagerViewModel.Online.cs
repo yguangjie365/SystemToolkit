@@ -731,18 +731,27 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        OnlineLoginInfo netEase = await _catalog.GetLoginStatusAsync(OnlineProvider.NetEase);
-        NetEaseLoginText = netEase.LoggedIn ? $"已登录 · {netEase.Nickname}" : "未登录";
-        if (!netEase.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
+        try
         {
-            NetEaseLoginText = "检测失败";
-        }
+            OnlineLoginInfo netEase = await _catalog.GetLoginStatusAsync(OnlineProvider.NetEase);
+            NetEaseLoginText = netEase.LoggedIn ? $"已登录 · {netEase.Nickname}" : "未登录";
+            if (!netEase.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
+            {
+                NetEaseLoginText = "检测失败";
+            }
 
-        OnlineLoginInfo qq = await _catalog.GetLoginStatusAsync(OnlineProvider.QQMusic);
-        QqLoginText = qq.LoggedIn ? $"已登录 · {qq.Nickname}" : "未登录";
-        if (!qq.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
+            OnlineLoginInfo qq = await _catalog.GetLoginStatusAsync(OnlineProvider.QQMusic);
+            QqLoginText = qq.LoggedIn ? $"已登录 · {qq.Nickname}" : "未登录";
+            if (!qq.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
+            {
+                QqLoginText = "检测失败";
+            }
+        }
+        catch (Exception ex)
         {
-            QqLoginText = "检测失败";
+            // 审查 Y13（2026-09-10）：命令直调，异常必须落用户可见处（AsyncRelayCommand 会吞）
+            OnlineStatusText = "登录状态刷新失败：" + ex.Message;
+            _log.Error("[Music] 登录状态刷新异常", ex);
         }
     }
 }
