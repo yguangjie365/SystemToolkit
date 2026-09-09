@@ -86,7 +86,8 @@ public partial class FileBackupViewModel
 
         // 🔴 2026-09-08 修复：ReadSnapshot 的参数是「快照目录路径」，此前误传 SnapshotId
         // → manifest 永远找不到 → throw 被 AsyncRelayCommand 吞掉 → 点击无任何反应
-        SnapshotInfo? info = manager.ReadSnapshot(snapDir);
+        // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化不应占 UI 线程
+        SnapshotInfo? info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
         if (info is null)
         {
             Log("[校验] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");
@@ -109,9 +110,9 @@ public partial class FileBackupViewModel
                 Log("[校验]   ✗ " + failure);
             }
 
-            // 结果写回快照状态（原子写），列表徽章随之更新
+            // 结果写回快照状态（原子写），列表徽章随之更新。审查 O16：序列化+落盘移出 UI 线程
             info.ChecksumStatus = report.Success ? ChecksumStatuses.Passed : ChecksumStatuses.Failed;
-            manager.WriteSnapshot(snapDir, info);
+            await Task.Run(() => manager.WriteSnapshot(snapDir, info)).ConfigureAwait(true);
             ReloadSnapshots();
         }
         catch (OperationCanceledException)
@@ -151,7 +152,8 @@ public partial class FileBackupViewModel
             return;
         }
 
-        SnapshotInfo? info = manager.ReadSnapshot(snapDir);
+        // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化移出 UI 线程
+        SnapshotInfo? info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
         if (info is null)
         {
             Log("[恢复] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");

@@ -183,15 +183,17 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
     }
 
     /// <inheritdoc cref="INetworkSnapshotService.DeleteAsync"/>
-    public Task DeleteAsync(string id, CancellationToken ct = default)
+    public async Task DeleteAsync(string id, CancellationToken ct = default)
     {
-        string? path = FindFileById(id);
-        if (path is not null && File.Exists(path))
+        // 审查 O16（2026-09-10）：快照目录扫描 + 文件删除移出调用线程（原非 async 方法被 await 不切线程）
+        await Task.Run(() =>
         {
-            File.Delete(path);
-        }
-
-        return Task.CompletedTask;
+            string? path = FindFileById(id);
+            if (path is not null && File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc cref="INetworkSnapshotService.RestoreAsync"/>

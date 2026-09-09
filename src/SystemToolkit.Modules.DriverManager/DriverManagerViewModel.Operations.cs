@@ -148,7 +148,8 @@ public partial class DriverManagerViewModel
             return;
         }
 
-        List<string> infs = Directory.GetFiles(folder, "*.inf", SearchOption.AllDirectories).ToList();
+        // 审查 O16（2026-09-10）：递归枚举 .inf 是 O(files) 系统调用，移出 UI 线程
+        List<string> infs = await Task.Run(() => Directory.GetFiles(folder, "*.inf", SearchOption.AllDirectories).ToList()).ConfigureAwait(true);
         if (infs.Count == 0)
         {
             AddLog($"{actionName}未启动：所选目录（含子目录）未找到任何 .inf 文件——{folder}");

@@ -172,18 +172,19 @@ public partial class AppManagerViewModel : ObservableObject
     private void RecountSelection() =>
         SelectedCount = StorePackages.Count(p => p.IsSelected) + ThirdPartyPackages.Count(p => p.IsSelected);
 
-    public Task LoadAsync()
+    public async Task LoadAsync()
     {
         if (_initialized)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         // 审查 2026-09-04（P1-4）：Load 抛异常（配置目录不可写等）不能把本页打成永久空白
+        // 审查 O16（2026-09-10）：_env.Load() 读盘移出 UI 线程
         EnvCatalog catalog;
         try
         {
-            catalog = _env.Load();
+            catalog = await Task.Run(() => _env.Load()).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -222,7 +223,6 @@ public partial class AppManagerViewModel : ObservableObject
         RebuildViews();
         RebuildArchives();
         AddLog($"已加载软件清单：{StorePackages.Count} 个商店应用，{ManualSoftwares.Count + ThirdPartyPackages.Count} 个第三方应用");
-        return Task.CompletedTask;
     }
 
     private void RebuildViews()
