@@ -1118,6 +1118,27 @@ public partial class MusicManagerViewModel : ObservableObject
         _waitingForNewSong = true;
         _lastPosBeforeReload = ResolveEngine()?.Position.TotalSeconds ?? 0;
         LyricsVersion++; // 通知 View：列表滚回顶部 + 取消进行中的滚动动画
+        DumpLyricRows(); // 🔍 空白块排查：行级内容 dump（索引:长度'文本前缀'），对照截图空白位置的数据形态
+    }
+
+    /// <summary>歌词行内容一次性 dump（空白块排查用：确认空白位置对应的行是否存在/是否不可见文本）。</summary>
+    private void DumpLyricRows()
+    {
+        if (_lyricRows.Count == 0)
+        {
+            return;
+        }
+
+        var dump = new System.Text.StringBuilder("[LyricDump] ");
+        for (int i = 0; i < _lyricRows.Count; i++)
+        {
+            string text = _lyricRows[i].Text;
+            dump.Append(i).Append(':').Append(text.Length)
+                .Append('\'').Append(text.Length == 0 ? "" : text[..Math.Min(8, text.Length)])
+                .Append("' ");
+        }
+
+        _log.Info(dump.ToString());
     }
 
     private bool _waitingForNewSong;
