@@ -239,6 +239,12 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         _ => "standard",
     };
 
+    /// <summary>安全取字符串属性：值非 String 类型（QQ 会给 0 数字哨兵）返回空串不抛异常。</summary>
+    private static string SafeStr(JsonElement e, string key)
+        => e.TryGetProperty(key, out JsonElement v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() ?? ""
+            : "";
+
     /// <summary>从 Cookie 串按候选键链提取第一个非空值（不分大小写；全缺返回空串）。</summary>
     private static string ExtractCookieValueChain(string cookie, params string[] keys)
     {
@@ -285,9 +291,15 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                     : default;
             if (musicuData.ValueKind == System.Text.Json.JsonValueKind.Object)
             {
-                string musicuLyric = DecodeBase64(musicuData.TryGetProperty("lyric", out JsonElement ml) ? ml.GetString() ?? "" : "");
-                string? musicuTrans = musicuData.TryGetProperty("trans", out JsonElement mt) ? DecodeBase64(mt.GetString() ?? "") : null;
-                string? qrc = musicuData.TryGetProperty("qrc", out JsonElement qEl) ? DecodeBase64(qEl.GetString() ?? "") : null;
+                // 🔴 字段值必须是字符串才 GetString——QQ 会给 "trans":0/"qrc":0 数字哨兵值，
+                // 直接 GetString 抛 InvalidOperationException → 每首歌词都降级旧接口（2026-09-09 日志实证）
+                string musicuLyric = DecodeBase64(SafeStr(musicuData, "lyric"));
+                string? musicuTrans = musicuData.TryGetProperty("trans", out JsonElement mt) && mt.ValueKind == JsonValueKind.String
+                    ? DecodeBase64(mt.GetString() ?? "")
+                    : null;
+                string? qrc = musicuData.TryGetProperty("qrc", out JsonElement qEl) && qEl.ValueKind == JsonValueKind.String
+                    ? DecodeBase64(qEl.GetString() ?? "")
+                    : null;
                 if (!string.IsNullOrEmpty(musicuLyric) || !string.IsNullOrEmpty(qrc))
                 {
                     return new OnlineLyrics
@@ -915,8 +927,8 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             // 「我喜欢的」是虚拟歌单，走喜欢列表接口（NexBox is_qq_liked_playlist_id）
             if (IsQqLikedPlaylistId(pid))
             {
-                List<OnlineTrack> liked = await LoadLikedListAsync(cookie, ct);
-                return start > 0 ? liked.Skip(start).Take(count).ToList() : liked.Take(count).ToList();
+                List<OnlineTrack> liked = await LoadLikedListAsync(start, count, cookie, ct);
+                return liked;
             }
 
             string uin = ExtractUin(cookie);
@@ -1156,31 +1168,52 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
     }
 
-    /// <summary>获取我喜欢的歌曲列表（FavSong.GetMyFavSong，需 Cookie）。</summary>
-    public async Task<List<OnlineTrack>> LoadLikedListAsync(string cookie = "", CancellationToken ct = default)
+    /// <summary>
+    /// 获取我喜欢的歌曲列表（对照 NexBox liked_playlist_tracks：music.srfDissInfo.DissInfo/CgiGetDiss，
+    /// dirid=201 虚拟歌单，按 song_begin/song_num 分页）。
+    /// 🔴 不用 music.fav.FavSong/GetMyFavSong（老项目遗留，NexBox 现役实现未用它）。
+    /// </summary>
+    public async Task<List<OnlineTrack>> LoadLikedListAsync(int start, int count, string cookie = "", CancellationToken ct = default)
     {
         try
         {
-            string uin = ExtractUin(cookie);
             var payload = new
             {
+                comm = new { ct = 24, cv = 0 },
                 req_0 = new
                 {
-                    module = "music.fav.FavSong",
-                    method = "GetMyFavSong",
-                    param = new { uin, start = 0, num = 200 },
+                    module = "music.srfDissInfo.DissInfo",
+                    method = "CgiGetDiss",
+                    param = new
+                    {
+                        disstid = 0,
+                        dirid = 201,
+                        tag = 1,
+                        song_begin = start,
+                        song_num = count,
+                        userinfo = 1,
+                        orderlist = 1,
+                    },
                 },
-                comm = new { ct = 24, cv = 0, uin },
             };
             JsonElement json = await PostMusicuAsync(JsonSerializer.Serialize(payload), cookie, ct);
 
             var list = new List<OnlineTrack>();
             if (!json.TryGetProperty("req_0", out JsonElement req0))
+            {
+                _logger.Warn("[QQMusic] 喜欢列表：无 req_0");
                 return list;
+            }
             if (!req0.TryGetProperty("data", out JsonElement data))
+            {
+                _logger.Warn("[QQMusic] 喜欢列表：无 data");
                 return list;
-            if (!data.TryGetProperty("songlist", out JsonElement songList))
+            }
+            if (!data.TryGetProperty("songlist", out JsonElement songList) || songList.ValueKind != JsonValueKind.Array)
+            {
+                _logger.Warn("[QQMusic] 喜欢列表：无 songlist 字段（多半未登录或凭据残缺）");
                 return list;
+            }
 
             foreach (JsonElement track in songList.EnumerateArray())
             {
@@ -1188,6 +1221,7 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 if (!string.IsNullOrEmpty(mapped.Name))
                     list.Add(mapped);
             }
+            _logger.Info($"[QQMusic] 喜欢列表 {list.Count} 首（song_begin={start}, song_num={count}）");
             return list;
         }
         catch (Exception e)
