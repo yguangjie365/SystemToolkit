@@ -732,6 +732,8 @@ public partial class MusicManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEngineReady));
     }
 
+    private MusicSong? _chromeLoadedSong;
+
     private void OnEngineStateChanged(PlayState state, MusicSong? song)
     {
         IsPlaying = state == PlayState.Playing;
@@ -741,8 +743,14 @@ public partial class MusicManagerViewModel : ObservableObject
             CurrentSub = string.IsNullOrEmpty(song.Album) ? song.Artist : $"{song.Artist} — {song.Album}";
             _consecutiveOnlineFailures = 0; // 真正起播 = 连续失败链归零（OnlineSkipPolicy 语义）
             _queue.ReportPlaybackStarted(song);
-            _ = LoadLyricsAsync(song); // IO 在后台；结果经 RunOnUi 回 UI
-            _ = LoadCoverAsync(song); // OM-6：封面 + 主色管线（同样后台 IO + RunOnUi 回写）
+            // 修复 Bug2（2026-09-10）：StateChanged(Playing) 在"暂停→恢复"时也会触发；
+            // 歌词/封面只在**换曲**时重载——否则恢复会 ApplyLyrics 重置进度 → 填充从 0 快刷回暂停位
+            if (!ReferenceEquals(song, _chromeLoadedSong))
+            {
+                _chromeLoadedSong = song;
+                _ = LoadLyricsAsync(song); // IO 在后台；结果经 RunOnUi 回 UI
+                _ = LoadCoverAsync(song); // OM-6：封面 + 主色管线（同样后台 IO + RunOnUi 回写）
+            }
         }
     }
 
@@ -837,7 +845,10 @@ public partial class MusicManagerViewModel : ObservableObject
         // 歌词同步：按引擎位置求当前行（MUSIC-3 的 CalcActiveIndex）
         if (_lyricLineSource.Count > 0)
         {
-            ActiveLyricIndex = LyricParser.CalcActiveIndex(_lyricLineSource, position.TotalSeconds);
+            // 修复 Bug1（2026-09-10）：引擎 Position 是 WaveStream 读取位置，比实际发声超前一个
+            // WaveOutEvent 输出缓冲（快语速约 2 字）→ 歌词位置回拨补偿常量；进度条/时间仍用原始 position
+            double lyricT = Math.Max(0, position.TotalSeconds - LyricLatencyCompensationSeconds);
+            ActiveLyricIndex = LyricParser.CalcActiveIndex(_lyricLineSource, lyricT);
 
             // 卡拉OK行内进度（反馈 4）：行 Time→Time+Duration 线性推进
             if (ActiveLyricIndex >= 0 && ActiveLyricIndex < _lyricLineSource.Count)
@@ -848,7 +859,7 @@ public partial class MusicManagerViewModel : ObservableObject
                     : null;
                 // 逐字感知进度（有 Words=字符级精确；无=行级 smoothstep）——卡拉OK填充共用
                 LyricProgress = Math.Clamp(
-                    LyricParser.GetLineProgress(line, next, position.TotalSeconds), 0, 1);
+                    LyricParser.GetLineProgress(line, next, lyricT), 0, 1);
             }
             else
             {
@@ -860,6 +871,13 @@ public partial class MusicManagerViewModel : ObservableObject
             LyricProgress = 0;
         }
     }
+
+    /// <summary>
+    /// 歌词位置延迟补偿（秒）：引擎 Position 是 WaveStream 读取位置，比实际发声超前一个
+    /// WaveOutEvent 输出缓冲。歌词活动行/逐字填充统一回拨此值以对齐听感；进度条不受影响。
+    /// 真机若仍偏快/偏慢，调此常量即可（0 = 不补偿）。
+    /// </summary>
+    private const double LyricLatencyCompensationSeconds = 0.25;
 
     /// <summary>
     /// P0（NexBox 对齐）：供视图以 CompositionTarget.Rendering（~60fps）高频采样当前卡拉OK行填充进度。
@@ -882,7 +900,9 @@ public partial class MusicManagerViewModel : ObservableObject
 
         LyricLine line = _lyricLineSource[idx];
         LyricLine? next = idx + 1 < _lyricLineSource.Count ? _lyricLineSource[idx + 1] : null;
-        return Math.Clamp(LyricParser.GetLineProgress(line, next, engine.Position.TotalSeconds), 0, 1);
+        // 与 100ms 事件一致：回拨输出缓冲延迟，逐字填充对齐听感（Bug1）
+        double lyricT = Math.Max(0, engine.Position.TotalSeconds - LyricLatencyCompensationSeconds);
+        return Math.Clamp(LyricParser.GetLineProgress(line, next, lyricT), 0, 1);
     }
 
     private async Task PlayCurrentCoreAsync(IMusicPlaybackEngine engine)
