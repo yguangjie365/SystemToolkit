@@ -1172,13 +1172,13 @@
                     <!-- 背景重影层（对照 NexBox ImmersiveLyricsView）：只取句首 2-4 字，
                          前景字号 ×2.6、白 0.16、居中 nowrap（字号/文本均由 code-behind 管理） -->
                     <TextBlock x:Name="ImmersionGhostText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextAlignment="Center" FontFamily="{StaticResource Font_ImmersiveLyric}" FontWeight="Black"
+                               TextAlignment="Center" FontFamily="{StaticResource Font_ImmersiveLyric}" FontWeight="Normal"
                                Foreground="#29FFFFFF"/>
                     <!-- P1 退场层：换行时旧句上移淡出（与新句空间分离，避免同位重叠）；字号/文本/位移由 code-behind 管理 -->
                     <TextBlock x:Name="ImmersionOutgoingText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
                                FontFamily="{StaticResource Font_ImmersiveLyric}"
-                               FontWeight="Black" Opacity="0" IsHitTestVisible="False"
+                               FontWeight="Normal" Opacity="0" IsHitTestVisible="False"
                                Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}">
                         <TextBlock.RenderTransform>
                             <TranslateTransform x:Name="ImmersionOutgoingShift" Y="0"/>
@@ -1189,7 +1189,7 @@
                                TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
                                RenderTransformOrigin="0.5,0.5"
                                FontFamily="{StaticResource Font_ImmersiveLyric}"
-                               FontWeight="Black"
+                               FontWeight="Normal"
                                Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}">
                         <TextBlock.RenderTransform>
                             <RotateTransform Angle="0"/>
