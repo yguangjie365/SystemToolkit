@@ -111,13 +111,26 @@ public class LyricParserTests
     [Fact]
     public void GetLineProgress_SmoothstepAtMidpoint_EqualsHalf()
     {
-        var line = new LyricLine { Time = 0, Duration = 10, Text = "x" };
+        // 行级填充跨度 = min(字符估算演唱时长, 到下一行间隔)。给足字符使估算跨度≥间隔(10s)，
+        // 则跨度=间隔=10，now=5 落在中点 → smoothstep≈0.5
+        var line = new LyricLine { Time = 0, Duration = 10, Text = new string('x', 40), CharCount = 40 };
         var next = new LyricLine { Time = 10, Duration = 10, Text = "y" };
 
         // now = 5（含 +0.02 补偿）→ 略过半 → smoothstep 略大于 0.5
         double p = LyricParser.GetLineProgress(line, next, 5);
 
         Assert.InRange(p, 0.5, 0.55);
+    }
+
+    [Fact]
+    public void GetLineProgress_ShortLineBeforeLongGap_CompletesBeforeGap()
+    {
+        // P0 修复回归：短行(4字→估算1.5s)后接长停顿(下一行在 20s)，
+        // 填充应在 ~1.5s 内填满并保持，不把停顿摊进本行（旧行为会爬满 20s）
+        var line = new LyricLine { Time = 0, Duration = 20, Text = "abcd", CharCount = 4 };
+        var next = new LyricLine { Time = 20, Duration = 5, Text = "y" };
+
+        Assert.Equal(1d, LyricParser.GetLineProgress(line, next, 5)); // 停顿中段：已填满
     }
 
     [Fact]
@@ -242,7 +255,8 @@ public class LyricParserTests
     [Fact]
     public void GetLineProgress_NoWords_FallsBackToSmoothstep()
     {
-        LyricLine line = new() { Time = 0, Duration = 4, Text = "abcd", CharCount = 4 };
+        // P0 语义：跨度 = min(字符估算演唱时长, 间隔)。12 字→估算 4.2s ≥ 间隔(Duration=4) → 跨度=4，t=2 落中点
+        LyricLine line = new() { Time = 0, Duration = 4, Text = new string('a', 12), CharCount = 12 };
 
         double p = LyricParser.GetLineProgress(line, null, 2.0);
 

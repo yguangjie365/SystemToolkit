@@ -298,10 +298,14 @@ public static partial class LyricParser
         }
 
         double now = currentTime + 0.02;
-        double nextT = nextLine is not null && nextLine.Time > line.Time
-            ? nextLine.Time
-            : line.Time + (line.Duration > 0 ? line.Duration : DefaultDuration);
-        double span = Math.Max(0.75, nextT - line.Time);
+        // 无逐字时间戳的行：填充跨度 = min(按字符估算的演唱时长, 到下一行的真实间隔)。
+        // → 有段落停顿时按字符估算提前填满并保持（不把停顿摊进本行）；无停顿时仍按真实间隔填。
+        // （逐字行走上面的 words 分支，末字即填满，本就正确）
+        double estSpan = Math.Clamp(line.CharCount * 0.35, 1.5, 10.0);
+        double gap = nextLine is not null && nextLine.Time > line.Time
+            ? nextLine.Time - line.Time
+            : (line.Duration > 0 ? line.Duration : DefaultDuration);
+        double span = Math.Max(0.75, Math.Min(estSpan, gap));
         double prog = Math.Max(0, Math.Min(1, (now - line.Time) / span));
         return prog * prog * (3 - 2 * prog); // smoothstep
     }
