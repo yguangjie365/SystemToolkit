@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using SystemToolkit.Core.Music.Models;
 using SystemToolkit.Core.Music.Online;
 using SystemToolkit.Core.Utilities;
@@ -205,24 +208,86 @@ public partial class MusicManagerView : UserControl
                 };
                 _discSpin = new System.Windows.Media.Animation.Storyboard();
                 _discSpin.Children.Add(spin);
-                System.Windows.Media.Animation.Storyboard.SetTarget(spin, DiscHost);
+                System.Windows.Media.Animation.Storyboard.SetTarget(spin, DiscSpinHost);
                 // 🔴 SetTarget 必须配对 SetTargetProperty——缺 TargetProperty 时
                 // Begin 的 ClockTreeWalkRecursive 直接抛 InvalidOperationException
                 //（2026-09-08 真机实证：必须为 DoubleAnimation 指定 TargetProperty）
                 System.Windows.Media.Animation.Storyboard.SetTargetProperty(
                     spin,
                     new System.Windows.PropertyPath("(UIElement.RenderTransform).(RotateTransform.Angle)"));
-                _discSpin.Begin(DiscHost, true); // controllable
+                _discSpin.Begin(DiscSpinHost, true); // controllable
                 _discSpinStarted = true;
             }
             else
             {
-                _discSpin?.Resume(DiscHost);
+                _discSpin?.Resume(DiscSpinHost);
             }
         }
         else if (_discSpinStarted)
         {
-            _discSpin?.Pause(DiscHost);
+            _discSpin?.Pause(DiscSpinHost);
+        }
+
+        UpdateVinylGlowBreath();
+    }
+
+    // ════════ 彩胶盘复刻配套（NexBox VinylDisc） ════════
+
+    private System.Windows.Media.Animation.Storyboard? _glowBreath;
+
+    /// <summary>光晕呼吸（5s：scale 1→1.06、opacity 0.85→1；暂停时停在原地——对照 NexBox）。</summary>
+    private void UpdateVinylGlowBreath()
+    {
+        if (DiscGlow is null)
+        {
+            return;
+        }
+
+        if (_vm.IsPlaying && _glowBreath is null)
+        {
+            var breath = new System.Windows.Media.Animation.Storyboard();
+            var scale = new System.Windows.Media.Animation.DoubleAnimation(1, 1.06, System.Windows.Duration.Automatic)
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                Duration = TimeSpan.FromSeconds(2.5), // 5s 全周期（往复）
+            };
+            System.Windows.Media.Animation.Storyboard.SetTarget(scale, DiscGlow);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(scale, new System.Windows.PropertyPath("(UIElement.RenderTransform).(ScaleTransform.ScaleX)"));
+            breath.Children.Add(scale);
+            System.Windows.Media.Animation.DoubleAnimation scaleY = scale.Clone();
+            System.Windows.Media.Animation.Storyboard.SetTarget(scaleY, DiscGlow);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(scaleY, new System.Windows.PropertyPath("(UIElement.RenderTransform).(ScaleTransform.ScaleY)"));
+            breath.Children.Add(scaleY);
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(0.85, 1, System.Windows.Duration.Automatic)
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                Duration = TimeSpan.FromSeconds(2.5),
+            };
+            System.Windows.Media.Animation.Storyboard.SetTarget(fade, DiscGlow);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(fade, new System.Windows.PropertyPath("Opacity"));
+            breath.Children.Add(fade);
+            _glowBreath = breath;
+            breath.Begin(DiscGlow, true);
+        }
+        else if (!_vm.IsPlaying && _glowBreath is not null)
+        {
+            _glowBreath.Pause(DiscGlow);
+        }
+    }
+
+    /// <summary>accent 变化：重建光晕径向刷（accent 0.30→0.13→透明）+ 同步彩胶歌词高亮刷。</summary>
+    private void SyncVinylAccentVisuals()
+    {
+        if (_vm.VinylAccentBrush is not null && DiscGlow is not null)
+        {
+            DiscGlow.Fill = CoverColorFactory.VinylGlow(_vm.VinylAccentBrush);
+        }
+
+        if (TryFindResource("VinylAccentHighlight") is SolidColorBrush highlight && _vm.VinylAccentBrush is not null)
+        {
+            highlight.Color = _vm.VinylAccentBrush.Color; // 可变实例：彩胶歌词高亮跟随胶片色
         }
     }
 
@@ -232,6 +297,26 @@ public partial class MusicManagerView : UserControl
         if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
         {
             UpdateDiscSpin();
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.VinylAccentBrush))
+        {
+            SyncVinylAccentVisuals();
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.IsImmersionStyle))
+        {
+            UpdateRippleFieldActive();
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.IsVinylStyle) && _vm.IsVinylStyle)
+        {
+            PlayVinylDiscEntrance();
+        }
+
+        if (e.PropertyName == nameof(MusicManagerViewModel.CurrentLyricText))
+        {
+            UpdateImmersionLyric();
         }
 
         if (e.PropertyName == nameof(MusicManagerViewModel.ActiveLyricIndex)
@@ -267,5 +352,230 @@ public partial class MusicManagerView : UserControl
             // 🔴 初始化失败显式可见（曲库文件 IO 异常等），不让 Dispatcher 吞掉
             _vm.ReportInitError($"曲库初始化失败：{ex.Message}");
         }
+    }
+
+    // ════════ NexBox 播放器三风格复刻（2026-09-09）：水波场 / 沉浸歌词重影 / 彩胶入场 ════════
+
+    private readonly System.Collections.Generic.List<System.Windows.Shapes.Ellipse> _ripples = [];
+    private System.Windows.Threading.DispatcherTimer? _rippleTimer;
+    private readonly Random _rippleRandom = new();
+    private int _rippleId;
+    private bool _rippleFirstSpawn = true;
+
+    /// <summary>沉浸态开/关水波发射器（挂载即启动；暂停后波纹依旧存在不消失——对照 NexBox）。</summary>
+    private void UpdateRippleFieldActive()
+    {
+        if (RippleHost is null)
+        {
+            return;
+        }
+
+        if (_vm.IsImmersionStyle && _rippleTimer is null)
+        {
+            SizeChanged -= OnViewSizeChangedForRipples;
+            SizeChanged += OnViewSizeChangedForRipples;
+            _rippleFirstSpawn = true;
+            SpawnRipplePair(); // 首波立即出现
+            _rippleTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(900),
+            };
+            _rippleTimer.Tick += (_, _) => SpawnRipplePair();
+            _rippleTimer.Start();
+        }
+        else if (!_vm.IsImmersionStyle && _rippleTimer is not null)
+        {
+            _rippleTimer.Stop();
+            _rippleTimer = null;
+            RippleHost.Children.Clear();
+            _ripples.Clear();
+        }
+    }
+
+    private void OnViewSizeChangedForRipples(object sender, SizeChangedEventArgs e)
+    {
+        // 窗口尺寸变化：按比例重排现存波纹圆心（贴左右边缘、垂直居中）
+        foreach (System.Windows.Shapes.Ellipse ripple in _ripples)
+        {
+            double size = ripple.Width;
+            bool isLeft = System.Windows.Controls.Canvas.GetLeft(ripple) < 0;
+            System.Windows.Controls.Canvas.SetLeft(ripple, isLeft ? -size / 2 : ActualWidth - size / 2);
+            System.Windows.Controls.Canvas.SetTop(ripple, ActualHeight / 2 - size / 2);
+        }
+    }
+
+    /// <summary>生成一对波纹：正弦模拟节拍强度（首播拉满），左深右浅（背景色自身 HSL 派生）。</summary>
+    private void SpawnRipplePair()
+    {
+        if (RippleHost is null || !_vm.IsImmersionStyle)
+        {
+            return;
+        }
+
+        double intensity = _rippleFirstSpawn
+            ? 0.95
+            : Math.Min(1, Math.Max(0.15, (0.5 + 0.5 * Math.Sin(DateTime.Now.Millisecond / 640.0)) * 0.72 + _rippleRandom.NextDouble() * 0.34));
+        _rippleFirstSpawn = false;
+
+        double maxDim = Math.Max(ActualWidth, ActualHeight);
+        SpawnOneRipple(isLeft: true, intensity, maxDim);
+        SpawnOneRipple(isLeft: false, intensity, maxDim);
+    }
+
+    private void SpawnOneRipple(bool isLeft, double intensity, double maxDim)
+    {
+        if (RippleHost is null || !_vm.IsImmersionStyle)
+        {
+            return;
+        }
+
+        // 波环取色：沉浸色板本色自身深/浅（左深右浅，保留色相非黑白）——工厂收敛
+        Brush brush = CoverColorFactory.ImmersionRippleRing(_vm.ImmersionVividColor, isLeft);
+
+        double size = Math.Max(200, maxDim * (0.62 + intensity * 0.3 + _rippleRandom.NextDouble() * 0.15));
+        double duration = 3.6 + _rippleRandom.NextDouble() * 1.6;
+        double delay = _rippleRandom.NextDouble() * 0.4;
+
+        brush.Freeze();
+        var ripple = new System.Windows.Shapes.Ellipse
+        {
+            Width = size,
+            Height = size,
+            Fill = brush,
+            IsHitTestVisible = false,
+            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+            RenderTransform = new ScaleTransform(0.3, 0.3),
+            Opacity = 0,
+        };
+        System.Windows.Controls.Canvas.SetLeft(ripple, isLeft ? -size / 2 : ActualWidth - size / 2);
+        System.Windows.Controls.Canvas.SetTop(ripple, ActualHeight / 2 - size / 2);
+        RippleHost.Children.Add(ripple);
+        _ripples.Add(ripple);
+
+        // 波纹扩散动画（对照 rippleLeft/Right 关键帧：10%→1、60%→0.92、85%→0.38、100%→0）
+        var storyboard = new System.Windows.Media.Animation.Storyboard
+        {
+            BeginTime = TimeSpan.FromSeconds(delay),
+        };
+        System.Windows.Media.Animation.DoubleAnimation scaleX = new(0.3, 1, TimeSpan.FromSeconds(duration));
+        System.Windows.Media.Animation.DoubleAnimation scaleY = scaleX.Clone();
+        System.Windows.Media.Animation.Storyboard.SetTarget(scaleX, ripple);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(scaleX, new System.Windows.PropertyPath("(UIElement.RenderTransform).(ScaleTransform.ScaleX)"));
+        System.Windows.Media.Animation.Storyboard.SetTarget(scaleY, ripple);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(scaleY, new System.Windows.PropertyPath("(UIElement.RenderTransform).(ScaleTransform.ScaleY)"));
+        storyboard.Children.Add(scaleX);
+        storyboard.Children.Add(scaleY);
+
+        var fade = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromSeconds(duration),
+        };
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0, TimeSpan.Zero));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(1, TimeSpan.FromSeconds(duration * 0.10)));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.92, TimeSpan.FromSeconds(duration * 0.60)));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.38, TimeSpan.FromSeconds(duration * 0.85)));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0, TimeSpan.FromSeconds(duration)));
+        System.Windows.Media.Animation.Storyboard.SetTarget(fade, ripple);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(fade, new System.Windows.PropertyPath("Opacity"));
+        storyboard.Children.Add(fade);
+        storyboard.Completed += (_, _) =>
+        {
+            RippleHost?.Children.Remove(ripple);
+            _ripples.Remove(ripple);
+        };
+        storyboard.Begin(ripple);
+        _rippleId++;
+    }
+
+    /// <summary>彩胶盘入场（对照 vinylDiscIn）：translate(6%,-6%) scale0.94 → 原位，0.7s。</summary>
+    private void PlayVinylDiscEntrance()
+    {
+        if (DiscHost is null)
+        {
+            return;
+        }
+
+        var group = new TransformGroup();
+        group.Children.Add(new TranslateTransform(6, -6));
+        group.Children.Add(new ScaleTransform(0.94, 0.94));
+        DiscHost.RenderTransform = group;
+        DiscHost.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+        var storyboard = new System.Windows.Media.Animation.Storyboard
+        {
+            Duration = TimeSpan.FromSeconds(0.7),
+        };
+        foreach (string prop in new[] { "X", "Y" })
+        {
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(
+                prop == "X" ? 6 : -6, 0, new System.Windows.Duration(TimeSpan.FromSeconds(0.7)))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+            };
+            System.Windows.Media.Animation.Storyboard.SetTarget(anim, DiscHost);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath($"RenderTransform.Children[0].{prop}"));
+            storyboard.Children.Add(anim);
+        }
+
+        foreach (string prop in new[] { "ScaleX", "ScaleY" })
+        {
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(
+                0.94, 1, new System.Windows.Duration(TimeSpan.FromSeconds(0.7)))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+            };
+            System.Windows.Media.Animation.Storyboard.SetTarget(anim, DiscHost);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new System.Windows.PropertyPath($"RenderTransform.Children[1].{prop}"));
+            storyboard.Children.Add(anim);
+        }
+
+        storyboard.Completed += (_, _) =>
+        {
+            // 归位为主变换（尺寸绑定实时变化，入场用完即弃）
+            DiscHost.RenderTransform = Transform.Identity;
+        };
+        storyboard.Begin(DiscHost);
+    }
+
+    /// <summary>
+    /// 沉浸歌词更新（对照 NexBox）：双行拆分 + 背景重影（放大灰）+ 入场动画随机二选一
+    /// （短词 rotate -6°→0 / 长词 scale 0.94→1），ENTER≈860ms。
+    /// </summary>
+    private void UpdateImmersionLyric()
+    {
+        if (ImmersionLyricText is null || ImmersionGhostText is null)
+        {
+            return;
+        }
+
+        string raw = _vm.CurrentLyricText;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            ImmersionLyricText.Text = "♪";
+            ImmersionGhostText.Text = string.Empty;
+            return;
+        }
+
+        string display = PaletteMath.SplitLyricIntoTwoLines(raw);
+        ImmersionLyricText.Text = display;
+        ImmersionGhostText.Text = display;
+
+        // 入场动画：随机 rotate / spread
+        bool rotate = _rippleRandom.Next(2) == 0;
+        var storyboard = new System.Windows.Media.Animation.Storyboard
+        {
+            Duration = TimeSpan.FromSeconds(0.86),
+        };
+        var enter = new System.Windows.Media.Animation.DoubleAnimation(
+            rotate ? -6 : 0.94, rotate ? 0 : 1, new System.Windows.Duration(TimeSpan.FromSeconds(0.86)))
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+        };
+        string path = rotate
+            ? "(UIElement.RenderTransform).(RotateTransform.Angle)"
+            : "(UIElement.RenderTransform).(ScaleTransform.ScaleX)";
+        System.Windows.Media.Animation.Storyboard.SetTarget(enter, ImmersionLyricText);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(enter, new System.Windows.PropertyPath(path));
+        storyboard.Children.Add(enter);
+        storyboard.Begin(ImmersionLyricText, true);
     }
 }

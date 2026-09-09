@@ -109,32 +109,51 @@ public partial class MusicManagerViewModel
 
     private long _coverSeq;
 
-    private SolidColorBrush _vinylBackgroundBrush = CoverColorFactory.LightTint(CoverColorFactory.Neutral);
+    // ════════ 三风格背景（2026-09-09 NexBox 100% 复刻：Brush 类型升级为渐变） ════════
+    // 渐变构造全部收敛在 CoverColorFactory（配色字面量唯一收敛点，CsBrushLiteralGuard 实测拦截）
+    //   彩胶   = 固定浅灰三段渐变（不随封面）；沉浸 = 色板匹配三段横向；现代 = 封面原色 40% 平铺 + 右缘压暗
 
-    /// <summary>彩胶浅背景（主色高亮低饱和近白染色；对照 NexBox 透明彩胶）。</summary>
-    public SolidColorBrush VinylBackgroundBrush
+    private Brush _vinylBackgroundBrush = CoverColorFactory.VinylBackgroundGradient();
+
+    /// <summary>彩胶背景：固定浅灰三段渐变（对照 NexBox，不随封面变化——彩色只在盘体）。</summary>
+    public Brush VinylBackgroundBrush
     {
         get => _vinylBackgroundBrush;
         private set => SetProperty(ref _vinylBackgroundBrush, value);
     }
 
-    private SolidColorBrush _immersionBackgroundBrush = CoverColorFactory.DarkImmersive(CoverColorFactory.Neutral);
+    private Brush _immersionBackgroundBrush = CoverColorFactory.DarkImmersive(CoverColorFactory.Neutral);
 
-    /// <summary>沉浸深背景（主色压暗；对照 NexBox 沉浸）。</summary>
-    public SolidColorBrush ImmersionBackgroundBrush
+    /// <summary>沉浸背景：色板匹配色的深-本色-浅三段横向渐变。</summary>
+    public Brush ImmersionBackgroundBrush
     {
         get => _immersionBackgroundBrush;
         private set => SetProperty(ref _immersionBackgroundBrush, value);
     }
 
-    private SolidColorBrush _modernBackgroundBrush = CoverColorFactory.MidTone(CoverColorFactory.Neutral);
+    private Brush _modernBackgroundBrush = CoverColorFactory.MidTone(CoverColorFactory.Neutral);
 
-    /// <summary>现代中调背景（主色中亮度中饱和；对照 NexBox 现代）。</summary>
-    public SolidColorBrush ModernBackgroundBrush
+    /// <summary>现代背景：封面原色 40% 平铺 + 右缘压暗（×0.25）135° 渐变。</summary>
+    public Brush ModernBackgroundBrush
     {
         get => _modernBackgroundBrush;
         private set => SetProperty(ref _modernBackgroundBrush, value);
     }
+
+    private SolidColorBrush _vinylAccentBrush = CoverColorFactory.VinylAccent(CoverColorFactory.Neutral);
+
+    /// <summary>
+    /// 彩胶主色（胶片色 = 歌词高亮色；对照 vinylAccent）：封面主色 HSV 钳制
+    /// 饱和 [0.48,0.92]、明度 [0.34,0.66]。
+    /// </summary>
+    public SolidColorBrush VinylAccentBrush
+    {
+        get => _vinylAccentBrush;
+        private set => SetProperty(ref _vinylAccentBrush, value);
+    }
+
+    /// <summary>沉浸水波基色（色板匹配本色；深/浅波环由其 HSL 派生）。</summary>
+    public Color ImmersionVividColor => ((SolidColorBrush)ImmersionBackgroundBrush).Color;
 
     private Brush _playerForegroundBrush = ThemeBrush.Find("Brush_TextPrimary", "#1F1F1F");
 
@@ -156,13 +175,29 @@ public partial class MusicManagerViewModel
 
     private void RefreshPlayerChromeBrushes()
     {
-        bool dark = PlayerStyle == PlayerStyleKind.Immersion;
-        PlayerForegroundBrush = dark
-            ? ThemeBrush.Find("Brush_OnDark", "#F5F5F4")
-            : ThemeBrush.Find("Brush_TextPrimary", "#1F1F1F");
-        PlayerMutedBrush = dark
-            ? ThemeBrush.Find("Brush_OnDarkMuted", "#A8A29E")
-            : ThemeBrush.Find("Brush_TextMuted", "#6B7280");
+        // NexBox 复刻：文字色随风格与封面明暗
+        // 彩胶 = 固定深灰 #333338 / 55%；沉浸 = OnDark 浅字；现代 = 按封面明暗切换深/浅
+        switch (PlayerStyle)
+        {
+            case PlayerStyleKind.Vinyl:
+                // 55% 静音色：冻结刷不可改 Opacity（实测设置即抛只读异常），alpha 建在色里
+                PlayerForegroundBrush = CoverColorFactory.FromRgb(0x33, 0x33, 0x38);
+                PlayerMutedBrush = CoverColorFactory.FromRgbWithOpacity(0x33, 0x33, 0x38, 0.55);
+                break;
+            case PlayerStyleKind.Modern:
+                bool light = CoverColorFactory.IsLight(CurrentAccentBrush);
+                PlayerForegroundBrush = light
+                    ? ThemeBrush.Find("Brush_TextPrimary", "#1a1a2e")
+                    : CoverColorFactory.FromRgb(0xF0, 0xF0, 0xF0);
+                PlayerMutedBrush = light
+                    ? CoverColorFactory.FromRgb(0x4A, 0x4A, 0x5E)
+                    : CoverColorFactory.FromRgb(0xB0, 0xB0, 0xB0);
+                break;
+            default: // 沉浸（深底恒浅字）
+                PlayerForegroundBrush = ThemeBrush.Find("Brush_OnDark", "#F5F5F4");
+                PlayerMutedBrush = ThemeBrush.Find("Brush_OnDarkMuted", "#A8A29E");
+                break;
+        }
     }
 
     /// <summary>起播/切歌后装载封面与主色（后台 IO；结果经 RunOnUi 回 UI）。</summary>
@@ -201,9 +236,12 @@ public partial class MusicManagerViewModel
             CurrentCoverImage = image;
             SolidColorBrush accent = image is null ? CoverColorFactory.Neutral : CoverColorFactory.FromBitmap(image);
             CurrentAccentBrush = accent;
-            VinylBackgroundBrush = CoverColorFactory.LightTint(accent);
-            ImmersionBackgroundBrush = CoverColorFactory.DarkImmersive(accent);
-            ModernBackgroundBrush = CoverColorFactory.MidTone(accent);
+
+            // NexBox 复刻：三风格背景渐变 + 彩胶主色（HSV 钳制）
+            ImmersionBackgroundBrush = CoverColorFactory.ImmersionBackgroundGradient(accent);
+            ModernBackgroundBrush = CoverColorFactory.ModernBackgroundGradient(accent);
+            VinylAccentBrush = CoverColorFactory.VinylAccent(accent);
+            RefreshPlayerChromeBrushes();
         });
     }
 

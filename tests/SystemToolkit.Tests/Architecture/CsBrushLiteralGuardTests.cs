@@ -37,6 +37,10 @@ public class CsBrushLiteralGuardTests
         // 封面主色工厂（OM-6）：运行时色——每首封面主色不同，无法用静态设计令牌表达；
         // 全仓唯一的 Color.FromRgb 字面量收敛点（见文件头注释）。
         "CoverColorFactory.cs",
+
+        // 彩胶纹理工厂（NexBox 复刻，2026-09-09）：运行时程序化绘制胶纹/高光
+        // （feTurbulence 的 WPF 近似），色值为固定过程常量，同类运行时色站点。
+        "VinylTextureFactory.cs",
     };
 
     [Fact]

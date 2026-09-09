@@ -1040,40 +1040,92 @@
                                Visibility="{Binding LyricsHint, Converter={StaticResource StrToVis}}"/>
                 </Grid>
 
-                <!-- 右：彩胶圆盘（右缘出血；主色环 + 封面圆心；播放时旋转——code-behind 控制） -->
-                <!-- 审查 P1-7：黑胶原固定 540px 且右出血 -170，窄窗口会遮住歌词；
-                     改为跟随 Row1 实际高度的 62%（钳制 300–520），出血同步收敛 -->
+                <!-- 右：彩胶圆盘（NexBox VinylDisc 100% 复刻，2026-09-09）：
+                     盘径 min(80vh,48vw)→按 Row1 高 80%（钳制 240–640），右上伸出（X+0.36/Y-0.30）；
+                     层序：光晕(1.7×,呼吸) → 旋转层[accent 0.56 半透明盘 + 湍流胶纹纹理 + 封面圆 70%] → conic 高光(不转) -->
                 <Grid Grid.Column="1" x:Name="DiscHost"
-                      Width="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.62|300|520}"
-                      Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.62|300|520}"
-                      Margin="0,-40,-110,-40" RenderTransformOrigin="0.5,0.5">
+                      Width="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.80|240|640}"
+                      Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.80|240|640}"
+                      HorizontalAlignment="Right" VerticalAlignment="Top">
                     <Grid.RenderTransform>
-                        <RotateTransform x:Name="DiscRotation"/>
+                        <TranslateTransform
+                            X="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.36}"
+                            Y="{Binding ActualHeight, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=-0.30}"/>
                     </Grid.RenderTransform>
-                    <!-- 旋转控制经 code-behind（🔴 Style 的 DataTrigger 无法引用元素树 NameScope
-                         中的 BeginStoryboardName——跨 NameScope 必抛 InvalidOperationException，
-                         2026-09-08 真机实证） -->
-                    <Ellipse Fill="{Binding CurrentAccentBrush, Mode=OneWay}"/>
-                    <Ellipse Margin="26" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.35"/>
-                    <Ellipse Margin="52" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.28"/>
-                    <Ellipse Margin="78" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.4"/>
-                    <Ellipse Margin="80" Fill="{StaticResource Brush_Surface}"/>
-                    <Ellipse Margin="86">
-                        <Ellipse.Fill>
-                            <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
-                        </Ellipse.Fill>
-                    </Ellipse>
-                    <Ellipse Margin="86" Stroke="{StaticResource Brush_DiscGroove}" StrokeThickness="1" Opacity="0.5"/>
+
+                    <!-- 光晕层：与盘同心 1.7×，accent 染色（Fill 由 code-behind 随 accent 重建），播放时呼吸 -->
+                    <Ellipse x:Name="DiscGlow" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             Width="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=1.7}"
+                             Height="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=1.7}"
+                             RenderTransformOrigin="0.5,0.5"/>
+
+                    <!-- 旋转层（24s，播放转/暂停停） -->
+                    <Grid x:Name="DiscSpinHost" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <RotateTransform x:Name="DiscRotation"/>
+                        </Grid.RenderTransform>
+                        <!-- 半透明盘体：accent 0.56，透出浅灰渐变底 -->
+                        <Ellipse Fill="{Binding VinylAccentBrush, Mode=OneWay}" Opacity="0.56"/>
+                        <!-- 湍流胶纹 + 同心细纹 + 明暗斑驳（运行时预渲染，随盘转） -->
+                        <Ellipse>
+                            <Ellipse.Fill>
+                                <ImageBrush ImageSource="{x:Static local:VinylTextureFactory.GrooveSource}" Stretch="Uniform"/>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <!-- 封面圆：盘径 70%，随盘转 -->
+                        <Ellipse Width="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
+                                 Height="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Stroke="#40FFFFFF" StrokeThickness="1">
+                            <Ellipse.Fill>
+                                <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Ellipse Width="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
+                                 Height="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Fill="{Binding VinylAccentBrush, Mode=OneWay}" Opacity="0.85"
+                                 Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}">
+                            <Ellipse.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#FF000000" Offset="0"/>
+                                    <GradientStop Color="#80000000" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Ellipse.OpacityMask>
+                        </Ellipse>
+                    </Grid>
+
+                    <!-- conic 反光高光：固定不随盘转（环境光） -->
+                    <Image Source="{x:Static local:VinylTextureFactory.HighlightSource}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Width="{Binding ActualWidth, ElementName=DiscHost}"
+                           Height="{Binding ActualWidth, ElementName=DiscHost}"/>
                 </Grid>
                 </Grid>
 
-                <!-- 模板② 沉浸：深主色底（背景层承担）；仅中央当前句大字随曲滚动（对照截图） -->
+                <!-- 模板② 沉浸：深主色三段渐变底 + 全屏水波场 + 中央当前句（重影双层 + 双行拆分） -->
                 <Grid Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding CurrentLyricText, Mode=OneWay}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="720"
+                    <!-- 水波场：左右两个发射点的同心波环（背景色自身深/浅），铺满模板区（审查 F-02 报告对照 NexBox ImmersiveRippleField） -->
+                    <Canvas x:Name="RippleHost" IsHitTestVisible="False"/>
+                    <!-- 重影层：当前句放大灰色（背景重影，对照前景正后方） -->
+                    <TextBlock x:Name="ImmersionGhostText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
+                               RenderTransformOrigin="0.5,0.5"
+                               FontSize="{DynamicResource Font_SizeTitleLg}"
+                               Foreground="#9CA3AF" Opacity="0.18">
+                        <TextBlock.RenderTransform>
+                            <ScaleTransform ScaleX="1.12" ScaleY="1.12"/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                    <!-- 前景主歌词：完整当前句，亮色居中 -->
+                    <TextBlock x:Name="ImmersionLyricText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
+                               RenderTransformOrigin="0.5,0.5"
                                FontSize="{DynamicResource Font_SizeTitleLg}"
                                Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="0"/>
+                        </TextBlock.RenderTransform>
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontWeight" Value="SemiBold"/>

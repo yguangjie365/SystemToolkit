@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -55,6 +56,154 @@ public static class CoverColorFactory
         source.CopyPixels(pixels, stride, 0);
         PaletteMath.Rgb rgb = PaletteMath.PickDominant(pixels, source.PixelWidth * source.PixelHeight);
         return Create(rgb.R, rgb.G, rgb.B);
+    }
+
+    // ════════ NexBox 复刻补充（2026-09-09，对照 MusicPage.tsx / VinylDisc.tsx） ════════
+
+    /// <summary>
+    /// 彩胶页背景（对照 NexBox）：固定浅灰三段渐变 160°（#dfdfe2/#d8d8dc/#d1d1d6）——
+    /// 不随封面变化，彩色只在盘体。
+    /// </summary>
+    public static Brush VinylBackgroundGradient()
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = GradientPoint(160),
+            EndPoint = GradientEnd(160),
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xDF, 0xDF, 0xE2), 0.0));
+        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD8, 0xD8, 0xDC), 0.55));
+        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD1, 0xD1, 0xD6), 1.0));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>沉浸页背景（对照 immersiveBgGradient）：色板匹配色 90° 三段（深 0% → 本色 50% → 浅 100%）。</summary>
+    public static Brush ImmersionBackgroundGradient(SolidColorBrush accent)
+    {
+        (SolidColorBrush baseBrush, SolidColorBrush deep, SolidColorBrush light) = ImmersiveVivid(accent);
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0.5),
+            EndPoint = new Point(1, 0.5),
+        };
+        brush.GradientStops.Add(new GradientStop(deep.Color, 0.0));
+        brush.GradientStops.Add(new GradientStop(baseBrush.Color, 0.5));
+        brush.GradientStops.Add(new GradientStop(light.Color, 1.0));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>现代页背景（对照 modernBgGradient）：封面原色 135°，0–40% 平铺、100% 压暗 ×0.25。</summary>
+    public static Brush ModernBackgroundGradient(SolidColorBrush accent)
+    {
+        SolidColorBrush dark = ModernDark(accent);
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(1, 1),
+        };
+        brush.GradientStops.Add(new GradientStop(accent.Color, 0.0));
+        brush.GradientStops.Add(new GradientStop(accent.Color, 0.4));
+        brush.GradientStops.Add(new GradientStop(dark.Color, 1.0));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>彩胶盘光晕（对照 VinylDisc 光晕层）：accent 径向 0.30 → 0.13(42%) → 透明(68%)。</summary>
+    public static Brush VinylGlow(SolidColorBrush accent)
+    {
+        Color c = accent.Color;
+        var brush = new RadialGradientBrush
+        {
+            GradientStops =
+            {
+                new GradientStop(Color.FromArgb(0x4D, c.R, c.G, c.B), 0),
+                new GradientStop(Color.FromArgb(0x21, c.R, c.G, c.B), 0.42),
+                new GradientStop(Color.FromArgb(0x00, 255, 255, 255), 0.68),
+            },
+        };
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    /// 沉浸水波单环刷（对照 ImmersiveRippleField）：左波用背景色加深（L×0.62）、
+    /// 右波用提亮（L+0.18）的九停靠点同心波环，保留色相（非黑白）。
+    /// </summary>
+    public static Brush ImmersionRippleRing(Color baseColor, bool isLeftWave)
+    {
+        PaletteMath.Hsl hsl = PaletteMath.RgbToHsl(baseColor.R, baseColor.G, baseColor.B);
+        double ringL = isLeftWave ? Math.Max(0.16, hsl.L * 0.62) : Math.Min(0.72, hsl.L + 0.18);
+        PaletteMath.Rgb ring = PaletteMath.HslToRgb(hsl.H, hsl.S, ringL);
+        var brush = new RadialGradientBrush();
+        foreach ((double offset, double alpha) in new[]
+        {
+            (0.0, 0.0), (0.12, 1.0), (0.22, 0.0), (0.34, 0.83),
+            (0.46, 0.0), (0.58, 0.6), (0.70, 0.0), (0.84, 0.33), (1.0, 0.0),
+        })
+        {
+            brush.GradientStops.Add(new GradientStop(
+                Color.FromArgb((byte)(alpha * 0x99), ring.R, ring.G, ring.B), offset));
+        }
+
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>CSS 渐变角 → WPF StartPoint（0°=向上，顺时针）。</summary>
+    private static Point GradientPoint(double angleDeg)
+    {
+        double rad = angleDeg * Math.PI / 180;
+        return new Point(0.5 - Math.Sin(rad) / 2, 0.5 + Math.Cos(rad) / 2);
+    }
+
+    /// <summary>CSS 渐变角 → WPF EndPoint。</summary>
+    private static Point GradientEnd(double angleDeg)
+    {
+        double rad = angleDeg * Math.PI / 180;
+        return new Point(0.5 + Math.Sin(rad) / 2, 0.5 - Math.Cos(rad) / 2);
+    }
+
+    /// <summary>RGB 直构冻结刷（NexBox 复刻的文字色出口；字面色只允许出现在本文件）。</summary>
+    public static SolidColorBrush FromRgb(byte r, byte g, byte b) => Create(r, g, b);
+
+    /// <summary>
+    /// 彩胶主色（对照 vinylAccent）：封面主色 → HSV 钳制饱和度 [0.48,0.92]、明度 [0.34,0.66]，
+    /// 保证胶片色在浅灰底上既鲜艳又可读；custom 固定色由调用方直接传入。
+    /// </summary>
+    public static SolidColorBrush VinylAccent(SolidColorBrush accent)
+    {
+        PaletteMath.Hsv hsv = PaletteMath.RgbToHsv(accent.Color.R, accent.Color.G, accent.Color.B);
+        double s = Math.Min(0.92, Math.Max(0.48, hsv.S));
+        double v = Math.Min(0.66, Math.Max(0.34, hsv.V));
+        PaletteMath.Rgb rgb = PaletteMath.HsvToRgb(hsv.H, s, v);
+        return Create(rgb.R, rgb.G, rgb.B);
+    }
+
+    /// <summary>沉浸背景三段（对照 makeVividColor）：封面色相匹配固定深色板 → 本色 + 深/浅（±0.07 亮度）。</summary>
+    public static (SolidColorBrush Base, SolidColorBrush Deep, SolidColorBrush Light) ImmersiveVivid(SolidColorBrush accent)
+    {
+        PaletteMath.Rgb matched = PaletteMath.MatchVividPalette(accent.Color.R, accent.Color.G, accent.Color.B);
+        PaletteMath.Rgb deep = PaletteMath.ShiftLightness(matched.R, matched.G, matched.B, -0.07);
+        PaletteMath.Rgb light = PaletteMath.ShiftLightness(matched.R, matched.G, matched.B, +0.07);
+        return (Create(matched.R, matched.G, matched.B), Create(deep.R, deep.G, deep.B), Create(light.R, light.G, light.B));
+    }
+
+    /// <summary>现代背景右缘压暗（对照 modernBgDark）：封面原色 × 0.25。</summary>
+    public static SolidColorBrush ModernDark(SolidColorBrush accent)
+        => Create((byte)(accent.Color.R * 0.25), (byte)(accent.Color.G * 0.25), (byte)(accent.Color.B * 0.25));
+
+    /// <summary>浅底判定（对照 coverColor.isLight）：感知亮度 &gt; 0.5 → 深色文字。</summary>
+    public static bool IsLight(SolidColorBrush brush)
+        => PaletteMath.Luminance(brush.Color.R, brush.Color.G, brush.Color.B) > 0.5;
+
+    /// <summary>RGB + alpha 直构冻结刷（半透明文字色；冻结刷不可改 Opacity——实测教训）。</summary>
+    public static SolidColorBrush FromRgbWithOpacity(byte r, byte g, byte b, double opacity)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb((byte)(opacity * 255), r, g, b));
+        brush.Freeze();
+        return brush;
     }
 
     private static SolidColorBrush Create(byte r, byte g, byte b)
