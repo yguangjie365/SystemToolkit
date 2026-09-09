@@ -1034,12 +1034,14 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.CanContentScroll="False"
                              VirtualizingPanel.IsVirtualizing="False"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              VirtualizingPanel.VirtualizationMode="Standard">
-                        <!-- 🔴 像素滚动铁律（2026-09-09 日志实锤的瞬移根因）：IsVirtualizing=False 后
-                             VirtualizingStackPanel 退化为按"项"滚动（ScrollUnit.Item），SmoothScrollLyricToActive
-                             把像素 itemTop 与项单位 offset/scrollable 混算 → target 在 0↔max 项间震荡 =
-                             视口每行进一次上下瞬跳 1100px。换纯 StackPanel 面板强制像素滚动。 -->
+                        <!-- 🔴 像素滚动铁律（2026-09-09 探针实证）：ScrollUnit 默认 Item 且由
+                             ScrollContentPresenter 消费（与面板类型无关！纯 StackPanel 也按项滚动）。
+                             SmoothScrollLyricToActive 把像素 itemTop 与项单位 offset/scrollable 混算 →
+                             target 在 0↔max 项间震荡 = 视口每行进一次上下瞬跳。必须显式 ScrollUnit=Pixel。 -->
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel/>
@@ -1245,7 +1247,9 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.CanContentScroll="False"
                              VirtualizingPanel.IsVirtualizing="False"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              VirtualizingPanel.VirtualizationMode="Standard">
                         <!-- 🔴 同 FullLyricsList：纯 StackPanel 强制像素滚动（项/像素单位混算=瞬移根因） -->
                         <ListBox.ItemsPanel>

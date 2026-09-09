@@ -109,8 +109,8 @@ public class MusicModernLyricsReproTests
 
                 (MusicManagerViewModel vm, _) = CreateVm();
                 var view = new MusicManagerView(vm);
-                view.Measure(new Size(1600, 900));
-                view.Arrange(new Rect(0, 0, 1600, 900));
+                view.Measure(new Size(1600, 400)); // 故意压低窗口：区分滚动单位（项≈10 vs 像素≈400）
+                view.Arrange(new Rect(0, 0, 1600, 400));
 
                 // 现代风格 + 打开完整播放器（复现视频场景）
                 vm.SwitchPlayerStyleCommand.Execute("Modern");
@@ -141,6 +141,13 @@ public class MusicModernLyricsReproTests
                 var sb = new System.Text.StringBuilder();
                 var list = (ListBox)view.FindName("ModernLyricsList")!;
                 ScrollViewer? sv = FindSv(list);
+                // 面板自证：ItemsHost 实际类型 + ScrollUnit 附加属性值（瞬移根因定位用）
+                DependencyObject? itemsHost = FindPresenterChild(list);
+                var vsp = itemsHost as System.Windows.Controls.VirtualizingPanel;
+                sb.AppendLine($"ItemsHost={itemsHost?.GetType().FullName ?? "null"}, " +
+                    $"ScrollUnit={System.Windows.Controls.VirtualizingPanel.GetScrollUnit(list)}, " +
+                    $"IsVirtualizing={System.Windows.Controls.VirtualizingPanel.GetIsVirtualizing(list)}, " +
+                    $"IsVsp={vsp is not null}");
                 sb.AppendLine($"ScrollOffset={sv?.VerticalOffset}, Scrollable={sv?.ScrollableHeight}, Extent={sv?.ExtentHeight}, Viewport={sv?.ViewportHeight}");
 
                 for (int i = 0; i < list.Items.Count; i++)
@@ -223,6 +230,26 @@ public class MusicModernLyricsReproTests
         for (int i = 0; i < n; i++)
         {
             TextBlock? found = FindTb(VisualTreeHelper.GetChild(from, i));
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>找 ItemsPresenter 的第一个子节点（即实际 items host 面板）。</summary>
+    private static DependencyObject? FindPresenterChild(DependencyObject from)
+    {
+        if (from is System.Windows.Controls.ItemsPresenter presenter)
+        {
+            return VisualTreeHelper.GetChild(presenter, 0);
+        }
+
+        int n = VisualTreeHelper.GetChildrenCount(from);
+        for (int i = 0; i < n; i++)
+        {
+            DependencyObject? found = FindPresenterChild(VisualTreeHelper.GetChild(from, i));
             if (found is not null)
             {
                 return found;

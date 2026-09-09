@@ -111,12 +111,10 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 uin = "0";
             }
 
-            // authst：cookie 里的 qm_keyst/music_key（NexBox auth.music_key 同源）；缺失走 ct=24 兜底
-            string authSt = ExtractCookieValue(cookie, "qm_keyst");
-            if (string.IsNullOrEmpty(authSt))
-            {
-                authSt = ExtractCookieValue(cookie, "music_key");
-            }
+            // authst（对照 NexBox cookie.rs qq_extract_music_key 九键候选链）：
+            // qm_keyst 为标准播放密钥；缺失时按链降级（扫码登录可能只带回 skey/p_skey 等）
+            string authSt = ExtractCookieValueChain(cookie, "qm_keyst", "qqmusic_key", "music_key",
+                "p_skey", "skey", "psrf_qqaccess_token", "psrf_qqrefresh_token", "wxrefresh_token", "wxskey");
 
             // 质量模板（对照 NexBox QQ_QUALITY_TEMPLATES；mediaMid 缺省用 songMid 兜底——NexBox 同策略）
             string mediaId = !string.IsNullOrWhiteSpace(mediaMid) ? mediaMid : songMid;
@@ -219,6 +217,20 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             _logger.Error("[QQMusic] 获取播放地址失败", e);
             return Fail(e.Message);
         }
+    }
+
+    /// <summary>从 Cookie 串按候选键链提取第一个非空值（不分大小写；全缺返回空串）。</summary>
+    private static string ExtractCookieValueChain(string cookie, params string[] keys)
+    {
+        foreach (string key in keys)
+        {
+            string v = ExtractCookieValue(cookie, key);
+            if (!string.IsNullOrEmpty(v))
+            {
+                return v;
+            }
+        }
+        return "";
     }
 
     /// <summary>从 Cookie 串提取指定键的值（不分大小写；无则空串）。</summary>
@@ -514,6 +526,13 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
 
         string id = liked ? "liked" : FirstId(item, "dissid", "tid", "dissId", "id", "diss_id");
+        // 🔴 id="0" 同样是"我喜欢"的特征（dirid 字段缺失时 tid/dissid 常为 0；正常 disstid 不会是 0）——
+        // 不归一就会拿 disstid=0 请求曲目 → cdlist_len=0 空白（2026-09-09 二次实证）
+        if (!liked && id == "0")
+        {
+            liked = true;
+            id = "liked";
+        }
         if (string.IsNullOrEmpty(id) && dirid > 0)
         {
             id = dirid.ToString();
