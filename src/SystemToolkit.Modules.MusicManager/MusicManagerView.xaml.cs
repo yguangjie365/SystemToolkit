@@ -740,10 +740,38 @@ public partial class MusicManagerView : UserControl
         {
             ImmersionLyricText.Text = "♪";
             ImmersionGhostText.Text = string.Empty;
+            ImmersionOutgoingText.Opacity = 0; // 无词：清退场层
             return;
         }
 
         string display = PaletteMath.SplitLyricIntoTwoLines(raw);
+
+        // P1 退场（重做）：旧句上移淡出，与新句空间+时间分离，避免同位重叠
+        string prev = ImmersionLyricText.Text;
+        if (!string.IsNullOrEmpty(prev) && prev != "♪" && prev != display)
+        {
+            ImmersionOutgoingText.Text = prev;
+            ImmersionOutgoingText.FontSize = ImmersionLyricText.FontSize;
+            ImmersionOutgoingShift.Y = 0;
+            ImmersionOutgoingText.Opacity = 1;
+            var outFade = new System.Windows.Media.Animation.DoubleAnimation(1, 0,
+                new System.Windows.Duration(TimeSpan.FromSeconds(0.3)));
+            var outRise = new System.Windows.Media.Animation.DoubleAnimation(0, -30,
+                new System.Windows.Duration(TimeSpan.FromSeconds(0.3)))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn },
+            };
+            System.Windows.Media.Animation.Storyboard.SetTarget(outFade, ImmersionOutgoingText);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(outFade, new System.Windows.PropertyPath("Opacity"));
+            System.Windows.Media.Animation.Storyboard.SetTarget(outRise, ImmersionOutgoingText);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(outRise,
+                new System.Windows.PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+            var outBoard = new System.Windows.Media.Animation.Storyboard();
+            outBoard.Children.Add(outFade);
+            outBoard.Children.Add(outRise);
+            outBoard.Begin(ImmersionOutgoingText, true);
+        }
+
         ImmersionLyricText.Text = display;
         // 重影只取句首 2-4 字（对照 NexBox：contentLen*0.35 钳 2..4，去空白），放大置于前景正后方
         string compact = display.Replace(" ", string.Empty).Replace("\n", string.Empty);
@@ -751,7 +779,7 @@ public partial class MusicManagerView : UserControl
         ImmersionGhostText.Text = compact.Length <= ghostCount ? compact : compact[..ghostCount];
         UpdateImmersionFontSizes();
 
-        // 入场动画：随机 rotate / spread（P1：rotate 对齐 NexBox -2.6°）
+        // 入场动画：随机 rotate / spread（P1：rotate 对齐 NexBox -2.6°）+ 淡入
         bool rotate = _rippleRandom.Next(2) == 0;
         var storyboard = new System.Windows.Media.Animation.Storyboard
         {
@@ -768,6 +796,12 @@ public partial class MusicManagerView : UserControl
         System.Windows.Media.Animation.Storyboard.SetTarget(enter, ImmersionLyricText);
         System.Windows.Media.Animation.Storyboard.SetTargetProperty(enter, new System.Windows.PropertyPath(path));
         storyboard.Children.Add(enter);
+        // 新句淡入（250ms），与旧句上移淡出错峰 → 不重叠
+        var enterFade = new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+            new System.Windows.Duration(TimeSpan.FromSeconds(0.25)));
+        System.Windows.Media.Animation.Storyboard.SetTarget(enterFade, ImmersionLyricText);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(enterFade, new System.Windows.PropertyPath("Opacity"));
+        storyboard.Children.Add(enterFade);
         storyboard.Begin(ImmersionLyricText, true);
     }
 
