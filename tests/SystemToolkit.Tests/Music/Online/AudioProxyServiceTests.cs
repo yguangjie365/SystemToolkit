@@ -158,7 +158,7 @@ public class AudioProxyServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CoverProxy_AddsCacheAndCorsHeaders()
+    public async Task CoverProxy_AddsCacheHeader_NoCors()
     {
         string upstreamPrefix = StartFakeUpstream([1, 2, 3, 4]);
         int port = await _sut.StartAsync();
@@ -169,6 +169,32 @@ public class AudioProxyServiceTests : IDisposable
 
         Assert.True(resp.IsSuccessStatusCode);
         Assert.Equal("public, max-age=86400", string.Join("", resp.Headers.GetValues("Cache-Control")));
-        Assert.Equal("*", string.Join("", resp.Headers.GetValues("Access-Control-Allow-Origin")));
+        // 审查 R1b：刻意不发 CORS（消费方 HttpClient/NAudio 无 CORS 语义；* 会放大 SSRF 读取面）
+        Assert.False(resp.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    [Theory]
+    [InlineData("http://evilqq.com/a.flac", true)]        // 裸 EndsWith("qq.com") 绕过 → 必须拒
+    [InlineData("http://notkugou.com/a.flac", true)]      // 绕过 kugou.com → 必须拒
+    [InlineData("http://xmigu.cn/a.flac", true)]          // 绕过 migu.cn → 必须拒
+    [InlineData("http://evil.music.163.com/x.flac", false)] // 真子域 → 放行（非 400）
+    [InlineData("http://y.qq.com/a.flac", false)]         // 精确域 → 放行
+    public async Task R1_HostAllowlist_RejectsSuffixBypass(string targetUrl, bool shouldReject)
+    {
+        // 默认白名单校验器（不注入放行）
+        var sut = new AudioProxyService();
+        int port = await sut.StartAsync();
+        using var client = new HttpClient();
+        HttpResponseMessage resp = await client.GetAsync(
+            $"http://127.0.0.1:{port}/audio?url={Uri.EscapeDataString(targetUrl)}");
+
+        if (shouldReject)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode); // 白名单外一律 400
+        }
+        else
+        {
+            Assert.NotEqual(HttpStatusCode.BadRequest, resp.StatusCode); // 放行后上游不可达 → 502 等，非 400
+        }
     }
 }

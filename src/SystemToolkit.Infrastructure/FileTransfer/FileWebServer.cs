@@ -781,7 +781,8 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
             .Where(kv => !kv.Key.Equals("t", StringComparison.OrdinalIgnoreCase))
             .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value.ToString())}"));
 
-        return $"https://{ctx.Request.Host.Host}:{_httpsPort}{ctx.Request.Path}"
+        // 审查 Y7（2026-09-10）：用服务端自身 _lanIp，不用客户端可控的 ctx.Request.Host.Host（Host 头注入）
+        return $"https://{_lanIp}:{_httpsPort}{ctx.Request.Path}"
                + (query.Length > 0 ? "?" + query : string.Empty);
     }
 

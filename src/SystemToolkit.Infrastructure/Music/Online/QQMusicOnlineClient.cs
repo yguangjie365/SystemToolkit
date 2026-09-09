@@ -1741,13 +1741,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             {
                 captured = string.Join("; ", setCookies.Select(c => c.Split(';')[0].Trim()));
             }
-            // 与 NetEase 对齐的诊断日志：每次轮询都打 code/message/昵称/Set-Cookie 摘要。
-            // 修复用户反馈"QQ 扫码后没反应"：此前只在 NetEase 分支打 Info 日志，QQ 走通也在日志里不可见，
-            // 外部看上去就像"仍然是网易云 400"。
-            string cookieSummary = codeVal == 803
-                ? captured is null ? "(null)" : captured.Length <= 80 ? captured : captured.Substring(0, 80) + "…"
-                : "(non-803)";
-            _logger.Info($"[QQMusic] 轮询扫码: code={codeVal} msg={message} nick={(string.IsNullOrEmpty(nick) ? "(无)" : nick)} setCookieSummary={cookieSummary} raw={(text.Length <= 160 ? text : text.Substring(0, 160) + "…")}");
+            // 与 NetEase 对齐的诊断日志：每次轮询都打 code/message/昵称；
+            // 审查 R2（2026-09-10）：captured 在 803 时含 qqmusic_key/skey/uin 会话令牌，
+            // 严禁写进日志（引导用户贴日志排错 → 明文令牌会泄露）。只记"是否捕获到"，不落值/原始响应体
+            bool cookieCaptured = captured is not null;
+            _logger.Info($"[QQMusic] 轮询扫码: code={codeVal} msg={message} nick={(string.IsNullOrEmpty(nick) ? "(无)" : nick)} cookieCaptured={cookieCaptured}");
 
             return new OnlineQrCheckResult
             {

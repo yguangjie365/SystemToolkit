@@ -1404,7 +1404,8 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         // 把签名前后逐字段打出来，让用户贴到日志里和 NexBox 跑同 requestId 时的输出对比。
         // 只在第一次请求时打印一次完整 payloadText（避免反复刷屏）；后续只打印 path+code。
         // payloadText 里包含 header JSON（含 buildver/requestId），两端同 requestId 就能精确比对。
-        _logger.Info($"[NetEase] EAPI 请求签名({apiPath}): payloadText={probe.payloadText} digestSource={probe.digestSource} digest={probe.digest} dataLen={probe.data.Length} encryptedLen={encrypted.Length} headerCookiePreview={headerCookie} userCookieEmpty={string.IsNullOrEmpty(userCookie)}");
+        // 审查 Y16（2026-09-10）：不再打印 headerCookiePreview（cookie 头内容），只留 requestId 比对所需的签名摘要
+        _logger.Info($"[NetEase] EAPI 请求签名({apiPath}): payloadText={probe.payloadText} digestSource={probe.digestSource} digest={probe.digest} dataLen={probe.data.Length} encryptedLen={encrypted.Length} userCookieEmpty={string.IsNullOrEmpty(userCookie)}");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         if (!string.IsNullOrEmpty(mergedCookie))
@@ -1527,7 +1528,7 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
                 ["key"] = MakeJsonStr(key),
                 ["csrf_token"] = MakeJsonStr(""),
             };
-            (JsonElement json, string? capturedFromHeader, string? raw) = await PostEapiAsync("/api/login/qrcode/client/login", payload, cookie, captureSetCookie: true, ct);
+            (JsonElement json, string? capturedFromHeader, _) = await PostEapiAsync("/api/login/qrcode/client/login", payload, cookie, captureSetCookie: true, ct);
 
             int code = -1;
             if (json.TryGetProperty("code", out JsonElement codeEl))
@@ -1560,11 +1561,10 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
             // 2026-09-03 修"扫码后无动作"的诊断信息：
             // 每次轮询都把 (code, message) 打到 Info，让用户贴日志就能区分
             //   "801 服务器根本没收到扫码确认" / "802 已经扫到但 UI 没走到 803" / "-1 Parse 失败" / "code=0 服务器返回错"
-            // 也把 802/803 的 nickname/avatar 与 Set-Cookie 摘要打到日志，避免手机已扫码但我们始终 801 被猜。
-            string cookieSummary = code == 803
-                ? captured is null ? "(null)" : captured.Length <= 80 ? captured : captured.Substring(0, 80) + "…"
-                : "(non-803)";
-            _logger.Info($"[NetEase] 轮询扫码: code={code} msg={message} nick={(string.IsNullOrEmpty(nickname) ? "(无)" : nickname)} avatarLen={(string.IsNullOrEmpty(avatar) ? 0 : avatar.Length)} setCookieSummary={cookieSummary} raw={(string.IsNullOrEmpty(raw) ? "" : (raw.Length > 160 ? raw.Substring(0, 160) + "…" : raw.Trim()))}");
+            // 审查 R2（2026-09-10）：captured 在 803 时是 MUSIC_U 会话令牌，严禁写进日志
+            // （项目引导用户贴日志排错 → 明文令牌会泄露）。只记"是否捕获到"，不落值/原始响应体
+            bool cookieCaptured = captured is not null;
+            _logger.Info($"[NetEase] 轮询扫码: code={code} msg={message} nick={(string.IsNullOrEmpty(nickname) ? "(无)" : nickname)} avatarLen={(string.IsNullOrEmpty(avatar) ? 0 : avatar.Length)} cookieCaptured={cookieCaptured}");
 
             return new OnlineQrCheckResult
             {

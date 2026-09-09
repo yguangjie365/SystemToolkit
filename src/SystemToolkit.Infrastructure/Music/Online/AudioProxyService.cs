@@ -114,16 +114,18 @@ public sealed class AudioProxyService : IAudioProxyService
             return false;
         }
 
+        // 审查 R1（2026-09-10）：裸 EndsWith("qq.com") 会被 evilqq.com 绕过——必须点边界
+        // （host 等于域，或以 ".域" 结尾才是真子域）
+        static bool Dom(string h, string d) => h == d || h.EndsWith("." + d, StringComparison.Ordinal);
         string host = uri.Host.ToLowerInvariant();
-        return host.EndsWith("music.163.com", StringComparison.Ordinal)
-            || host.EndsWith(".music.126.net", StringComparison.Ordinal) || host.EndsWith("music.126.net", StringComparison.Ordinal)
-            || host.EndsWith(".126.net", StringComparison.Ordinal)
-            || host.EndsWith("qq.com", StringComparison.Ordinal)
-            || host.EndsWith("qqmusic.qq.com", StringComparison.Ordinal)
-            || host.EndsWith("gtimg.cn", StringComparison.Ordinal) || host.EndsWith("gtimg.com", StringComparison.Ordinal)
-            || host.EndsWith("qpic.cn", StringComparison.Ordinal)
-            || host.EndsWith("kugou.com", StringComparison.Ordinal)
-            || host.EndsWith("migu.cn", StringComparison.Ordinal) || host.EndsWith("miguvideo.com", StringComparison.Ordinal);
+        return Dom(host, "music.163.com")
+            || Dom(host, "music.126.net")
+            || Dom(host, "126.net")
+            || Dom(host, "qq.com")
+            || Dom(host, "gtimg.cn") || Dom(host, "gtimg.com")
+            || Dom(host, "qpic.cn")
+            || Dom(host, "kugou.com")
+            || Dom(host, "migu.cn") || Dom(host, "miguvideo.com");
     }
 
     private TaskCompletionSource<int>? _startGate;
@@ -132,21 +134,14 @@ public sealed class AudioProxyService : IAudioProxyService
     public async Task<int> StartAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_started < 0, this);
-        if (Interlocked.CompareExchange(ref _started, 1, 0) == 1)
-        {
-            // 审查 Y4（2026-09-10）：并发首启时胜者尚未赋 _port，直接返回会拿到 0——
-            // 经 TCS 门等待胜者的真实端口
-            TaskCompletionSource<int>? gate = _startGate;
-            if (gate is not null)
-            {
-                return await gate.Task.ConfigureAwait(false);
-            }
-
-            return _port; // 已完全启动
-        }
-
+        // 审查 O7（2026-09-10）：以 _startGate 本身作 CAS 目标——门在任何 await 之前
+        // 原子发布，输方必定 await 到胜者的真实端口，杜绝"CAS 后读未赋值 _port=0"窗口
         var startGate = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _startGate = startGate;
+        TaskCompletionSource<int>? existing = Interlocked.CompareExchange(ref _startGate, startGate, null);
+        if (existing is not null)
+        {
+            return await existing.Task.ConfigureAwait(false); // 已启动/启动中：等真实端口
+        }
 
         try
         {
@@ -169,7 +164,9 @@ public sealed class AudioProxyService : IAudioProxyService
                 .Select(u => new Uri(u).Port)
                 .FirstOrDefault();
             _app = app;
-            _startGate = null;
+            // 审查 O7：保留 _startGate 为已完成门——后续 StartAsync 调用 CAS 失败后 await 到真实端口；
+            // 不能置 null，否则停止前误置 null 会让新调用重新 CAS 成功并二次建站
+            Interlocked.Exchange(ref _started, 1);
             startGate.TrySetResult(_port);
             return _port;
         }
@@ -192,6 +189,7 @@ public sealed class AudioProxyService : IAudioProxyService
             _app = null;
             _port = 0;
             Interlocked.Exchange(ref _started, 0);
+            _startGate = null; // 审查 O7：停止后归零门，允许再 StartAsync 重新 CAS 建站
         }
 
         if (app is not null)
@@ -273,13 +271,15 @@ public sealed class AudioProxyService : IAudioProxyService
 
         try
         {
+            CancellationToken aborted = request.HttpContext.RequestAborted; // 审查 Y14：可取消
             using HttpResponseMessage upstreamResp = await StreamClient.SendAsync(
-                upstream, HttpCompletionOption.ResponseHeadersRead);
+                upstream, HttpCompletionOption.ResponseHeadersRead, aborted);
 
             response.StatusCode = (int)upstreamResp.StatusCode;
             response.ContentType = ContentTypeFor(audioUrl);
             response.Headers.Append("Accept-Ranges", "bytes");
-            response.Headers.Append("Access-Control-Allow-Origin", "*");
+            // 审查 R1b（2026-09-10）：刻意不发 Access-Control-Allow-Origin——消费方是 NAudio
+            // 原生 HTTP（无 CORS 语义）；此前设 * 会让本机任意网页跨源读代理响应
 
             if (upstreamResp.Content.Headers.ContentLength is not null)
             {
@@ -292,7 +292,7 @@ public sealed class AudioProxyService : IAudioProxyService
             }
 
             // 纯流式透传：边下边播，零额外内存开销
-            await upstreamResp.Content.CopyToAsync(response.Body);
+            await upstreamResp.Content.CopyToAsync(response.Body, aborted);
         }
         catch (Exception ex)
         {
@@ -317,11 +317,12 @@ public sealed class AudioProxyService : IAudioProxyService
 
         try
         {
-            using HttpResponseMessage upstreamResp = await WebClient.SendAsync(upstream);
+            CancellationToken aborted = request.HttpContext.RequestAborted; // 审查 Y14
+            using HttpResponseMessage upstreamResp = await WebClient.SendAsync(upstream, aborted);
 
             response.StatusCode = (int)upstreamResp.StatusCode;
             response.ContentType = upstreamResp.Content.Headers.ContentType?.ToString() ?? "image/jpeg";
-            response.Headers.Append("Access-Control-Allow-Origin", "*");
+            // 审查 R1b（2026-09-10）：不发 Access-Control-Allow-Origin（同 /audio 理由）
             response.Headers.Append("Cache-Control", "public, max-age=86400");
 
             if (upstreamResp.Content.Headers.ContentLength is not null)

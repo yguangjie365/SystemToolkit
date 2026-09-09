@@ -102,8 +102,26 @@ public sealed class DpapiOnlineCredentialStore : IOnlineCredentialStore
             return [];
         }
 
-        Payload? payload = JsonSerializer.Deserialize<Payload>(File.ReadAllText(_path), JsonOpts);
-        return payload?.ProtectedCookies ?? [];
+        // 审查 O15（2026-09-10）：坏/截断 JSON 此前会让 SetCookie/Clear 抛出，
+        // 用户卡在"无法重新登录覆盖"。降级收进此处——损坏即删文件回退空表，三调用点共用
+        try
+        {
+            Payload? payload = JsonSerializer.Deserialize<Payload>(File.ReadAllText(_path), JsonOpts);
+            return payload?.ProtectedCookies ?? [];
+        }
+        catch (Exception)
+        {
+            try
+            {
+                File.Delete(_path);
+            }
+            catch
+            {
+                // 删失败仍回退空表
+            }
+
+            return [];
+        }
     }
 
     private void SaveProtected(Dictionary<string, string> protectedCookies)
