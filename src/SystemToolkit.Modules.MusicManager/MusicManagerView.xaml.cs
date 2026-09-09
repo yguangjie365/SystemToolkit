@@ -853,6 +853,12 @@ public partial class MusicManagerView : UserControl
         // VerticalOffset 是只读依赖属性，Storyboard.Begin 即抛"路径包含非动画属性"，
         // 异常顶掉状态行且滚动跟随整体失效（seek 后歌词错位/列表空白）。
         // 改为 350ms 手动帧插值（cubic ease-out），与 NexBox 行为一致。
+        // 手动滚动冲突处理（对照 NexBox 第 4 环节）：用户刚滚过滚轮时自动跟随暂不抢位
+        if (DateTime.UtcNow - _lastManualScrollUtc < ManualScrollHold)
+        {
+            return;
+        }
+
         // 📋 瞬移诊断（用户实测反馈"整段上下瞬移"）：每次滚动触发全量留痕，复现日志一锤定音
         SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
             SystemToolkit.Core.Logging.LogLevel.Info, "musicmanager",
@@ -867,6 +873,23 @@ public partial class MusicManagerView : UserControl
     private double _scrollAnimFrom;
     private double _scrollAnimTo;
     private DateTime _scrollAnimStart;
+
+    /// <summary>用户手动滚动后的自动跟随保持窗口（窗口内自动滚动不抢位，NexBox 同语义）。</summary>
+    private static readonly TimeSpan ManualScrollHold = TimeSpan.FromSeconds(4);
+
+    private DateTime _lastManualScrollUtc = DateTime.MinValue;
+
+    /// <summary>
+    /// 歌词区滚轮接管（对照 NexBox 手动滚动冲突处理）：停掉自动跟随动画让滚轮生效，
+    /// 并记录时间戳——<see cref="ManualScrollHold"/> 窗口内自动滚动不抢位，之后自动恢复跟随。
+    /// 不标记 Handled：默认滚轮滚动原样生效。
+    /// </summary>
+    private void OnLyricPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        _scrollTimer?.Stop();
+        _scrollAnimTarget = null;
+        _lastManualScrollUtc = DateTime.UtcNow;
+    }
 
     /// <summary>滚动动画单帧时长（与原 350ms 缓动一致）。</summary>
     private static readonly TimeSpan ScrollAnimDuration = TimeSpan.FromMilliseconds(350);

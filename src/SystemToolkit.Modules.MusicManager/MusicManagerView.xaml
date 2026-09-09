@@ -1031,6 +1031,7 @@
                                Foreground="{StaticResource Brush_TextMuted}"
                                TextTrimming="CharacterEllipsis"/>
                     <ListBox Grid.Row="2" x:Name="FullLyricsList"
+                             PreviewMouseWheel="OnLyricPreviewMouseWheel"
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -1243,6 +1244,7 @@
 
                     <!-- 右：歌词列表（当前行主色高亮） -->
                     <ListBox Grid.Column="1" x:Name="ModernLyricsList"
+                             PreviewMouseWheel="OnLyricPreviewMouseWheel"
                              Margin="8,60,64,16"
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
