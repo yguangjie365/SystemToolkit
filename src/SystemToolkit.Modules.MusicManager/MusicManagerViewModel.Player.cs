@@ -379,6 +379,9 @@ public partial class MusicManagerViewModel
     }
 
     /// <summary>队列面板点选（图3 队列按钮配套行为）：定位到该曲并立即播放。</summary>
+    /// <remarks>🔴 必须走 <see cref="IPlaybackQueueService.SetCurrent"/>（只切当前、不动队列内容）。
+    /// 旧实现 SetQueue(_queue.Queue, song)：Queue 是底层集合的活只读包装，SetQueue 先 Clear
+    /// 再遍历自身 → 空集 → 点队列任一首 = 队列全灭 + Current=null（2026-09-09 日志+复现测试实锤）。</remarks>
     [RelayCommand]
     private async Task PlayQueueItemAsync(MusicSong? song)
     {
@@ -387,7 +390,7 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        _queue.SetQueue(_queue.Queue, song);
+        _queue.SetCurrent(song);
         OnPropertyChanged(nameof(QueueCurrent));
         if (ResolveEngine() is { } engine)
         {

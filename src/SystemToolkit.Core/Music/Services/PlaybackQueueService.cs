@@ -104,6 +104,24 @@ public sealed class PlaybackQueueService : IPlaybackQueueService
     }
 
     /// <inheritdoc />
+    public void SetCurrent(MusicSong song)
+    {
+        MusicSong? match = _songs.FirstOrDefault(s => s.Id == song.Id);
+        if (match is null)
+        {
+            return; // 不在队列中：no-op（队列点选只可能点队列里已有的曲）
+        }
+
+        if (_current is not null && _current.Id == match.Id)
+        {
+            return; // 重复点同一首：不重发事件（避免下游无谓重载）
+        }
+
+        _current = match;
+        CurrentChanged?.Invoke();
+    }
+
+    /// <inheritdoc />
     public MusicSong? PickNext()
     {
         if (_songs.Count == 0)

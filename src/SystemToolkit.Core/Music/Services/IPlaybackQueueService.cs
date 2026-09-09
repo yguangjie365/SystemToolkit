@@ -62,4 +62,12 @@ public interface IPlaybackQueueService
 
     /// <summary>上层在引擎确认开播后上报；写入播放历史供 PickPrevious 回退。上报的曲目不在队列中也允许（如已从队列移除但仍在播）。</summary>
     void ReportPlaybackStarted(MusicSong song);
+
+    /// <summary>
+    /// 队列内点选：把当前曲目定位到 <paramref name="song"/>（按 Id 匹配），<b>不重建队列内容</b>。
+    /// 🔴 不得用 <c>SetQueue(Queue, song)</c> 实现同等语义——Queue 是底层集合的活只读包装，
+    /// SetQueue 内部先 Clear 再遍历自身会得到空集（2026-09-09 实测：点队列任一首 → 队列全灭）。
+    /// 不在队列中时 no-op。触发 CurrentChanged（不触发 QueueChanged）。
+    /// </summary>
+    void SetCurrent(MusicSong song);
 }
