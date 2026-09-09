@@ -20,15 +20,9 @@ public enum LyricSource
 /// 一行歌词。
 /// </summary>
 /// <remarks>
-/// <para>结构对照旧工程 <c>KaraokeLine</c>，但删去了三个逐字卡拉OK 专用成员
-/// （<c>Words</c> / <c>HasKaraoke</c> / <c>CharCount</c>）及配套的 <c>LyricWord</c> 类型。
-/// 🔴 复用纪律要求的偏离说明：这三者只由 <c>LyricParser.ParseYrc</c> 填充，
-/// 而 YRC 逐字歌词<b>只有</b>网易云/QQ 音乐接口会下发，属二阶段第三方平台能力
-/// （且按 AGENTS.md 红线须走独立 WebView2 进程，数据通路要重新设计）。
-/// 本阶段两个歌词来源——内嵌 USLT 与外部 <c>.lrc</c>——都是逐行 LRC，
-/// <c>Words</c> 恒为 null，留着就是不可达分支，还要为死代码写测试。</para>
-/// <para>相应地，<c>LyricParser.GetLineProgress</c> 的逐字分支在搬移时一并去掉，
-/// 只保留行级线性插值 + smoothstep 缓动那条路径（算法逐字未改）。</para>
+/// <para>结构对照旧工程 <c>KaraokeLine</c>。2026-09-09 用户裁决恢复逐字卡拉OK（对照 NexBox）：此前的"偏离说明"作废，
+/// <c>LyricParser.ParseYrc</c> 与 <c>LyricParser.GetLineProgress</c> 的逐字分支按原算法
+/// 恢复（网易 YRC / QQ QRC 接口均能下发）。</para>
 /// </remarks>
 public sealed record LyricLine
 {
@@ -43,7 +37,16 @@ public sealed record LyricLine
 
     /// <summary>译文（按时间戳匹配；无译文时为 null）。</summary>
     public string? Translation { get; init; }
+
+    /// <summary>逐字数据（有 YRC/QRC 时非 null；卡拉OK逐字填充用）。</summary>
+    public IReadOnlyList<LyricWord>? Words { get; init; }
+
+    /// <summary>整行字符数（逐字进度按字符区间换算；恒 ≥1）。</summary>
+    public int CharCount { get; init; } = 1;
 }
+
+/// <summary>逐字数据：词文本 + 起止时间 + 在整行文本中的字符区间 [C0,C1)。</summary>
+public sealed record LyricWord(string Text, double T, double D, int C0, int C1);
 
 /// <summary>
 /// 一首歌的歌词文档：来源 + 已解析的行 + 无时间标签时的纯文本兜底。

@@ -52,6 +52,11 @@
         <Geometry x:Key="IconEqSliders">M5,8 H19 M5,16 H19 M9,5.5 A2.5,2.5 0 1 1 9,10.5 A2.5,2.5 0 1 1 9,5.5 M15,13.5 A2.5,2.5 0 1 1 15,18.5 A2.5,2.5 0 1 1 15,13.5</Geometry>
         <!-- 2026-09-09 修复"进度条被底色吞掉"：默认 Slider 轨道为主题底色，压在播放器染色背景上隐形（只剩滑块）。
              自绘模板：剩余轨道半透明灰 + 已播段强调色 + 白色圆形滑块——浅底/彩胶/沉浸/现代四背景通用 -->
+                <!-- 顶栏平台切换芯片公共样式（差异只在选中 DataTrigger，留在各按钮上） -->
+        <Style x:Key="PlatformChipStyle" TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="10,0"/>
+        </Style>
         <Style x:Key="SeekSliderStyle" TargetType="Slider">
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Focusable" Value="False"/>
@@ -120,10 +125,10 @@
                            Foreground="{StaticResource Brush_TextMuted}"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Button Height="32" Content="网易云" Padding="10,0"
+                <Button Content="网易云"
                         Command="{Binding SelectPlatformCommand}" CommandParameter="NetEase">
                     <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                        <Style TargetType="Button" BasedOn="{StaticResource PlatformChipStyle}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedPlatform, Mode=OneWay}" Value="NetEase">
                                     <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
@@ -132,10 +137,10 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Height="32" Content="QQ 音乐" Padding="10,0" Margin="4,0,0,0"
+                <Button Content="QQ 音乐" Margin="4,0,0,0"
                         Command="{Binding SelectPlatformCommand}" CommandParameter="QQMusic">
                     <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                        <Style TargetType="Button" BasedOn="{StaticResource PlatformChipStyle}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedPlatform, Mode=OneWay}" Value="QQMusic">
                                     <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
@@ -164,7 +169,7 @@
         <!-- 状态行 + 曲库降级警告（🔴 不静默：缓存损坏/剔除文件必须可见） -->
         <StackPanel Grid.Row="1" Margin="0,0,0,6">
             <Border Background="{StaticResource Brush_WarningSoft}" CornerRadius="{DynamicResource Radius_MD}"
-                    Padding="10,6"
+                    Padding="10,6" Margin="0,0,0,4"
                     Visibility="{Binding LibraryWarning, Converter={StaticResource StrToVis}}">
                 <TextBlock Text="{Binding LibraryWarning}" FontSize="{DynamicResource Font_SizeCaption}"
                            Foreground="{StaticResource Brush_Warning}"/>
@@ -195,7 +200,7 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Width="28" Height="28" Padding="0" Margin="0,0,8,0"
                                 Background="Transparent" BorderThickness="0"
-                                Command="{Binding ClosePlaylistCommand}" ToolTip="返回上一层"
+                                Command="{Binding ClosePlaylistCommand}" AutomationProperties.Name="返回上一层" ToolTip="返回上一层"
                                 Visibility="{Binding IsLocalLibraryView, Converter={StaticResource InverseToVis}}">
                             <Path Data="{StaticResource IconBack}" StrokeLineJoin="Round"
                                   Stroke="{StaticResource Brush_TextPrimary}" StrokeThickness="2"/>
@@ -277,7 +282,7 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button Width="24" Height="24" Padding="0" Margin="0,0,6,0"
                                         Background="Transparent" BorderThickness="0"
-                                        Command="{Binding LoadPlaylistsCommand}" ToolTip="刷新歌单">
+                                        Command="{Binding LoadPlaylistsCommand}" AutomationProperties.Name="刷新歌单" ToolTip="刷新歌单">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                             <Style.Triggers>
@@ -334,7 +339,7 @@
                                         <Border Width="48" Height="48" CornerRadius="{DynamicResource Radius_MD}"
                                                 Background="{StaticResource Brush_SurfaceAlt}">
                                             <Grid>
-                                                <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                                <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill" ImageFailed="OnCoverImageFailed"
                                                        Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
                                                 <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_TextMuted}"
                                                       Width="18" Height="18" Stretch="Uniform"
@@ -469,7 +474,7 @@
                                             <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
                                                   Width="15" Height="15" Stretch="Uniform"
                                                   Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
-                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill" ImageFailed="OnCoverImageFailed"
                                                    Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
                                         </Grid>
                                     </Border>
@@ -555,7 +560,7 @@
                                             <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
                                                   Width="15" Height="15" Stretch="Uniform"
                                                   Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
-                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                            <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill" ImageFailed="OnCoverImageFailed"
                                                    Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
                                         </Grid>
                                     </Border>
@@ -624,7 +629,7 @@
                                HorizontalAlignment="Right" Margin="0,0,8,0"
                                Visibility="{Binding IsLoadingRecommendations, Converter={StaticResource BoolToVis}}"/>
                     <Button Grid.Column="1" Width="22" Height="22" Padding="0"
-                            Command="{Binding LoadRecommendationsCommand}" ToolTip="刷新推荐">
+                            Command="{Binding LoadRecommendationsCommand}" AutomationProperties.Name="刷新推荐" ToolTip="刷新推荐">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                 <Style.Triggers>
@@ -665,7 +670,7 @@
                                         <Path Data="{StaticResource IconNote}" Fill="{StaticResource Brush_Accent}"
                                               Width="13" Height="13" Stretch="Uniform"
                                               Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}"/>
-                                        <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill"
+                                        <Image Source="{Binding CoverImage, Mode=OneWay}" Stretch="UniformToFill" ImageFailed="OnCoverImageFailed"
                                                Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}"/>
                                     </Grid>
                                 </Border>
@@ -696,8 +701,8 @@
         <!-- 底部常驻播放条（2026-09-09 NexBox 风格重做：封面+曲名/艺人+中央圆形播放钮+右侧图标组+下缘进度；点击空白区展开完整播放器） -->
         <Border Grid.Row="3" Margin="0,8,0,0" Padding="14,8,14,6"
                 Background="{StaticResource Brush_Surface}"
-                CornerRadius="{DynamicResource Radius_LG}"
-                MouseLeftButtonDown="OnBottomBarTap">
+                CornerRadius="{DynamicResource Radius_LG}">
+                <!-- 反馈：整条热区误触展开已移除——仅右上专用展开钮进入完整播放器 -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -733,13 +738,13 @@
                                 IsEnabled="{Binding IsEngineReady}">
                         <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
                                 Background="Transparent" BorderThickness="0"
-                                Command="{Binding PreviousCommand}" ToolTip="上一首">
+                                Command="{Binding PreviousCommand}" AutomationProperties.Name="上一首" ToolTip="上一首">
                             <Path Data="{StaticResource IconPrev}" Fill="{StaticResource Brush_TextPrimary}"
                                   Width="16" Height="16" Stretch="Uniform"/>
                         </Button>
                         <Button Width="36" Height="36" Padding="0" Margin="0,0,16,0"
                                 Background="{StaticResource Brush_Accent}" BorderThickness="0"
-                                Command="{Binding PlayPauseCommand}" ToolTip="播放 / 暂停">
+                                Command="{Binding PlayPauseCommand}" AutomationProperties.Name="播放或暂停" ToolTip="播放 / 暂停">
                             <Grid>
                                 <Path Data="{StaticResource IconPlaySolid}" Fill="{StaticResource Brush_Background}"
                                       Width="15" Height="15" Stretch="Uniform"
@@ -751,12 +756,24 @@
                         </Button>
                         <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
                                 Background="Transparent" BorderThickness="0"
-                                Command="{Binding NextCommand}" ToolTip="下一首">
+                                Command="{Binding NextCommand}" AutomationProperties.Name="下一首" ToolTip="下一首">
                             <Path Data="{StaticResource IconNext}" Fill="{StaticResource Brush_TextPrimary}"
                                   Width="16" Height="16" Stretch="Uniform"/>
                         </Button>
-                        <Button Width="32" Height="32" Padding="0"
+                        <Button Width="32" Height="32" Padding="0" Margin="0,0,16,0"
                                 Background="Transparent" BorderThickness="0"
+                                Command="{Binding ToggleMuteCommand}" AutomationProperties.Name="音量静音切换"
+                                ToolTip="音量（点击静音/取消静音）">
+                            <Grid>
+                                <Rectangle Width="14" Height="14" RadiusX="3" RadiusY="3"
+                                           Fill="{Binding PlayerAccentBrush, Mode=OneWay}"
+                                           Visibility="{Binding Muted, Converter={StaticResource InverseToVis}}"/>
+                                <Rectangle Width="14" Height="14" RadiusX="3" RadiusY="3"
+                                           Stroke="{Binding PlayerMutedBrush, Mode=OneWay}" StrokeThickness="1.5"
+                                           Visibility="{Binding Muted, Converter={StaticResource BoolToVis}}"/>
+                            </Grid>
+                        </Button>
+                        <Button Width="32" Height="32" Padding="0"
                                 Command="{Binding ToggleModeCommand}" ToolTip="{Binding ModeText, Mode=OneWay}">
                             <Path Data="{StaticResource IconLoop}" StrokeLineJoin="Round"
                                   Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
@@ -928,8 +945,15 @@
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
             </Grid>
 
-            <!-- ① 顶栏：只留收起钮（反馈5：风格切换移到底栏；音质/队列在底控制栏） -->
+            <!-- ① 顶栏：收起钮（左）；现代态显示"歌词"pill（右，对照 NexBox，不做评论） -->
             <Grid Grid.Row="0">
+                <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,20,0"
+                        Padding="10,4" CornerRadius="{DynamicResource Radius_Pill}"
+                        Background="{Binding PlayerAccentBrush, Mode=OneWay}"
+                        Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="♪ 歌词" FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}"/>
+                </Border>
                 <Button HorizontalAlignment="Left" Margin="20,14,0,0"
                         Width="40" Height="40" Padding="0"
                         Background="Transparent" BorderThickness="0"
@@ -1144,9 +1168,13 @@
                                        FontSize="{DynamicResource Font_SizeTitle}"
                                        Foreground="{StaticResource Brush_TextPrimary}"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding CurrentSub, Mode=OneWay}" Margin="0,6,0,0"
+                            <TextBlock Text="{Binding CurrentArtistText, Mode=OneWay}" Margin="0,6,0,0"
                                        FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{StaticResource Brush_TextMuted}"
+                                       Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding CurrentAlbumText, Mode=OneWay}" Margin="0,2,0,0"
+                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                       Foreground="{Binding PlayerMutedBrush, Mode=OneWay}"
                                        TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Border>
@@ -1294,13 +1322,13 @@
                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
                     <Button Width="44" Height="40" Margin="0,0,28,0" Padding="0"
                             Style="{StaticResource RowActionButton}"
-                            Command="{Binding PreviousCommand}" ToolTip="上一首">
+                            Command="{Binding PreviousCommand}" AutomationProperties.Name="上一首" ToolTip="上一首">
                         <Path Data="{StaticResource IconPrev}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
                               Width="18" Height="18" Stretch="Uniform"/>
                     </Button>
                     <Button Width="56" Height="56" Padding="0"
                             Background="{StaticResource Brush_Accent}" BorderThickness="0"
-                            Command="{Binding PlayPauseCommand}" ToolTip="播放 / 暂停">
+                            Command="{Binding PlayPauseCommand}" AutomationProperties.Name="播放或暂停" ToolTip="播放 / 暂停">
                         <Grid>
                             <Path Fill="{StaticResource Brush_Background}" Data="{StaticResource IconPlaySolid}"
                                   Width="20" Height="20" Stretch="Uniform"
@@ -1312,7 +1340,7 @@
                     </Button>
                     <Button Width="44" Height="40" Margin="28,0,0,0" Padding="0"
                             Style="{StaticResource RowActionButton}"
-                            Command="{Binding NextCommand}" ToolTip="下一首">
+                            Command="{Binding NextCommand}" AutomationProperties.Name="下一首" ToolTip="下一首">
                         <Path Data="{StaticResource IconNext}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
                               Width="18" Height="18" Stretch="Uniform"/>
                     </Button>

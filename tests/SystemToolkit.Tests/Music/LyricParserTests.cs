@@ -182,4 +182,70 @@ public class LyricParserTests
 
         Assert.Equal(0, LyricParser.CalcActiveIndex(lines, 4.97));
     }
+
+    // ════════ ParseYrc 逐字歌词（2026-09-09 恢复；算法对照 NexBox parseYrc） ════════
+
+    [Fact]
+    public void ParseYrc_ParsesWordsAndCharOffsets()
+    {
+        // 行头 [start,dur] + 圆括号词标签（网易 YRC；绝对时间戳）
+        const string yrc = "[10000,4000](10000,800,0)Hello (10800,1200,0)world";
+
+        LyricDocument doc = LyricParser.ParseYrc(yrc);
+
+        LyricLine line = Assert.Single(doc.Lines);
+        Assert.Equal(10.0, line.Time);
+        Assert.Equal("Hello world", line.Text);
+        Assert.NotNull(line.Words);
+        Assert.Equal(2, line.Words!.Count);
+        // 词1 "Hello "：区间 [0,6)，起点 10s
+        Assert.Equal(0, line.Words[0].C0);
+        Assert.Equal(6, line.Words[1].C0);
+        Assert.Equal("Hello ", line.Words[0].Text);
+    }
+
+    [Fact]
+    public void ParseYrc_AcceptsQrcAngleBracketTags()
+    {
+        // QQ QRC：尖括号词标签 + 相对行头的时间偏移
+        const string yrc = "[2000,3000]<0,500,0>你 <500,500,0>好";
+
+        LyricDocument doc = LyricParser.ParseYrc(yrc);
+
+        LyricLine line = Assert.Single(doc.Lines);
+        Assert.Equal("你 好", line.Text);
+        Assert.NotNull(line.Words);
+        // 相对偏移 0 → 绝对 2s；500 → 2.5s
+        Assert.Equal(2.0, line.Words![0].T);
+        Assert.Equal(2.5, line.Words[1].T);
+    }
+
+    [Fact]
+    public void GetLineProgress_WordBranch_TracksCharPosition()
+    {
+        const string yrc = "[0,4000](0,1000,0)AB(1000,1000,0)CD(2000,2000,0)EF";
+        LyricDocument doc = LyricParser.ParseYrc(yrc);
+        LyricLine line = doc.Lines[0];
+
+        // 0.5s（+0.03 补偿=0.53）：词1 "AB"（字符区间 [0,2)）唱到 53% → 1.06/6
+        double p1 = LyricParser.GetLineProgress(line, null, 0.5);
+        Assert.InRange(p1, 0.175, 0.179);
+
+        // 1.5s：词2 "CD"（字符区间 [2,4)）唱到 53% → 3.06/6
+        double p2 = LyricParser.GetLineProgress(line, null, 1.5);
+        Assert.InRange(p2, 0.505, 0.511);
+
+        // 5s：整行唱完
+        Assert.Equal(1.0, LyricParser.GetLineProgress(line, null, 5.0));
+    }
+
+    [Fact]
+    public void GetLineProgress_NoWords_FallsBackToSmoothstep()
+    {
+        LyricLine line = new() { Time = 0, Duration = 4, Text = "abcd", CharCount = 4 };
+
+        double p = LyricParser.GetLineProgress(line, null, 2.0);
+
+        Assert.InRange(p, 0.49, 0.51); // smoothstep 在 50% 处 ≈ 0.5
+    }
 }

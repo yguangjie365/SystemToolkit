@@ -77,9 +77,6 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    /// <summary>底部播放条空白区点击 → 展开完整播放器（按钮区域自行处理点击，不冒泡到这里）。</summary>
-    private void OnBottomBarTap(object sender, MouseButtonEventArgs e)
-        => _vm.OpenFullPlayerCommand.Execute(null);
 
     // ════════ OM-5 在线三面板交互 ════════
 
@@ -105,6 +102,22 @@ public partial class MusicManagerView : UserControl
         => _vm.PlayFromSearchCommand.Execute(RowOf<MusicManagerViewModel.OnlineResultRowVm>(sender));
 
     /// <summary>行内播放钮单击（反馈1：单击即播，与双击等效）。</summary>
+    /// <summary>在线封面加载失败（审查 P4-24）：回退行 VM 的音符占位，防破图。</summary>
+    private void OnCoverImageFailed(object sender, System.Windows.ExceptionRoutedEventArgs e)
+    {
+        if (sender is System.Windows.FrameworkElement { DataContext: { } dc })
+        {
+            if (dc is MusicManagerViewModel.OnlineResultRowVm resultRow)
+            {
+                resultRow.MarkCoverFailed();
+            }
+            else if (dc is MusicManagerViewModel.PlaylistRowVm playlistRow)
+            {
+                playlistRow.MarkCoverFailed();
+            }
+        }
+    }
+
     private void OnSearchRowPlayClick(object sender, RoutedEventArgs e)
         => _vm.PlayFromSearchCommand.Execute(RowFromButton<MusicManagerViewModel.OnlineResultRowVm>(sender));
 

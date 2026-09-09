@@ -64,6 +64,9 @@
     <SolidColorBrush x:Key="Brush_AccentPressed" Color="{StaticResource Color_AccentPressed}"/>
     <SolidColorBrush x:Key="Brush_Success" Color="{StaticResource Color_Success}"/>
     <SolidColorBrush x:Key="Brush_Warning" Color="{StaticResource Color_Warning}"/>
+    <!-- 进度条轨道/滑块（音乐 SeekSliderStyle 等；2026-09-09 抽令牌，消除裸值） -->
+    <SolidColorBrush x:Key="Brush_SliderTrack" Color="#26808080"/>
+    <SolidColorBrush x:Key="Brush_SliderThumb" Color="#FFFFFF"/>
     <!-- 分段条 60-85% 警戒段专用亮橙（与 Warning #F59E0B 保持视觉区分；M-UI-1 同步换系；
          M-UI-2 纳入 Color_ 契约） -->
     <SolidColorBrush x:Key="Brush_SegmentWarn" Color="{StaticResource Color_SegmentWarn}"/>

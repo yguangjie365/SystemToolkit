@@ -12,7 +12,9 @@ namespace SystemToolkit.Core.Music.Services;
 /// <para><b>搬移范围</b>（任务板 MUSIC-3 删改清单，别多做也别少做）：
 /// 删 <c>ParseYrc</c>、删 <c>BuildKaraokeLines</c> 的 YRC 分支、删 <c>GetLineProgress</c>
 /// 的逐字分支、删 <c>FinalizeLineDurations</c> 的 <c>CharCount</c> clamp、
-/// <c>KaraokeLine</c> → <see cref="LyricLine"/>。</para>
+/// <c>KaraokeLine</c> → <see cref="LyricLine"/>。
+/// ⚠️ 2026-09-09 用户裁决恢复逐字卡拉OK（对照 NexBox/Mineradio 算法）：
+/// <see cref="ParseYrc"/> 与 <see cref="GetLineProgress"/> 逐字分支、CharCount clamp 均已恢复。</para>
 /// <para><b>四个算法逐字未改</b>：行级插值 + smoothstep、水平滚动</para>
 /// （startGate 0.08 / endGate 0.78）、<c>CalcActiveIndex</c>（最后一条 time ≤ now+0.05）、
 /// 时长推断与 clamp（0.45–12s）。
@@ -20,7 +22,7 @@ namespace SystemToolkit.Core.Music.Services;
 /// <c>[mm:ss.xx]</c> 的文本直接返回空列表，UI 只能显示「暂无歌词」——
 /// 明明内嵌着歌词却告诉用户没有。本实现改为回填 <see cref="LyricDocument.PlainText"/>。</para>
 /// </remarks>
-public static class LyricParser
+public static partial class LyricParser
 {
     /// <summary>时间标签 <c>[mm:ss.xx]</c>（分 2 位起、秒可带小数）。</summary>
     private static readonly Regex TimeTag = new(@"\[(\d+):(\d+(?:\.\d+)?)\]", RegexOptions.Compiled);
@@ -102,6 +104,162 @@ public static class LyricParser
     }
 
     /// <summary>
+    /// 解析 YRC/QRC 逐字歌词（2026-09-09 恢复；对照 NexBox parseYrc）。
+    /// 行头 <c>[startMs,durMs]</c>；词标签兼容圆括号 <c>(ws,wd,0)词</c>（网易 YRC）
+    /// 与尖括号 <c>&lt;ws,wd,0&gt;词</c>（QQ QRC）。词时间戳为绝对值，相对行头偏移自动判别。
+    /// </summary>
+    public static LyricDocument ParseYrc(string? yrc, string? translation = null)
+    {
+        List<LyricLine> lines = [];
+        if (!string.IsNullOrWhiteSpace(yrc))
+        {
+            foreach (string rawLine in yrc.Split(["\r\n", "\n"], StringSplitOptions.None))
+            {
+                Match lineMatch = LineHeadRegex().Match(rawLine);
+                if (!lineMatch.Success)
+                {
+                    continue;
+                }
+
+                double lineStartMs = ParseMs(lineMatch.Groups[1].Value);
+                double lineDurMs = ParseMs(lineMatch.Groups[2].Value);
+                string body = lineMatch.Groups[3].Value;
+
+                List<LyricWord> words = [];
+                var textBuilder = new System.Text.StringBuilder();
+                foreach (Match wm in WordTagRegex().Matches(body))
+                {
+                    string txt = Regex.Replace(wm.Groups[3].Value, @"\s+", " ");
+                    if (txt.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    double rawStart = ParseMs(wm.Groups[1].Value);
+                    double rawDur = ParseMs(wm.Groups[2].Value);
+                    // 词时间戳 ≥ 行头-500ms 视为绝对时间，否则为相对行头偏移
+                    double absStartMs = rawStart >= lineStartMs - 500 ? rawStart : lineStartMs + rawStart;
+
+                    int c0 = textBuilder.Length;
+                    textBuilder.Append(txt);
+                    words.Add(new LyricWord(txt, absStartMs / 1000.0, Math.Max(0.06, rawDur / 1000.0), c0, textBuilder.Length));
+                }
+
+                string fullText = textBuilder.ToString();
+                if (fullText.Length == 0)
+                {
+                    fullText = Regex.Replace(body, @"[(<]\d+,\d+,\d+[)>]", " ");
+                }
+
+                // 去前导空白并按前导长度修正字符区间（对照 NexBox）
+                int leading = 0;
+                while (leading < fullText.Length && fullText[leading] == ' ')
+                {
+                    leading++;
+                }
+
+                fullText = Regex.Replace(fullText, @"\s+", " ").Trim();
+                if (fullText.Length == 0)
+                {
+                    continue;
+                }
+
+                if (words.Count > 0)
+                {
+                    List<LyricWord> valid = [];
+                    foreach (LyricWord w in words)
+                    {
+                        int c0 = Math.Max(0, Math.Min(fullText.Length, w.C0 - leading));
+                        int c1 = Math.Max(c0, Math.Min(fullText.Length, w.C1 - leading));
+                        if (c1 > c0)
+                        {
+                            valid.Add(w with { C0 = c0, C1 = c1 });
+                        }
+                    }
+
+                    if (valid.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    lines.Add(new LyricLine
+                    {
+                        Time = lineStartMs / 1000.0,
+                        Duration = lineDurMs / 1000.0,
+                        Text = fullText,
+                        Words = valid,
+                        CharCount = Math.Max(1, fullText.Length),
+                    });
+                }
+                else
+                {
+                    lines.Add(new LyricLine
+                    {
+                        Time = lineStartMs / 1000.0,
+                        Duration = lineDurMs / 1000.0,
+                        Text = fullText,
+                        CharCount = Math.Max(1, fullText.Length),
+                    });
+                }
+            }
+        }
+
+        lines = FinalizeLineDurations(lines);
+
+        // 译文合并：按 ±0.5s 就近匹配（对照 NexBox；YRC 时间与 LRC 时间很少完全相等）
+        if (!string.IsNullOrWhiteSpace(translation))
+        {
+            for (int li = 0; li < lines.Count; li++)
+            {
+                LyricLine line = lines[li];
+                string? best = null;
+                double bestDiff = 0.5;
+                foreach (string transLine in translation.Split(["\r\n", "\n"], StringSplitOptions.None))
+                {
+                    Match m = TransTimeRegex().Match(transLine);
+                    if (!m.Success)
+                    {
+                        continue;
+                    }
+
+                    double time = ParseMs(m.Groups[1].Value) * 60 + ParseMs(m.Groups[2].Value);
+                    string text = TransTimeRegex().Replace(transLine, "").Trim();
+                    if (text.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    double diff = Math.Abs(time - line.Time);
+                    if (diff < bestDiff)
+                    {
+                        bestDiff = diff;
+                        best = text;
+                    }
+                }
+
+                if (best is not null)
+                {
+                    lines[li] = line with { Translation = best };
+                }
+            }
+        }
+
+        return new LyricDocument { Source = LyricSource.Online, Lines = lines };
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\[(\d+),(\d+)\](.*)$")]
+    private static partial System.Text.RegularExpressions.Regex LineHeadRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"[(<](\d+),(\d+),\d+[)>]([^()<>]*)")]
+    private static partial System.Text.RegularExpressions.Regex WordTagRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[(\d+):(\d+(?:\.\d+)?)\]")]
+    private static partial System.Text.RegularExpressions.Regex TransTimeRegex();
+
+    private static double ParseMs(string s)
+        => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0;
+
+    /// <summary>
     /// 行进度（0~1）：行级线性插值 + smoothstep 缓动。
     /// 含 +0.02s 视觉补偿（让进度略超前于实际音频）。
     /// </summary>
@@ -110,6 +268,33 @@ public static class LyricParser
         if (line is null)
         {
             return 0;
+        }
+
+        // 逐字分支（对照 NexBox getLineProgress）：按词的字符区间精确推进
+        if (line.Words is { Count: > 0 } words && line.CharCount > 0)
+        {
+            double nowWord = currentTime + 0.03; // 逐字视觉补偿略大（对照 NexBox）
+            double last = 0;
+            foreach (LyricWord w in words)
+            {
+                double ws = w.T;
+                double we = w.T + Math.Max(0.08, w.D);
+                if (nowWord < ws)
+                {
+                    return last;
+                }
+
+                double local = nowWord >= we ? 1 : (nowWord - ws) / Math.Max(0.08, we - ws);
+                local = Math.Max(0, Math.Min(1, local));
+                double p = (w.C0 + ((w.C1 - w.C0) * local)) / line.CharCount;
+                last = Math.Max(last, p);
+                if (nowWord < we)
+                {
+                    return last;
+                }
+            }
+
+            return 1;
         }
 
         double now = currentTime + 0.02;
@@ -229,7 +414,8 @@ public static class LyricParser
             }
 
             dur = Math.Max(MinDuration, Math.Min(MaxDuration, dur));
-            lines[i] = lines[i] with { Duration = dur };
+            int charCount = Math.Max(1, Math.Max(lines[i].CharCount, lines[i].Text.Length));
+            lines[i] = lines[i] with { Duration = dur, CharCount = charCount };
         }
 
         return lines;

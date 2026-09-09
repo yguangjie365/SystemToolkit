@@ -335,6 +335,24 @@ public partial class MusicManagerViewModel : ObservableObject
     private string _currentSub = string.Empty;
     public string CurrentSub { get => _currentSub; private set => SetProperty(ref _currentSub, value); }
 
+    private string _currentArtistText = string.Empty;
+
+    /// <summary>当前艺人（现代模板三行排版用）。</summary>
+    public string CurrentArtistText
+    {
+        get => _currentArtistText;
+        private set => SetProperty(ref _currentArtistText, value);
+    }
+
+    private string _currentAlbumText = string.Empty;
+
+    /// <summary>当前专辑（现代模板三行排版用）。</summary>
+    public string CurrentAlbumText
+    {
+        get => _currentAlbumText;
+        private set => SetProperty(ref _currentAlbumText, value);
+    }
+
     private string _positionCurrentText = "--:--";
     /// <summary>当前播放时间（分列显示——完整播放器与主屏底栏统一用分列）。</summary>
     public string PositionCurrentText { get => _positionCurrentText; private set => SetProperty(ref _positionCurrentText, value); }
@@ -715,8 +733,12 @@ public partial class MusicManagerViewModel : ObservableObject
             if (ActiveLyricIndex >= 0 && ActiveLyricIndex < _lyricLineSource.Count)
             {
                 LyricLine line = _lyricLineSource[ActiveLyricIndex];
-                double span = line.Duration > 0.05 ? line.Duration : 4.0;
-                LyricProgress = Math.Clamp((position.TotalSeconds - line.Time) / span, 0, 1);
+                LyricLine? next = ActiveLyricIndex + 1 < _lyricLineSource.Count
+                    ? _lyricLineSource[ActiveLyricIndex + 1]
+                    : null;
+                // 逐字感知进度（有 Words=字符级精确；无=行级 smoothstep）——卡拉OK填充共用
+                LyricProgress = Math.Clamp(
+                    LyricParser.GetLineProgress(line, next, position.TotalSeconds), 0, 1);
             }
             else
             {
@@ -906,6 +928,9 @@ public partial class MusicManagerViewModel : ObservableObject
             CurrentSub = string.IsNullOrEmpty(_queue.Current.Album)
                 ? _queue.Current.Artist
                 : $"{_queue.Current.Artist} — {_queue.Current.Album}";
+            // 现代模板三行排版（对照 NexBox）：艺人 / 专辑分行
+            CurrentArtistText = _queue.Current.Artist;
+            CurrentAlbumText = _queue.Current.Album;
         }
     }
 
@@ -961,10 +986,13 @@ public partial class MusicManagerViewModel : ObservableObject
                         ? (song.Online.Mid ?? song.Online.Id)
                         : song.Online.Id;
                     OnlineLyrics online = await _catalog.GetLyricsAsync(song.Online.Provider, key);
-                    doc = LyricParser.Parse(
-                        string.IsNullOrWhiteSpace(online.Lyric) ? null : online.Lyric,
-                        online.Translation,
-                        source: LyricSource.Online);
+                    // 逐字卡拉OK（2026-09-09）：有 YRC/QRC 走逐字解析，否则行级 LRC
+                    doc = !string.IsNullOrWhiteSpace(online.Yrc)
+                        ? LyricParser.ParseYrc(online.Yrc, online.Translation)
+                        : LyricParser.Parse(
+                            string.IsNullOrWhiteSpace(online.Lyric) ? null : online.Lyric,
+                            online.Translation,
+                            source: LyricSource.Online);
                 }
             }
             else if (File.Exists(Path.ChangeExtension(song.LocalPath, ".lrc")))

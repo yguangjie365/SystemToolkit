@@ -44,6 +44,8 @@ public static class TokenKeys
         public const string Color_PlayerBgTo = "Color_PlayerBgTo";
         public const string Color_DiscGroove = "Color_DiscGroove";
         public const string Brush_DiscGroove = "Brush_DiscGroove";
+        public const string Brush_SliderTrack = "Brush_SliderTrack";
+        public const string Brush_SliderThumb = "Brush_SliderThumb";
         public const string Color_OnDark = "Color_OnDark";
         // ── 状态语义（2026-09-08 阶段 2 补齐）：与 Success/Warning/Danger 同级，
         //    均遵循 M-UI-2「语义色走 700 档」决策（白底对比度 ≥4.5）

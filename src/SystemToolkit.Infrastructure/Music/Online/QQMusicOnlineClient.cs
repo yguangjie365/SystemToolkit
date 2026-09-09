@@ -166,6 +166,42 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     /// <summary>获取歌词。</summary>
     public async Task<OnlineLyrics> GetLyricsAsync(string songMid, string cookie = "", CancellationToken ct = default)
     {
+        // 优先 musicu GetPlayLyricInfo（含 qrc 逐字歌词，对照 NexBox handleQQLyric；2026-09-09 逐字卡拉OK）
+        try
+        {
+            string payloadJson =
+                "{\"comm\":{\"ct\":24,\"cv\":0}," +
+                "\"lyric\":{\"module\":\"music.musichallSong.PlayLyricInfo\"," +
+                "\"method\":\"GetPlayLyricInfo\"," +
+                "\"param\":{\"songMID\":\"" + songMid.Replace("\"", "") + "\"}}}";
+            JsonElement musicuJson = await PostMusicuAsync(payloadJson, cookie, ct);
+            JsonElement musicuData = musicuJson.TryGetProperty("lyric", out JsonElement lyricProp)
+                && lyricProp.TryGetProperty("data", out JsonElement dataProp)
+                    ? dataProp
+                    : default;
+            if (musicuData.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                string musicuLyric = DecodeBase64(musicuData.TryGetProperty("lyric", out JsonElement ml) ? ml.GetString() ?? "" : "");
+                string? musicuTrans = musicuData.TryGetProperty("trans", out JsonElement mt) ? DecodeBase64(mt.GetString() ?? "") : null;
+                string? qrc = musicuData.TryGetProperty("qrc", out JsonElement qEl) ? DecodeBase64(qEl.GetString() ?? "") : null;
+                if (!string.IsNullOrEmpty(musicuLyric) || !string.IsNullOrEmpty(qrc))
+                {
+                    return new OnlineLyrics
+                    {
+                        Lyric = musicuLyric,
+                        Translation = string.IsNullOrEmpty(musicuTrans) ? null : musicuTrans,
+                        Yrc = string.IsNullOrEmpty(qrc) ? null : qrc,
+                    };
+                }
+            }
+        }
+        catch (Exception musicuEx)
+        {
+            // 降级到旧版接口（🔴 降级路径可见）
+            _logger.Warn($"[QQMusic] musicu 歌词获取失败，降级旧版接口：{musicuEx.Message}");
+        }
+
+        // 旧版 yqq 歌词接口（无 qrc）
         try
         {
             string qs = $"?songmid={Uri.EscapeDataString(songMid)}&pcachetime={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}&g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0&format=json";

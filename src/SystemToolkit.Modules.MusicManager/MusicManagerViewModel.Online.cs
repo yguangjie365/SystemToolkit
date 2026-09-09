@@ -142,7 +142,21 @@ public partial class MusicManagerViewModel
         }
 
         /// <summary>是否已有封面（占位图标 ↔ 图片切换用）。</summary>
-        public bool HasCover => _coverImage is not null;
+        public bool HasCover => _coverImage is not null && !_coverFailed;
+
+        private bool _coverFailed;
+
+        /// <summary>封面下载/解码失败标记（审查 P4-24）：回退音符占位。</summary>
+        public void MarkCoverFailed()
+        {
+            if (_coverFailed)
+            {
+                return;
+            }
+
+            _coverFailed = true;
+            OnPropertyChanged(nameof(HasCover));
+        }
 
         private bool _coverAttempted;
 
@@ -280,7 +294,21 @@ public partial class MusicManagerViewModel
         }
 
         /// <summary>是否已有封面。</summary>
-        public bool HasCover => _coverImage is not null;
+        public bool HasCover => _coverImage is not null && !_coverFailed;
+
+        private bool _coverFailed;
+
+        /// <summary>封面下载/解码失败标记（审查 P4-24）：回退音符占位。</summary>
+        public void MarkCoverFailed()
+        {
+            if (_coverFailed)
+            {
+                return;
+            }
+
+            _coverFailed = true;
+            OnPropertyChanged(nameof(HasCover));
+        }
 
         private bool _coverAttempted;
 

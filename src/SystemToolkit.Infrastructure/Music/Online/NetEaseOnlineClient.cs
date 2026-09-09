@@ -162,7 +162,8 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         try
         {
             string url = "https://music.163.com/api/song/lyric/v1";
-            string body = $"id={id}&cp=false&lv=0&kv=0&tv=0&rv=0&yv=0&ytv=0&yrv=0&csrf_token=";
+            // yv/ytv/yrv=1 → 返回 yrc 逐字歌词（对照 NexBox netease.rs；2026-09-09 逐字卡拉OK）
+            string body = $"id={id}&cp=false&lv=0&kv=0&tv=0&rv=0&yv=1&ytv=1&yrv=1&csrf_token=";
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
             if (!string.IsNullOrEmpty(cookie))
