@@ -144,9 +144,16 @@ public partial class MusicManagerViewModel : ObservableObject
         _catalog = catalog;
         _credentials = credentials;
 
-        Songs.CollectionChanged += (_, _) => LibraryCountText = $"曲库 {Songs.Count} 首";
+        Songs.CollectionChanged += (_, _) =>
+        {
+            if (!_bulkLoadingSongs)
+            {
+                LibraryCountText = $"曲库 {Songs.Count} 首";
+            }
+        };
+        _songsFilter = o => o is MusicSong s && MatchesFilter(s);
         SongsView = CollectionViewSource.GetDefaultView(Songs);
-        SongsView.Filter = o => o is MusicSong s && MatchesFilter(s);
+        SongsView.Filter = _songsFilter;
         // 图2 对齐（2026-09-09）：歌单详情内搜索——过滤当前歌单曲目（标题/副题/艺人）
         PlaylistTracksView = CollectionViewSource.GetDefaultView(PlaylistTracks);
         PlaylistTracksView.Filter = o => o is OnlineResultRowVm r && MatchesPlaylistFilter(r);
@@ -642,15 +649,38 @@ public partial class MusicManagerViewModel : ObservableObject
         }
     }
 
+    private bool _bulkLoadingSongs;
+    private readonly Predicate<object>? _songsFilter;
+
     private void ApplyLibrary(MusicLibrary library)
     {
-        Songs.Clear();
-        foreach (MusicSong song in library.Songs)
+        // 审查 R4：万级曲库逐条 Add 会触发等量 CollectionChanged（计数 INPC + 绑定重渲染）
+        // + 过滤谓词，末尾再 Refresh 又全量过滤一遍 → 多秒冻结。批量载入期间关闸 + 摘过滤，结束后单次刷新
+        _bulkLoadingSongs = true;
+        try
         {
-            Songs.Add(song);
+            if (SongsView is not null)
+            {
+                SongsView.Filter = null;
+            }
+
+            Songs.Clear();
+            foreach (MusicSong song in library.Songs)
+            {
+                Songs.Add(song);
+            }
+        }
+        finally
+        {
+            _bulkLoadingSongs = false;
+            if (SongsView is not null && _songsFilter is not null)
+            {
+                SongsView.Filter = _songsFilter;
+            }
         }
 
         SongsView?.Refresh();
+        LibraryCountText = $"曲库 {Songs.Count} 首";
     }
 
     private void WireEngineOnce()

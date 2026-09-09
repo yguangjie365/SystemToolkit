@@ -386,9 +386,8 @@ public partial class MusicManagerViewModel
         try
         {
             string proxy = await _audioProxy!.GetProxiedCoverUrlAsync(rawUrl).ConfigureAwait(true);
-            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            byte[] bytes = await client.GetByteArrayAsync(proxy).ConfigureAwait(true);
-            BitmapSource? image = Decode(bytes); // Player 分部的私有解码（Frozen BitmapImage）
+            byte[] bytes = await CoverHttp.GetByteArrayAsync(proxy).ConfigureAwait(true); // 审查 O13：复用共享 client
+            BitmapSource? image = Decode(bytes, 96); // 审查 O14：缩略图按目标尺寸解码（Player 分部私有解码）
             CoverThumbCache.Store(rawUrl, image);
             return image;
         }
@@ -397,6 +396,22 @@ public partial class MusicManagerViewModel
             // 缩略图失败只降级占位（列表主功能不受影响），但日志可见（🔴 不静默）
             _log.Warn($"[Music] 缩略图加载失败：{ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>审查 O13：在线封面并发闸（防一次开歌单 100 张全量并发下载 + 解码排 Dispatcher）。</summary>
+    private static readonly System.Threading.SemaphoreSlim CoverGate = new(6, 6);
+
+    private static async Task RunThrottled(Func<Task> work)
+    {
+        await CoverGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await work().ConfigureAwait(false);
+        }
+        finally
+        {
+            CoverGate.Release();
         }
     }
 
@@ -410,7 +425,7 @@ public partial class MusicManagerViewModel
 
         foreach (OnlineResultRowVm row in rows)
         {
-            _ = row.LoadCoverAsync(loader);
+            _ = RunThrottled(() => row.LoadCoverAsync(loader)); // 审查 O13：限流并发
         }
     }
 
@@ -424,7 +439,7 @@ public partial class MusicManagerViewModel
 
         foreach (PlaylistRowVm row in rows)
         {
-            _ = row.LoadCoverAsync(loader);
+            _ = RunThrottled(() => row.LoadCoverAsync(loader)); // 审查 O13：限流并发
         }
     }
 

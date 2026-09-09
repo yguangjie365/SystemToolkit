@@ -15,12 +15,13 @@ public partial class GameCardVm : ObservableObject
 {
     public SteamGame Model { get; }
 
-    /// <remarks>封面路径由调用方在后台预计算后传入（性能审查 P1-5：构造期同步探测会阻塞 UI 线程）。</remarks>
-    public GameCardVm(SteamGame model, string coverPath, GameManagerViewModel owner)
+    /// <remarks>封面路径与库离线态均由调用方在后台预计算后传入（性能审查 R3：每回收重算 Directory.Exists 会阻塞 UI 线程）。</remarks>
+    public GameCardVm(SteamGame model, string coverPath, bool libraryOffline, GameManagerViewModel owner)
     {
         Model = model;
         Owner = owner;
         _coverPath = coverPath;
+        _isLibraryOffline = libraryOffline;
     }
 
     private GameManagerViewModel Owner { get; }
@@ -61,8 +62,9 @@ public partial class GameCardVm : ObservableObject
     public bool IsFullyInstalled => (Model.StateFlags & 4) != 0;
     public string StateText => IsFullyInstalled ? "已安装" : "下载/更新中";
 
-    /// <summary>库不可用（库目录不存在，如离线盘）时为 true。</summary>
-    public bool IsLibraryOffline => !Directory.Exists(Path.Combine(Model.LibraryPath, "steamapps"));
+    /// <summary>库不可用（库目录不存在，如离线盘）时为 true。审查 R3：载入期按库路径预计算一次，避免每次容器回收重发 Directory.Exists。</summary>
+    private readonly bool _isLibraryOffline;
+    public bool IsLibraryOffline => _isLibraryOffline;
 
     // 排序投影（SortDescription 需要可比较属性；负号实现"降序"语义）
     public long SortRecent => -Model.LastPlayed;
@@ -301,7 +303,7 @@ public partial class GameManagerViewModel : ObservableObject
                 // 封面探测并行预计算（性能审查 P1-5）：每卡最多 9 次候选路径探测 × N 卡，
                 // 原实现在 UI 线程逐卡同步探测，200 卡 = 上千次同步文件打开阻塞首屏
                 string installPath = SteamInstallPath ?? string.Empty;
-                System.Collections.Concurrent.ConcurrentDictionary<uint, string> coverPaths = await Task.Run(() =>
+                (System.Collections.Concurrent.ConcurrentDictionary<uint, string> coverPaths, HashSet<string> offlineLibs) = await Task.Run(() =>
                 {
                     var map = new System.Collections.Concurrent.ConcurrentDictionary<uint, string>();
                     Parallel.ForEach(data.Games, new ParallelOptions { MaxDegreeOfParallelism = 4 }, g =>
@@ -320,13 +322,31 @@ public partial class GameManagerViewModel : ObservableObject
                             _logger.Warn($"封面探测失败（AppId {g.AppId}）：{ex.Message}");
                         }
                     });
-                    return map;
+
+                    // 审查 R3：按库路径（数量极少）各一次 Directory.Exists，离线/网络盘判定离 UI 线程预计算
+                    var offline = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (string lib in data.Games.Select(g => g.LibraryPath).Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            if (!Directory.Exists(Path.Combine(lib, "steamapps")))
+                            {
+                                offline.Add(lib);
+                            }
+                        }
+                        catch
+                        {
+                            offline.Add(lib); // 探测异常视为不可用
+                        }
+                    }
+
+                    return (map, offline);
                 }).ConfigureAwait(true);
 
                 foreach (SteamGame g in data.Games)
                 {
                     string cover = coverPaths.TryGetValue(g.AppId, out string? cp) ? cp : string.Empty;
-                    var vm = new GameCardVm(g, cover, this);
+                    var vm = new GameCardVm(g, cover, offlineLibs.Contains(g.LibraryPath), this);
                     HookFilterRefresh(vm);
                     Games.Add(vm);
                 }

@@ -290,6 +290,9 @@ public partial class MusicManagerViewModel
         });
     }
 
+    /// <summary>在线封面共享 HttpClient（审查 O13：每图一 new HttpClient → 临时端口耗尽）。Timeout 10s。</summary>
+    private static readonly HttpClient CoverHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+
     /// <summary>在线封面：代理 URL（防盗链）→ 下载字节 → 解码。代理不可用则跳过（有本地图源的不受影响）。</summary>
     private async Task<BitmapSource?> LoadOnlineCoverAsync(string rawUrl)
     {
@@ -299,16 +302,19 @@ public partial class MusicManagerViewModel
         }
 
         string proxy = await _audioProxy.GetProxiedCoverUrlAsync(rawUrl);
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        byte[] bytes = await client.GetByteArrayAsync(proxy);
-        return Decode(bytes);
+        byte[] bytes = await CoverHttp.GetByteArrayAsync(proxy); // 审查 O13：复用共享 client
+        return Decode(bytes); // 正在播放封面：全分辨率
     }
 
-    private static BitmapSource? Decode(byte[] bytes)
+    private static BitmapSource? Decode(byte[] bytes, int? decodePixelWidth = null)
     {
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
+        if (decodePixelWidth is int pw)
+        {
+            image.DecodePixelWidth = pw; // 审查 O14：缩略图按目标尺寸解码，避免原生全尺寸常驻
+        }
         image.StreamSource = new MemoryStream(bytes);
         image.EndInit();
         image.Freeze();

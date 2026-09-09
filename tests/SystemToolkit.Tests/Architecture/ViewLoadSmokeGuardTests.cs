@@ -332,9 +332,9 @@ public class ViewLoadSmokeGuardTests
                 var view = new GameManagerView(vm);
 
                 stage = "fill three card states";
-                vm.Games.Add(new GameCardVm(MakeGame(814380, "Sekiro", stateFlags: 4), "C:\\cover-a.jpg", vm));
-                vm.Games.Add(new GameCardVm(MakeGame(1245620, "ELDEN RING", stateFlags: 4), string.Empty, vm));
-                vm.Games.Add(new GameCardVm(MakeGame(2215430, "Torchlight", stateFlags: 6), string.Empty, vm));
+                vm.Games.Add(new GameCardVm(MakeGame(814380, "Sekiro", stateFlags: 4), "C:\\cover-a.jpg", false, vm));
+                vm.Games.Add(new GameCardVm(MakeGame(1245620, "ELDEN RING", stateFlags: 4), string.Empty, false, vm));
+                vm.Games.Add(new GameCardVm(MakeGame(2215430, "Torchlight", stateFlags: 6), string.Empty, false, vm));
                 vm.GamesView.Refresh();
 
                 stage = "measure + arrange";
