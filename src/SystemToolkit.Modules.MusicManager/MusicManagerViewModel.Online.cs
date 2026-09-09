@@ -663,6 +663,28 @@ public partial class MusicManagerViewModel
     private void RequestLogin(string? platform) =>
         LoginRequested?.Invoke(platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase);
 
+    /// <summary>
+    /// 完全退出登录（2026-09-09 用户要求）：清除本地加密 Cookie 后刷新登录态。
+    /// 用途：旧 Cookie 残缺（如缺 qm_keyst/uin 不匹配）导致 QQ 歌单能看不能播，
+    /// 退出后重新扫码登录可获得完整凭据。
+    /// </summary>
+    [RelayCommand]
+    private async Task RequestLogoutAsync(string? platform)
+    {
+        OnlineProvider provider = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
+        if (_credentials is null)
+        {
+            OnlineStatusText = "凭据存储未就绪，无法退出";
+            return;
+        }
+
+        _credentials.Clear(provider);
+        OnlineStatusText = $"已退出登录（{provider}），请重新扫码登录";
+        _log.Info($"[Music] 用户退出登录（{provider}），本地凭据已清除");
+        await RefreshLoginStateAsync();
+        await LoadPlaylistsAsync(); // 歌单面板随登出刷新（未登录态各平台自会给出明确提示）
+    }
+
     /// <summary>View 捕获到 Cookie 后回传：加密落盘 + 刷新登录态。</summary>
     public async Task OnLoginCookieObtainedAsync(OnlineProvider provider, string? cookie)
     {

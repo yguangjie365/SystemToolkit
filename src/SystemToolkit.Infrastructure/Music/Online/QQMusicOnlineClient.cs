@@ -188,11 +188,13 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 ? sipArr[0].GetString() ?? "https://ws.stream.qqmusic.qq.com/"
                 : "https://ws.stream.qqmusic.qq.com/";
 
+            int emptyPurl = 0;
             foreach (JsonElement info in midurlinfo.EnumerateArray())
             {
                 string purl = info.GetStr("purl", "");
                 if (string.IsNullOrEmpty(purl))
                 {
+                    emptyPurl++;
                     continue;
                 }
 
@@ -207,6 +209,9 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 };
             }
 
+            // 📋 诊断留痕：purl 全空 = 未登录（无 qm_keyst）/ VIP 版权限制；登录态可见与否直接看日志
+            _logger.Warn($"[QQMusic] purl 全空（{emptyPurl}/{midurlinfo.GetArrayLength()}）mid={songMid} " +
+                         $"uin={uin} authst={(string.IsNullOrEmpty(authSt) ? "无" : "有")}——多为未登录或 VIP 版权限制");
             return new OnlineSongUrlResult { Playable = false, Reason = "url_unavailable", Message = "该歌曲可能需要 VIP 或登录" };
         }
         catch (Exception e)
@@ -487,10 +492,33 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             return 0;
         }
 
-        string id = FirstId(item, "dissid", "tid", "dissId", "id", "diss_id");
-        if (string.IsNullOrEmpty(id) && item.TryGetProperty("dirid", out JsonElement diridEl) && diridEl.ValueKind == JsonValueKind.Number)
-            id = diridEl.GetInt64().ToString();
-        string name = FirstStr(item, "diss_name", "dissname", "name", "title");
+        long dirid = 0;
+        if (item.TryGetProperty("dirid", out JsonElement diridEl) && diridEl.ValueKind == JsonValueKind.Number)
+        {
+            dirid = diridEl.GetInt64();
+        }
+        else if (item.TryGetProperty("dir_id", out JsonElement dirIdEl) && dirIdEl.ValueKind == JsonValueKind.Number)
+        {
+            dirid = dirIdEl.GetInt64();
+        }
+
+        // 🔴 "我喜欢"归一（对照 NexBox map_qq_playlist 开头的 liked 分支）：dirid=201 的虚拟歌单
+        // 行的 tid/dissid 常为 0，旧映射得到 id="0" → 用 disstid=0 请求曲目 → cdlist_len=0 空白
+        // （2026-09-09 日志实锤 id=0）。识别后强制 Id="liked"，走 LoadLikedListAsync 喜欢列表接口。
+        bool liked = dirid == 201;
+        if (!liked)
+        {
+            string normName = FirstStr(item, "diss_name", "dissname", "name", "title")
+                .Replace("·", "").Replace("•", "").Replace(" ", "").Replace("　", "");
+            liked = normName is "我喜欢" or "我的喜欢" or "喜欢的音乐" or "qq音乐我喜欢" or "qq音乐我的喜欢" or "qq音乐喜欢的音乐";
+        }
+
+        string id = liked ? "liked" : FirstId(item, "dissid", "tid", "dissId", "id", "diss_id");
+        if (string.IsNullOrEmpty(id) && dirid > 0)
+        {
+            id = dirid.ToString();
+        }
+        string name = liked ? "我喜欢的音乐" : FirstStr(item, "diss_name", "dissname", "name", "title");
         string cover = FirstStr(item, "diss_cover", "dissCover", "logo", "picurl", "cover");
         long count = FirstInt(item, "song_cnt", "songCnt", "songnum", "songNum", "total_song_num", "song_count", "songCount");
         string creator = FirstStr(item, "hostname", "nick", "creator", "nickname");
