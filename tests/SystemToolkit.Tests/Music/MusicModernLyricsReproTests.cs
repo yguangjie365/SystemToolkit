@@ -122,7 +122,7 @@ public class MusicModernLyricsReproTests
                 vm.LyricRows.Clear();
                 foreach (LyricLine line in lines)
                 {
-                    vm.LyricRows.Add(new MusicManagerViewModel.LyricRowVm(line.Text, IsActive: false));
+                    vm.LyricRows.Add(new MusicManagerViewModel.LyricRowVm(line.Text, false));
                 }
 
                 SetPrivate(vm, "ActiveLyricIndex", 7);

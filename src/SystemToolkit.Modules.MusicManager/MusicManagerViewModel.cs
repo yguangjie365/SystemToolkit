@@ -519,7 +519,46 @@ public partial class MusicManagerViewModel : ObservableObject
     // ════════ 歌词 ════════
 
     /// <summary>歌词行包装（模型 <see cref="LyricLine"/> 无 UI 状态，IsActive 由 VM 维护）。</summary>
-    public sealed record LyricRowVm(string Text, bool IsActive);
+    /// <remarks>
+    /// 🔴 必须是可变 class + INPC，禁止 record + 集合 Replace（2026-09-09 实测滚动追帧根因）：
+    /// <c>_lyricRows[i] = row with { … }</c> 在 ItemsCollection 里是 Remove+Insert 语义，
+    /// 每次 IsActive 切换重建两个行容器 → 布局抖动把 ScrollViewer 位置顶飞（日志实证
+    /// offset 冲过 target 直至 clamp 底部）→ 视口"上面歌词逐行消失后才追上来"的空白块。
+    /// </remarks>
+    public sealed class LyricRowVm : System.ComponentModel.INotifyPropertyChanged
+    {
+        public LyricRowVm(string text, bool isActive)
+        {
+            _text = text;
+            _isActive = isActive;
+        }
+
+        private readonly string _text;
+
+        /// <summary>行文本（歌词重载时整列表重建，故只读）。</summary>
+        public string Text => _text;
+
+        private bool _isActive;
+
+        /// <summary>是否当前行（就地通知，不重建容器）。</summary>
+        public bool IsActive
+        {
+            get => _isActive;
+            set
+            {
+                if (_isActive != value)
+                {
+                    _isActive = value;
+                    OnPropertyChanged(nameof(IsActive));
+                }
+            }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+    }
 
     // 复用同一实例（Clear+Add），避免切歌时整体替换触发重绑定/闪烁（2026-09-08 审查采纳项）
     private readonly ObservableCollection<LyricRowVm> _lyricRows = [];
@@ -542,16 +581,17 @@ public partial class MusicManagerViewModel : ObservableObject
                 return;
             }
 
-            // 精准只更新新旧两行（审查采纳项）：避免每次跳行全量遍历
+            // 精准只更新新旧两行（就地 INPC 通知，不 Replace 集合——Replace 语义=Remove+Insert，
+            // 会重建容器并抖动 ScrollViewer，见 LyricRowVm 注释）
             if (value >= 0 && value < _lyricRows.Count)
             {
-                _lyricRows[value] = _lyricRows[value] with { IsActive = true };
+                _lyricRows[value].IsActive = true;
             }
 
             if (_previousActiveIndex >= 0 && _previousActiveIndex < _lyricRows.Count
                 && _previousActiveIndex != value)
             {
-                _lyricRows[_previousActiveIndex] = _lyricRows[_previousActiveIndex] with { IsActive = false };
+                _lyricRows[_previousActiveIndex].IsActive = false;
             }
 
             _previousActiveIndex = value;
