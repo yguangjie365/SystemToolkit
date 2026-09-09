@@ -318,7 +318,9 @@ public sealed partial class WingetService : IWingetClient
         }
         catch (OperationCanceledException)
         {
-            return new WingetRunResult(-1, Success: false);
+            // 审查 O2（2026-09-10）：取消必须重新抛出——咽成退出码 -1 会让上层
+            // "关窗即停"的 break 分支成死代码，剩余包仍逐项尝试（违背取消令牌红线）
+            throw;
         }
         catch (TimeoutException ex)
         {

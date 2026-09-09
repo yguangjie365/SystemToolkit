@@ -675,6 +675,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         // 安全边界四：分片大小须与接收端配置一致——恶意握手声明超大 ChunkSize 会让接收端按其分配缓冲
         if (tm.ChunkSize <= 0 || tm.ChunkSize > _chunkSize)
         {
+            Interlocked.Decrement(ref _activeReceives); // 审查 R2（2026-09-10）：拒绝分支必须归还已抢的槽
             _logger.Warn($"拒绝传输握手：分片大小不一致（对端 {tm.ChunkSize}，本端 {_chunkSize}，来源 {ipPort}）。");
             _ = SendControlAsync(guid, new TransferMessage
             {
@@ -688,6 +689,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         // 安全边界五：文件大小不得为负——恶意握手声明负/超大 FileSize 可绕过偏移越界校验（见 HandleChunk 溢出修复）
         if (tm.FileSize < 0)
         {
+            Interlocked.Decrement(ref _activeReceives); // 审查 R2（2026-09-10）：拒绝分支必须归还已抢的槽
             _logger.Warn($"拒绝传输握手：文件大小非法（{tm.FileSize}，来源 {ipPort}）。");
             _ = SendControlAsync(guid, new TransferMessage
             {
@@ -1075,6 +1077,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 _logger.Warn($"接收失败：{task.FileName}（任务 {task.Id}）：{error}。");
             }
             _tasks.TryRemove(task.Id, out _);
+            ReleaseReceiveSlot(task); // 审查 R2（2026-09-10）：终态后归还并发槽（幂等，防槽泄漏锁死接收端）
         }
         ctx.Hash?.Dispose();
         ctx.Hash = null;

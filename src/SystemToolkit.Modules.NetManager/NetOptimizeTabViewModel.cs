@@ -247,5 +247,5 @@ public partial class NetOptimizeTabViewModel : ObservableObject
     }
 
     private bool Confirm(string title, string message)
-        => ConfirmRequest?.Invoke(title, message) != false;
+        => ConfirmRequest?.Invoke(title, message) == true; // 审查 Y1：危险操作确认缺省应拒绝（fail-closed）
 }

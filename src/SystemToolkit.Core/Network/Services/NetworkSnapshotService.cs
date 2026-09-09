@@ -207,6 +207,7 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
 
         // ① 适配器 IPv4 / DNS（只回放快照里当前仍存在的适配器）
         IReadOnlyList<NetAdapterInfo> current = await _info.GetAdaptersAsync().ConfigureAwait(false);
+        var failedExits = new List<int>(); // 审查 O4（2026-09-10）：聚合各步非零退出码，补 Verify 红线
         foreach (NetAdapterInfo adapter in record.Content.Adapters)
         {
             if (current.FirstOrDefault(a => a.Name == adapter.Name) is null)
@@ -215,8 +216,17 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
                 continue;
             }
 
-            await RestoreAdapterAddressAsync(adapter, onLine, ct).ConfigureAwait(false);
-            await RestoreAdapterDnsAsync(adapter, onLine, ct).ConfigureAwait(false);
+            int addressExit = await RestoreAdapterAddressAsync(adapter, onLine, ct).ConfigureAwait(false);
+            if (addressExit != 0)
+            {
+                failedExits.Add(addressExit);
+            }
+
+            int dnsExit = await RestoreAdapterDnsAsync(adapter, onLine, ct).ConfigureAwait(false);
+            if (dnsExit != 0)
+            {
+                failedExits.Add(dnsExit);
+            }
         }
 
         // ② TCP 调优（ApplyAsync 只对变化项发命令；可空字段跳过——与「降级不猜值」纪律一致）
@@ -245,21 +255,31 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
         // ④ 系统代理
         _info.SetSystemProxy(record.Content.Proxy.Enabled, record.Content.Proxy.Server, onLine);
 
-        onLine("[快照] ✅ 还原完成。若结果不符合预期，可再还原本次还原前自动保存的快照（RestoreSnapshot）");
+        // 审查 O4：按各步退出码给出真实结局，不再无条件 ✅
+        if (failedExits.Count == 0)
+        {
+            onLine("[快照] ✅ 还原完成。若结果不符合预期，可再还原本次还原前自动保存的快照（RestoreSnapshot）");
+        }
+        else
+        {
+            onLine($"[快照] ⚠️ 还原完成，但有 {failedExits.Count} 步失败（退出码 {string.Join("、", failedExits)}）——" +
+                "可用 RestoreSnapshot 回滚本次还原前自动保存的快照");
+        }
     }
 
-    private async Task RestoreAdapterAddressAsync(NetAdapterInfo adapter, Action<string> onLine, CancellationToken ct)
+    // 审查 O4（2026-09-10）：还原子方法改为回传退出码（-1=前置校验未执行）——
+    // 主流程聚合失败步，不再无条件报"✅ 还原完成"（Snapshot→Modify→Verify→Rollback 红线补 Verify）
+    private async Task<int> RestoreAdapterAddressAsync(NetAdapterInfo adapter, Action<string> onLine, CancellationToken ct)
     {
         if (adapter.IsDhcp)
         {
             onLine($"[快照] 「{adapter.Name}」恢复 DHCP 自动获取");
-            await _config.SetDhcpAsync(adapter.Name, onLine).ConfigureAwait(false);
-            return;
+            return await _config.SetDhcpAsync(adapter.Name, onLine).ConfigureAwait(false);
         }
 
         if (adapter.IPv4WithMask.Count == 0)
         {
-            return; // 静态模式但无 IPv4（罕见）：无从还原，静默跳过
+            return 0; // 静态模式但无 IPv4（罕见）：无从还原，静默跳过
         }
 
         string primary = adapter.IPv4WithMask[0];
@@ -268,7 +288,7 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
             || !int.TryParse(primary[(slash + 1)..], out int prefix) || prefix is < 0 or > 32)
         {
             onLine($"[快照] ⚠️ 「{adapter.Name}」的 IP 记录「{primary}」无法解析，跳过其 IPv4 还原");
-            return;
+            return 0;
         }
 
         string ip = primary[..slash];
@@ -280,20 +300,20 @@ public sealed class NetworkSnapshotService : INetworkSnapshotService
         }
 
         onLine($"[快照] 「{adapter.Name}」恢复静态 IP {ip}/{mask}（网关 {gateway ?? "无"}）");
-        await _config.SetStaticIpAsync(adapter.Name, ip, mask, gateway, onLine).ConfigureAwait(false);
+        return await _config.SetStaticIpAsync(adapter.Name, ip, mask, gateway, onLine).ConfigureAwait(false);
     }
 
-    private async Task RestoreAdapterDnsAsync(NetAdapterInfo adapter, Action<string> onLine, CancellationToken ct)
+    private async Task<int> RestoreAdapterDnsAsync(NetAdapterInfo adapter, Action<string> onLine, CancellationToken ct)
     {
         string? primary = adapter.DnsServers.Count > 0 ? adapter.DnsServers[0] : null;
         string? secondary = adapter.DnsServers.Count > 1 ? adapter.DnsServers[1] : null;
         if (primary is null && adapter.DnsServers.Count > 0)
         {
-            return; // 首条为空但列表非空：记录异常，不动作
+            return 0; // 首条为空但列表非空：记录异常，不动作
         }
 
         onLine($"[快照] 「{adapter.Name}」恢复 DNS：{primary ?? "自动获取"}{(secondary is null ? "" : $" / {secondary}")}");
-        await _config.SetDnsAsync(adapter.Name, primary, secondary, onLine).ConfigureAwait(false);
+        return await _config.SetDnsAsync(adapter.Name, primary, secondary, onLine).ConfigureAwait(false);
     }
 
     /// <summary>前缀长度 → 子网掩码（/24 → 255.255.255.0）。internal 供单测钉死位运算。</summary>

@@ -751,7 +751,7 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
     };
 
     /// <inheritdoc cref="IRestorePreviewProvider.PreviewConflictsAsync"/>
-    public Task<RestorePreviewReport> PreviewConflictsAsync(
+    public async Task<RestorePreviewReport> PreviewConflictsAsync(
         SnapshotInfo info, string? targetRoot,
         IReadOnlyList<string>? trustedRoots = null, CancellationToken ct = default)
     {
@@ -782,20 +782,25 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
             CancellationToken = ct,
         };
 
-        Parallel.ForEach(info.Files, options, f =>
+        // 审查 O5（2026-09-10）：万级文件的 File.Exists 探测不应跑在 UI 线程（方法非 async 时
+        // await 同步完成的 Task 不会切线程）——照姊妹方法 ResolvePolicyAsync 包进 Task.Run
+        await Task.Run(() =>
         {
-            ct.ThrowIfCancellationRequested();
-            try
+            Parallel.ForEach(info.Files, options, f =>
             {
-                string dst = RestoreDestination(f, targetRoot, allowedRoots, protectedRoots);
-                entries.Add(new RestorePreviewEntry(f.RelativePath, dst, File.Exists(dst), false, null));
-            }
-            catch (IOException ex)
-            {
-                // 不安全相对路径 / 系统关键路径 / 越界：真实恢复会拒绝，预演按 Blocked 呈现
-                entries.Add(new RestorePreviewEntry(f.RelativePath, "-", false, true, ex.Message));
-            }
-        });
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    string dst = RestoreDestination(f, targetRoot, allowedRoots, protectedRoots);
+                    entries.Add(new RestorePreviewEntry(f.RelativePath, dst, File.Exists(dst), false, null));
+                }
+                catch (IOException ex)
+                {
+                    // 不安全相对路径 / 系统关键路径 / 越界：真实恢复会拒绝，预演按 Blocked 呈现
+                    entries.Add(new RestorePreviewEntry(f.RelativePath, "-", false, true, ex.Message));
+                }
+            });
+        }, ct).ConfigureAwait(false);
 
         var list = entries.OrderBy(e => e.RelativePath, StringComparer.Ordinal).ToList();
         var report = new RestorePreviewReport
@@ -805,6 +810,6 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
             BlockedCount = list.Count(e => e.Blocked),
             Entries = list,
         };
-        return Task.FromResult(report);
+        return report;
     }
 }

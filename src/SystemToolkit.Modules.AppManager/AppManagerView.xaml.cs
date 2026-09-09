@@ -24,7 +24,9 @@ public partial class AppManagerView : UserControl
             => System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Question)
                == MessageBoxResult.OK;
         // 信息提示回调（审查 O4：NewArchive 的提示不再直调 MessageBox）
-        vm.InfoRequest = (message, title)
+        // 审查 Y2（2026-09-10）：VM 按 (title, message) 传参（Archives.cs:111 "新建环境档案" 是标题），
+        // 原写法标题/正文颠倒——修正为 MessageBox.Show(message, title)
+        vm.InfoRequest = (title, message)
             => System.Windows.MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
         // 导入/导出路径回调（审查 O6：对话框一律 View 注入）
         vm.PickSavePath = () =>

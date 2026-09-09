@@ -104,7 +104,8 @@ public sealed partial class OverviewService
         {
             // 参考图布局：GPU 统计卡紧跟 CPU 之后（第二位），有负载画进度条，无负载用温度顶位
             string bigValue = gpuLoad is not null ? $"{gpuLoad}%" : $"{gpuTemp:0} °C";
-            data.HardwareStats.Insert(1, new OverviewItem("\uE95D", "显卡", bigValue,
+            // 审查 O8（2026-09-10）：CPU/内存卡都可能缺席，Insert(1) 会越界——按现有卡数插到第 1 位之后
+            data.HardwareStats.Insert(Math.Min(1, data.HardwareStats.Count), new OverviewItem("\uE95D", "显卡", bigValue,
                 gpuTemp is null ? null : $"温度 {gpuTemp:0} °C",
                 percent: gpuLoad, percentLabel: gpuLoad is null ? null : "显卡负载"));
         }

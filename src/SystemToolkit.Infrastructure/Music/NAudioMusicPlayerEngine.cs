@@ -215,9 +215,21 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
         // （NexBox 前端以 RAF 60fps 直读 audio.currentTime；100ms 轮询成本极低——读 CurrentTime 属性）
         _positionTimer = new System.Threading.Timer(_ =>
         {
-            if (_reader is not null && _state == PlayState.Playing)
+            // 审查 R1（2026-09-10）：Timer.Dispose 不等待在途回调，StopInternal 在 UI 线程
+            // Dispose _reader 与回调读 Position 存在 TOCTOU——线程池异常不经过
+            // DispatcherUnhandledException，会直接崩进程，必须就地吞掉
+            try
             {
-                PositionChanged?.Invoke(Position, Duration);
+                if (_reader is not null && _state == PlayState.Playing)
+                {
+                    PositionChanged?.Invoke(Position, Duration);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
             }
         }, null, 0, 100);
     }

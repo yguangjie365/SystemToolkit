@@ -37,7 +37,7 @@ public sealed class TcpTuningService : ITcpTuningService
     /// <summary>构造；快照路径缺省为 <c>%APPDATA%\FileBackupTool\net\tuning_snapshot.json</c>（测试注入临时目录）。
     /// 【非提权宿主适配 2026-09-06】<paramref name="throttlingWriter"/>：HKLM 直写在新宿主（按需 UAC 架构）必失败，
     /// 注入委托时 NetworkThrottlingIndex 改走提权 Helper 通道；未注入（旧测试/旧宿主）保持直写 + 权限失败降级。</summary>
-    public TcpTuningService(ICommandRunner runner, string? snapshotPath = null, Func<uint, Action<string>, Task>? throttlingWriter = null)
+    public TcpTuningService(ICommandRunner runner, string? snapshotPath = null, Func<uint, Action<string>, Task<int>>? throttlingWriter = null)
     {
         _runner = runner;
         _snapshotPath = snapshotPath
@@ -47,7 +47,7 @@ public sealed class TcpTuningService : ITcpTuningService
         _throttlingWriter = throttlingWriter;
     }
 
-    private readonly Func<uint, Action<string>, Task>? _throttlingWriter;
+    private readonly Func<uint, Action<string>, Task<int>>? _throttlingWriter;
 
     /// <inheritdoc cref="ITcpTuningService.HasSnapshot"/>
     public bool HasSnapshot => File.Exists(_snapshotPath);
@@ -138,8 +138,15 @@ public sealed class TcpTuningService : ITcpTuningService
             }
             else if (current.NetworkThrottlingIndex != target.NetworkThrottlingIndex)
             {
-                await WriteThrottlingIndexAsync(target.NetworkThrottlingIndex.Value, onLine).ConfigureAwait(false);
-                applied.Add($"网络限流 → 0x{target.NetworkThrottlingIndex.Value:X}");
+                // 审查 O3（2026-09-10）：只有写入成功才计入 applied
+                if (await WriteThrottlingIndexAsync(target.NetworkThrottlingIndex.Value, onLine).ConfigureAwait(false))
+                {
+                    applied.Add($"网络限流 → 0x{target.NetworkThrottlingIndex.Value:X}");
+                }
+                else
+                {
+                    skipped.Add("网络限流（提权被拒绝或写入失败）");
+                }
             }
         }
 
@@ -292,22 +299,33 @@ public sealed class TcpTuningService : ITcpTuningService
     /// restore 语义时先经调用方比较，避免无谓写入）。
     /// 【非提权宿主适配】注入了 <c>throttlingWriter</c> 时走提权 Helper 通道（见构造器注）。
     /// </summary>
-    private async Task WriteThrottlingIndexAsync(uint value, Action<string> onLine, bool restore = false)
+    /// <returns>写入是否成功（false = UAC 拒绝/Helper 失败——调用方不得计入 applied）。</returns>
+    private async Task<bool> WriteThrottlingIndexAsync(uint value, Action<string> onLine, bool restore = false)
     {
         onLine($"$ [注册表] HKLM\\…\\Tcpip\\Parameters\\NetworkThrottlingIndex = 0x{value:X}");
         if (_throttlingWriter is not null)
         {
-            await _throttlingWriter(value, onLine).ConfigureAwait(false);
-            onLine(restore
-                ? $"[调优] NetworkThrottlingIndex 已还原为 0x{value:X}"
-                : $"[调优] NetworkThrottlingIndex 已写入 0x{value:X}");
-            return;
+            // 审查 O3（2026-09-10）：退出码曾被委托签名 Task 擦除——1223/失败仍报"已写入"。
+            // 改按退出码分支：0=成功；1223=用户拒绝 UAC（安全终止）；其余=失败。
+            int exit = await _throttlingWriter(value, onLine).ConfigureAwait(false);
+            if (exit == 0)
+            {
+                onLine(restore
+                    ? $"[调优] NetworkThrottlingIndex 已还原为 0x{value:X}"
+                    : $"[调优] NetworkThrottlingIndex 已写入 0x{value:X}");
+                return true;
+            }
+
+            onLine(exit == 1223
+                ? $"[调优] ⚠️ NetworkThrottlingIndex 写入：用户拒绝 UAC 提权，已安全终止（无副作用）"
+                : $"[调优] ❌ NetworkThrottlingIndex 写入失败（退出码 {exit}）");
+            return false;
         }
 
         if (!OperatingSystem.IsWindows())
         {
             onLine("[调优] ⚠️ 当前平台不支持注册表写入，且未配置提权写入通道——已跳过");
-            return;
+            return false;
         }
 
         try
@@ -316,6 +334,7 @@ public sealed class TcpTuningService : ITcpTuningService
             onLine(restore
                 ? $"[调优] NetworkThrottlingIndex 已还原为 0x{value:X}"
                 : $"[调优] NetworkThrottlingIndex 已写入 0x{value:X}");
+            return true;
         }
         catch (System.Security.SecurityException ex)
         {
@@ -325,6 +344,8 @@ public sealed class TcpTuningService : ITcpTuningService
         {
             onLine($"[调优] ⚠️ 注册表写入被拒绝（{ex.Message}）——该项需要管理员权限，其余项不受影响");
         }
+
+        return false;
     }
 
     private async Task SetGlobalAsync(string setting, Action<string> onLine, CancellationToken ct = default)

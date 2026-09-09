@@ -290,9 +290,12 @@ public partial class NetSettingsTabViewModel : ObservableObject
         try
         {
             int exit = await _config.SetAdapterEnabledAsync(adapter, enabled: !disable, _log).ConfigureAwait(true);
+            // 审查 O6（2026-09-10）：1223=用户拒绝 UAC=安全终止（对齐修复页纪律）
             _log(exit == 0
                 ? $"[设置] ✅ 已{action}「{adapter}」"
-                : $"[设置] ❌ {action}「{adapter}」失败（退出码 {exit}）。若提示拒绝访问，请确认 UAC 已放行");
+                : exit == 1223
+                    ? $"[设置] ⚠️ {action}「{adapter}」：用户拒绝 UAC 提权，已安全终止（无副作用）"
+                    : $"[设置] ❌ {action}「{adapter}」失败（退出码 {exit}）");
             await Task.Delay(1500).ConfigureAwait(true); // 状态切换落地等待，再回读
             await LoadAsync().ConfigureAwait(true);
         }
@@ -452,7 +455,7 @@ public partial class NetSettingsTabViewModel : ObservableObject
     private bool CanWrite => !IsBusy;
 
     private bool Confirm(string title, string message)
-        => ConfirmRequest?.Invoke(title, message) != false;
+        => ConfirmRequest?.Invoke(title, message) == true; // 审查 Y1：危险操作确认缺省应拒绝（fail-closed）
 
     /// <summary>修改类操作统一通道：先拍 BeforeChange 快照 → 执行 → 按退出码报结果 → 回读刷新。</summary>
     private async Task SnapshotThenRunAsync(string relatedAction, Func<Task<int>> run)
@@ -465,9 +468,12 @@ public partial class NetSettingsTabViewModel : ObservableObject
                 onLine: _log).ConfigureAwait(true);
 
             int exit = await run().ConfigureAwait(true);
+            // 审查 O6（2026-09-10）：同上，1223 显式识别
             _log(exit == 0
                 ? $"[设置] ✅ {relatedAction} 已执行，正在回读验证……"
-                : $"[设置] ❌ {relatedAction} 失败（退出码 {exit}）。可用配置快照一键回滚");
+                : exit == 1223
+                    ? $"[设置] ⚠️ {relatedAction}：用户拒绝 UAC 提权，已安全终止（可用配置快照回滚）"
+                    : $"[设置] ❌ {relatedAction} 失败（退出码 {exit}）。可用配置快照一键回滚");
             await LoadAsync().ConfigureAwait(true);
         }
         finally

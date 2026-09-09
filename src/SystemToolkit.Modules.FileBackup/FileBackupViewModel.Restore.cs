@@ -334,7 +334,16 @@ public partial class FileBackupViewModel
 
         try
         {
-            manager.DeleteSnapshot(target.SnapshotId);
+            // 审查 O1（2026-09-10）：DeleteSnapshot 收的是目录路径——误传 SnapshotId 会让
+            // Directory.Exists 恒 false → 静默空操作 + 假成功（已修 ReadSnapshot 的姊妹路径漏网此处）
+            string? snapDir = SnapshotDirOf(manager, target.SnapshotId);
+            if (snapDir is null)
+            {
+                Log("[备份] ❌ 未找到该快照目录（可能已被手动删除）");
+                return;
+            }
+
+            manager.DeleteSnapshot(snapDir);
             Log($"[备份] 快照已删除：{target.DisplayTime}");
         }
         catch (Exception ex)

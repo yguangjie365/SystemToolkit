@@ -19,6 +19,8 @@ public partial class NetManagerView : UserControl
         InitializeComponent();
         DataContext = vm;
         Loaded += OnLoaded;
+        // 审查 O7（2026-09-10）：切页卸载/关窗时取消持续 ping（循环与 VM 常驻泄漏）
+        Unloaded += (_, _) => (DataContext as NetManagerViewModel)?.Diagnostics.CancelPing();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

@@ -103,6 +103,13 @@ public partial class SettingsViewModel : ObservableObject
             return;
         }
 
+        // 审查 O9（2026-09-10 二轮）：BackupConfigService.Settings 是引擎消费的同一活对象——
+        // 先快照旧值，Save 失败回滚，避免"内存新值/磁盘旧值"背离
+        string oldRoot = _config.Settings.BackupRoot;
+        int oldSnapshots = _config.Settings.MaxSnapshots;
+        int oldWorkers = _config.Settings.MaxWorkers;
+        string oldPolicy = _config.Settings.DefaultConflictPolicy;
+
         try
         {
             _config.Settings.BackupRoot = root;
@@ -116,8 +123,11 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // 审查 🟠-3（2026-09-10）：同步命令无 AsyncRelayCommand 兜底层，磁盘满/权限丢失/杀软拦截
-            // 抛 IOException/UnauthorizedAccessException 会直冲 UI 线程——必须就地落用户可见
+            _config.Settings.BackupRoot = oldRoot;
+            _config.Settings.MaxSnapshots = oldSnapshots;
+            _config.Settings.MaxWorkers = oldWorkers;
+            _config.Settings.DefaultConflictPolicy = oldPolicy;
+
             StatusText = "❌ 保存失败：" + ex.Message;
             _logger.Error("备份设置保存失败", ex);
         }

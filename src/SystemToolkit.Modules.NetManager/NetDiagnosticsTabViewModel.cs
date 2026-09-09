@@ -373,6 +373,9 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
         _log("[诊断] 正在停止持续 ping…");
     }
 
+    /// <summary>审查 O7（2026-09-10）：切页/关窗时取消持续 ping，防循环与 VM 常驻泄漏。</summary>
+    public void CancelPing() => _pingCts?.Cancel();
+
     private bool CanStopPing => IsPinging;
 
     partial void OnIsPingingChanged(bool value)
