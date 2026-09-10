@@ -29,6 +29,14 @@ public sealed class DpapiOnlineCredentialStore : IOnlineCredentialStore
 
     private readonly string _path;
 
+    /// <summary>
+    /// 进程内串行闸（🟡 审查 2026-09-10）：三个公开方法都是「读全文件 → 改字典 → 写回」的
+    /// Load-Modify-Save，无锁时两个平台并发保存会互相覆盖（后写者基于旧快照 → 丢掉对方条目
+    /// → 表现为「登录状态莫名丢失」，排查成本极高）。当前虽是单例且调用串行，
+    /// 但并发约束不应依赖调用方自觉。Monitor 可重入，故 GetCookie 内嵌的 Clear 调用不会自锁。
+    /// </summary>
+    private readonly object _gate = new();
+
     /// <summary>生产用默认路径；测试可注入独立路径避免污染真实凭据。</summary>
     public DpapiOnlineCredentialStore(string? filePath = null)
     {
@@ -40,58 +48,67 @@ public sealed class DpapiOnlineCredentialStore : IOnlineCredentialStore
     /// <inheritdoc />
     public string? GetCookie(OnlineProvider provider)
     {
-        try
+        lock (_gate)
         {
-            if (!File.Exists(_path))
-            {
-                return null;
-            }
-
-            Payload? payload = JsonSerializer.Deserialize<Payload>(File.ReadAllText(_path), JsonOpts);
-            string? key = Key(provider);
-            if (payload?.ProtectedCookies is null
-                || !payload.ProtectedCookies.TryGetValue(key, out string? protectedBase64))
-            {
-                return null;
-            }
-
-            byte[] plain = ProtectedData.Unprotect(
-                Convert.FromBase64String(protectedBase64), Entropy, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(plain);
-        }
-        catch (Exception)
-        {
-            // 凭据不可读（换机/损坏/用户 profile 变更）＝视为未登录；删除坏条目避免每次都撞
             try
             {
-                Clear(provider);
-            }
-            catch
-            {
-                // 清理失败也按未登录继续——不阻塞主流程
-            }
+                if (!File.Exists(_path))
+                {
+                    return null;
+                }
 
-            return null;
+                Payload? payload = JsonSerializer.Deserialize<Payload>(File.ReadAllText(_path), JsonOpts);
+                string? key = Key(provider);
+                if (payload?.ProtectedCookies is null
+                    || !payload.ProtectedCookies.TryGetValue(key, out string? protectedBase64))
+                {
+                    return null;
+                }
+
+                byte[] plain = ProtectedData.Unprotect(
+                    Convert.FromBase64String(protectedBase64), Entropy, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(plain);
+            }
+            catch (Exception)
+            {
+                // 凭据不可读（换机/损坏/用户 profile 变更）＝视为未登录；删除坏条目避免每次都撞
+                try
+                {
+                    Clear(provider); // 同线程重入（Monitor 可重入），不会自锁
+                }
+                catch
+                {
+                    // 清理失败也按未登录继续——不阻塞主流程
+                }
+
+                return null;
+            }
         }
     }
 
     /// <inheritdoc />
     public void SetCookie(OnlineProvider provider, string cookie)
     {
-        Dictionary<string, string> protectedCookies = LoadProtected();
-        byte[] plain = Encoding.UTF8.GetBytes(cookie);
-        byte[] protectedBytes = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
-        protectedCookies[Key(provider)] = Convert.ToBase64String(protectedBytes);
-        SaveProtected(protectedCookies);
+        lock (_gate)
+        {
+            Dictionary<string, string> protectedCookies = LoadProtected();
+            byte[] plain = Encoding.UTF8.GetBytes(cookie);
+            byte[] protectedBytes = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
+            protectedCookies[Key(provider)] = Convert.ToBase64String(protectedBytes);
+            SaveProtected(protectedCookies);
+        }
     }
 
     /// <inheritdoc />
     public void Clear(OnlineProvider provider)
     {
-        Dictionary<string, string> protectedCookies = LoadProtected();
-        if (protectedCookies.Remove(Key(provider)))
+        lock (_gate)
         {
-            SaveProtected(protectedCookies);
+            Dictionary<string, string> protectedCookies = LoadProtected();
+            if (protectedCookies.Remove(Key(provider)))
+            {
+                SaveProtected(protectedCookies);
+            }
         }
     }
 
