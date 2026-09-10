@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- UI 编辑器核心逻辑（纯字符串/XML，无 WPF 依赖，net10.0 平台中立）。
+       dev 工具，独立于产品链：不进 SystemToolkit.sln、不受产品 Release 门禁与 DependencyGuard 约束。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- 工具自身工程：关闭"代码风格即错误"，避免 IDE0007/0008 反复拉锯（非产品代码，产品门禁才是硬约束） -->
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>
