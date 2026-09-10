@@ -43,8 +43,13 @@
     <Color x:Key="Color_Info">#5B9BFF</Color>
     <Color x:Key="Color_Disabled">#898989</Color>
     <Color x:Key="Color_Focus">#76B900</Color>
-    <!-- 2026-09-10 优化：原 #1A2E0A 与 Surface 比值仅 1.19（选中态几乎不可辨） -->
+    <!-- 2026-09-10 优化：原 #1A2E0A 与 Surface 比值仅 1.19（选中态几乎不可辨）
+         ⚠️ 2026-09-11 复核：改后的 #243A0D 与 Surface 仍只有 1.40:1，**仍未达**选中态 3:1 红线；
+         选中态的可辨性改由 ListItemRowBaseStyle 的 Accent 左缘条承担（审查 🟠-4） -->
     <Color x:Key="Color_Selection">#243A0D</Color>
+    <!-- 🔴 审查 2026-09-11（🔴-4）：深色主题的浮层分离**不用投影**（近黑阴影压在近黑底上不可见），
+         改用亮边描边——此键在深色包仅作占位（阴影本身不承担层次），真正的分离靠 Brush_Shadow -->
+    <Color x:Key="Color_Shadow">#000000</Color>
 
     <!-- ===== 画刷 ===== -->
     <SolidColorBrush x:Key="Brush_Background" Color="{StaticResource Color_Background}"/>
@@ -69,6 +74,10 @@
     <SolidColorBrush x:Key="Brush_DarkSurface" Color="{StaticResource Color_DarkSurface}"/>
     <SolidColorBrush x:Key="Brush_OnDark" Color="{StaticResource Color_OnDark}"/>
     <SolidColorBrush x:Key="Brush_AccentSoft" Color="#2676B900"/>
+    <!-- 🔴 审查 2026-09-11（🔴-4）：浮层与底面的可辨边界。深色下投影没有分离力，
+         层次必须由这条边界承担：#666666 vs Brush_Surface(#1A1A1A) ≈ 3.03:1，
+         满足 ADR-005「两包各自独立达标」纪律 -->
+    <SolidColorBrush x:Key="Brush_Shadow" Color="#666666"/>
     <SolidColorBrush x:Key="Brush_SuccessSoft" Color="#1F3F8500"/>
     <SolidColorBrush x:Key="Brush_WarningSoft" Color="#1FDF6500"/>
     <SolidColorBrush x:Key="Brush_NavySoft" Color="#33FFFFFF"/>
@@ -680,17 +689,27 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListViewItem">
-                    <Border x:Name="RowBg" Background="{TemplateBinding Background}"
-                            BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1">
-                        <GridViewRowPresenter Content="{TemplateBinding Content}"
-                                              Margin="{TemplateBinding Padding}"/>
-                    </Border>
+                    <Grid>
+                        <Border x:Name="RowBg" Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1">
+                            <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                  Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <!-- 🟠 审查 2026-09-11（🟠-4）：选中态左缘指示条（NVIDIA 自家 UI 的惯用手法）。
+                             Brush_Selection(#243A0D) 单独叠 Surface 仅 1.40:1，远低于选中态 3:1 红线；
+                             这条 Brush_Accent(#76B900) vs Surface ≈ 7.2:1，才是可辨性的承担者。
+                             声明在 RowBg 之后 → 绘制在其上层。 -->
+                        <Border x:Name="SelBar" Width="3" HorizontalAlignment="Left"
+                                Background="{StaticResource Brush_Accent}" Visibility="Collapsed"/>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="RowBg" Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="RowBg" Property="Background" Value="{StaticResource Brush_AccentSoft}"/>
+                            <!-- 🟡-4：接线语义令牌 Brush_Selection（此前全仓零消费的死令牌） -->
+                            <Setter TargetName="RowBg" Property="Background" Value="{StaticResource Brush_Selection}"/>
+                            <Setter TargetName="SelBar" Property="Visibility" Value="Visible"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

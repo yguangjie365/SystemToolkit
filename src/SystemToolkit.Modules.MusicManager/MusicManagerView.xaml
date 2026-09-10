@@ -233,6 +233,14 @@
                                         <DataTrigger Binding="{Binding IsCurrentAccountLoggedIn, Mode=OneWay}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
+                                        <!-- 🟠 审查 2026-09-11（🟠-3）：检测中不显示"登录"——两平台串行 await
+                                             期间 IsCurrentAccountLoggedIn 仍是上值（首屏为 false），
+                                             已登录用户会被诱导重复点击；禁用并明示"检测中" -->
+                                        <DataTrigger Binding="{Binding IsCheckingLogin, Mode=OneWay}" Value="True">
+                                            <Setter Property="Content" Value="检测中…"/>
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="ToolTip" Value="正在检测登录状态…"/>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
@@ -267,11 +275,16 @@
                            PopupAnimation="Fade"
                            Width="240">
                         <Border Background="{DynamicResource Brush_Surface}"
-                                BorderBrush="{DynamicResource Brush_SurfaceAlt}" BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush_Shadow}" BorderThickness="1"
                                 CornerRadius="{DynamicResource Radius_MD}"
                                 Margin="0,4,0,0" Padding="6">
                             <Border.Effect>
-                                <DropShadowEffect Color="#1F2937" Opacity="0.16" BlurRadius="16" ShadowDepth="2"/>
+                                <!-- 🔴 审查 2026-09-11（🔴-4）：原为硬编码 #1F2937 —— ① 违反「颜色一律令牌」；
+                                     ② 深色包下近黑阴影压在近黑底上毫无分离力。令牌化后：深色包由
+                                     Brush_Shadow（#666666，vs Surface ≈3.03:1）的亮边承担层次，
+                                     浅色包沿用投影。 -->
+                                <DropShadowEffect Color="{DynamicResource Color_Shadow}" Opacity="0.16"
+                                                  BlurRadius="16" ShadowDepth="2"/>
                             </Border.Effect>
                             <StackPanel>
                                 <TextBlock Text="切换平台 / 管理登录" Margin="8,6,8,4"
@@ -345,11 +358,16 @@
                            PopupAnimation="Fade"
                            Width="280">
                         <Border Background="{DynamicResource Brush_Surface}"
-                                BorderBrush="{DynamicResource Brush_SurfaceAlt}" BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush_Shadow}" BorderThickness="1"
                                 CornerRadius="{DynamicResource Radius_MD}"
                                 Margin="0,4,0,0" Padding="6">
                             <Border.Effect>
-                                <DropShadowEffect Color="#1F2937" Opacity="0.16" BlurRadius="16" ShadowDepth="2"/>
+                                <!-- 🔴 审查 2026-09-11（🔴-4）：原为硬编码 #1F2937 —— ① 违反「颜色一律令牌」；
+                                     ② 深色包下近黑阴影压在近黑底上毫无分离力。令牌化后：深色包由
+                                     Brush_Shadow（#666666，vs Surface ≈3.03:1）的亮边承担层次，
+                                     浅色包沿用投影。 -->
+                                <DropShadowEffect Color="{DynamicResource Color_Shadow}" Opacity="0.16"
+                                                  BlurRadius="16" ShadowDepth="2"/>
                             </Border.Effect>
                             <StackPanel>
                                 <Grid Margin="8,6,8,4">
@@ -864,6 +882,9 @@
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsLoadingRecommendations, Mode=OneWay}" Value="True">
                                         <Setter Property="IsEnabled" Value="False"/>
+                                        <!-- 🟡 审查 2026-09-11（🟡-3）：禁用中的按钮若仍提示"刷新推荐"，
+                                             用户会以为按钮失灵——ToolTip 随加载态变化（🟡-18 同款的新残留） -->
+                                        <Setter Property="ToolTip" Value="正在加载推荐…"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>

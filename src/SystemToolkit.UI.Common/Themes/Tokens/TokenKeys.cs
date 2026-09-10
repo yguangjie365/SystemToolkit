@@ -53,6 +53,8 @@ public static class TokenKeys
         public const string Color_Disabled = "Color_Disabled";
         public const string Color_Focus = "Color_Focus";
         public const string Color_Selection = "Color_Selection";
+        // ── 浮层分离（2026-09-11 审查 🔴-4）：浅色主题靠投影，深色主题靠亮边描边 ──
+        public const string Color_Shadow = "Color_Shadow";
     }
 
     public static class Brushes
@@ -91,6 +93,8 @@ public static class TokenKeys
         public const string Brush_Disabled = "Brush_Disabled";
         public const string Brush_Focus = "Brush_Focus";
         public const string Brush_Selection = "Brush_Selection";
+        // ── 浮层分离（2026-09-11 审查 🔴-4）：浮层与底面的可辨边界 ──
+        public const string Brush_Shadow = "Brush_Shadow";
 
         // ── 音乐完整播放器 ──
         public const string Brush_PlayerVinyl = "Brush_PlayerVinyl";

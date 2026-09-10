@@ -105,6 +105,12 @@ public partial class FileBackupViewModel : ObservableObject
 
         // 初始化时检测VSS可用性
         CheckVssAvailability();
+
+        // 🔴 审查 2026-09-11（🔴-3）：VSS 状态色是**主题派生刷**（构造期 ThemeBrush.Find 定值），
+        // 而本 VM 是 DI 单例（FileBackupModule.AddSingleton）、主题切换只重建视图不重建 VM——
+        // 不订阅就会让状态点停在旧主题配色（深色主题下浅色的绿/黄/红压在近黑底上）。
+        // 重跑检查即可重取颜色（CheckVssAvailability 幂等，不做副作用）。
+        ThemeManager.ThemeChanged += CheckVssAvailability;
     }
 
     /// <summary>确认对话框回调（View 注入）。</summary>
