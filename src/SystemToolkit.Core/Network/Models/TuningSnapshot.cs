@@ -2,7 +2,8 @@ namespace SystemToolkit.Core.Network.Models;
 
 /// <summary>
 /// 优化改前快照（每次应用前写入，仅保留最近一份；落
-/// <c>%APPDATA%/FileBackupTool/net/tuning_snapshot.json</c>，snake_case JSON 沿用项目约定）。
+/// <c>%LOCALAPPDATA%/SystemToolkit/net/tuning_snapshot.json</c>——02 §六统一配置根，
+/// 旧位置 <c>%APPDATA%/FileBackupTool/net/</c> 只作一次性迁移来源；snake_case JSON 沿用项目约定）。
 /// <para>
 /// <see cref="NetshValues"/> 只记录<b>能可靠读到的项</b>（键：autotuninglevel / rss / ecncapability）；
 /// 解析失败的项不进快照——还原时跳过，绝不拿「未知」去写系统。

@@ -34,17 +34,69 @@ public sealed class TcpTuningService : ITcpTuningService
     private readonly ICommandRunner _runner;
     private readonly string _snapshotPath;
 
-    /// <summary>构造；快照路径缺省为 <c>%APPDATA%\FileBackupTool\net\tuning_snapshot.json</c>（测试注入临时目录）。
+    /// <summary>
+    /// 默认快照路径（02 §六统一配置根）。历史版本写的是 <c>%APPDATA%\FileBackupTool\net\</c>
+    /// ——旧产品名 + Roaming，属 M9 整改的漏网项（🟡 审查 2026-09-10）。
+    /// </summary>
+    private static readonly string DefaultSnapshotPath = System.IO.Path.Combine(
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+        "SystemToolkit", "net", "tuning_snapshot.json");
+
+    /// <summary>旧版快照位置——只作一次性迁移来源，不再写入。</summary>
+    private static readonly string LegacySnapshotPath = System.IO.Path.Combine(
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+        "FileBackupTool", "net", "tuning_snapshot.json");
+
+    /// <summary>构造；快照路径缺省为 <c>%LOCALAPPDATA%\SystemToolkit\net\tuning_snapshot.json</c>（测试注入临时目录）。
     /// 【非提权宿主适配 2026-09-06】<paramref name="throttlingWriter"/>：HKLM 直写在新宿主（按需 UAC 架构）必失败，
     /// 注入委托时 NetworkThrottlingIndex 改走提权 Helper 通道；未注入（旧测试/旧宿主）保持直写 + 权限失败降级。</summary>
     public TcpTuningService(ICommandRunner runner, string? snapshotPath = null, Func<uint, Action<string>, Task<int>>? throttlingWriter = null)
     {
         _runner = runner;
-        _snapshotPath = snapshotPath
-            ?? System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-                "FileBackupTool", "net", "tuning_snapshot.json");
+        if (snapshotPath is null)
+        {
+            _snapshotPath = DefaultSnapshotPath;
+            MigrateLegacySnapshot(); // 仅缺省路径迁移；显式注入（测试）不触碰真实目录
+        }
+        else
+        {
+            _snapshotPath = snapshotPath;
+        }
+
         _throttlingWriter = throttlingWriter;
+    }
+
+    /// <summary>
+    /// 一次性迁移（🟡-6，范式对齐 <c>RuleManager.MigrateLegacyRulesFile</c>）：
+    /// 新位置缺失且旧位置存在时原样复制，保留老用户「升级前调优状态」的还原能力；
+    /// 新位置已有数据则不动，旧文件保留不删。
+    /// </summary>
+    /// <remarks>
+    /// 刻意不抛：本类构造期没有日志出口（<c>onLine</c> 是方法参数），而迁移失败只意味着
+    /// 「本次会话看不到历史快照」——<see cref="HasSnapshot"/> 会如实返回 false，UI 显示
+    /// 「无可还原快照」，不构成假成功；调优功能本身完全不受影响。
+    /// </remarks>
+    private void MigrateLegacySnapshot()
+    {
+        try
+        {
+            if (File.Exists(_snapshotPath) || !File.Exists(LegacySnapshotPath))
+            {
+                return;
+            }
+
+            string? dir = System.IO.Path.GetDirectoryName(_snapshotPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.Copy(LegacySnapshotPath, _snapshotPath);
+        }
+        catch (Exception)
+        {
+            // 见 remarks：失败退化为"无历史快照"，不阻断构造
+        }
     }
 
     private readonly Func<uint, Action<string>, Task<int>>? _throttlingWriter;
