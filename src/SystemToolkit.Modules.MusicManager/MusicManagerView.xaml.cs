@@ -88,6 +88,14 @@ public partial class MusicManagerView : UserControl
         // 不退订则隐藏中的旧实例继续消费 VM 事件）。「-= 先行」保证 Loaded 重复触发也只有一个订阅
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+
+        // P3a：窗口级鼠标按下挂钩（外部点击收起浮层）；「-= 先行」防重复订阅
+        if (Window.GetWindow(this) is { } win)
+        {
+            win.PreviewMouseDown -= OnWindowPreviewMouseDown;
+            win.PreviewMouseDown += OnWindowPreviewMouseDown;
+        }
+
         UpdateDiscSpin(); // 重挂后同步黑胶状态（Unloaded 时已暂停；若正在播放需恢复旋转）
 
         _ = InitializeOnceAsync();
@@ -96,6 +104,12 @@ public partial class MusicManagerView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        if (Window.GetWindow(this) is { } win)
+        {
+            win.PreviewMouseDown -= OnWindowPreviewMouseDown;
+        }
+
+        SearchHistoryPopup.IsOpen = false; // 切页不残留浮层
         SetKaraokeRenderHook(false); // P0：静态 CompositionTarget.Rendering 必须随卸载解绑，防视图泄漏
         _discSpin?.Pause(DiscHost); // 切走页面：黑胶暂停，避免不可见空转（审查 🟠-1 采纳——修正其论据后落地）
     }
@@ -144,6 +158,25 @@ public partial class MusicManagerView : UserControl
     private void OnOnlineSearchGotFocus(object sender, RoutedEventArgs e)
     {
         SearchHistoryPopup.IsOpen = _vm.HasSearchHistory;
+    }
+
+    /// <summary>
+    /// P3a：窗口级鼠标按下 → 点在浮层/搜索框之外时收起。
+    /// 🔴 不用 Popup.StaysOpen="False"：它与「点击获焦后弹出」同一次鼠标事件相冲，
+    /// 表现就是浮层「闪一下就消失」（2026-09-10 实测）。改 StaysOpen=True + 自行判定关闭。
+    /// </summary>
+    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!SearchHistoryPopup.IsOpen)
+        {
+            return;
+        }
+
+        bool overPopup = SearchHistoryPopup.Child is System.Windows.FrameworkElement popupRoot && popupRoot.IsMouseOver;
+        if (!overPopup && !OnlineSearchBox.IsMouseOver)
+        {
+            SearchHistoryPopup.IsOpen = false;
+        }
     }
 
     /// <summary>P3a：点历史项复搜后收起（命令已由 VM 执行）。</summary>
@@ -451,6 +484,12 @@ public partial class MusicManagerView : UserControl
         if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
         {
             UpdateDiscSpin();
+        }
+
+        // P3a：历史被清空（HasSearchHistory→false）时收起浮层，避免留一个空壳
+        if (e.PropertyName == nameof(MusicManagerViewModel.HasSearchHistory) && !_vm.HasSearchHistory)
+        {
+            SearchHistoryPopup.IsOpen = false;
         }
 
         if (e.PropertyName == nameof(MusicManagerViewModel.VinylAccentBrush))

@@ -24,6 +24,12 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     private const string SearchUa = "QQMusic 14090508(android 12)";
     private const string Referer = "https://y.qq.com/";
 
+    /// <summary>搜索专用 UA（对照 NexBox QQ_SEARCH_UA：musics.fcg 按移动端校验）。</summary>
+    private const string QqSearchUa = "QQMusic 14090508(android 12)";
+
+    /// <summary>搜索专用端点（对照 NexBox：musics.fcg?sign=，不是 musicu.fcg）。</summary>
+    private const string QqSearchUrl = "https://u.y.qq.com/cgi-bin/musics.fcg";
+
     private readonly HttpClient _http;
     private readonly ILogger _logger;
 
@@ -40,45 +46,130 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     }
 
     /// <summary>搜索歌曲（通过 musicu.fcg 搜索接口）。</summary>
+    /// <summary>
+    /// 搜索歌曲。2026-09-10 对照 NexBox <c>full_song_search</c>（qqmusic.rs:821）重写。
+    /// <para>
+    /// 🔴 旧实现走 <c>musicu.fcg</c> + 顶层键 <c>music.search.SearchFReq</c>——该路径已失效，
+    /// 实测在 QQ 平台点搜索恒返回空列表（"点了没结果"）。NexBox 现役实现：
+    /// ① 端点 <c>musics.fcg?sign=</c>；② module/method =
+    /// <c>music.search.SearchCgiService</c> / <c>DoSearchForQQMusicMobile</c>，顶层键 <c>req</c>；
+    /// ③ comm 必须完整（ct 11 / cv 14090508 / tmeAppID qqmusic…）；
+    /// ④ 签名入参是**整个请求体**（QqSearchSign 算法与 NexBox qq_search_sign 同构）；
+    /// ⑤ 解析 <c>req.data.body.item_song</c>（每项先取 <c>track_info</c>），
+    ///    兼容 <c>body.song.list</c> / <c>body.list</c>；命中名含 &lt;em&gt; 高亮标签需剥离。
+    /// </para>
+    /// </summary>
     public async Task<List<OnlineTrack>> SearchAsync(string keywords, int limit = 30, string cookie = "", CancellationToken ct = default)
     {
         try
         {
-            // 构造 musicu.fcg 搜索 payload（属性名含点号，不能用匿名类型）
-            string sign = QqSearchSign(keywords);
-            string escKw = keywords.Replace("\\", "\\\\").Replace("\"", "\\\"");
-            string payloadJson = "{\"music.search.SearchFReq\":{\"query\":\"" + escKw + "\",\"page_size\":" + limit + ",\"page_num\":1,\"grp\":[1,5],\"search_id\":\"" + sign + "\"},\"comm\":{\"ct\":24,\"cv\":0}}";
-            using var req = new HttpRequestMessage(HttpMethod.Post, MusicuUrl);
-            req.Headers.Add("Referer", Referer);
-            req.Headers.Add("User-Agent", HeadersUa);
-            if (!string.IsNullOrEmpty(cookie))
-                req.Headers.Add("Cookie", cookie);
-            req.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+            string kw = (keywords ?? string.Empty).Trim();
+            if (kw.Length == 0)
+            {
+                return [];
+            }
+
+            int numPerPage = Math.Clamp(limit, 1, 30);
+            string searchId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + Random.Shared.Next(0, 1000000).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
+
+            var payload = new
+            {
+                comm = new
+                {
+                    ct = "11",
+                    cv = "14090508",
+                    v = "14090508",
+                    tmeAppID = "qqmusic",
+                    phonetype = "EBG-AN10",
+                    os_ver = "12",
+                    QIMEI36 = "0",
+                    uid = "0",
+                    modeSwitch = "6",
+                    ui_mode = "2",
+                    nettype = "1020",
+                },
+                req = new
+                {
+                    module = "music.search.SearchCgiService",
+                    method = "DoSearchForQQMusicMobile",
+                    param = new
+                    {
+                        search_type = 0,
+                        searchid = searchId,
+                        query = kw,
+                        page_num = 1,
+                        num_per_page = numPerPage,
+                        highlight = 0,
+                        nqc_flag = 0,
+                        multi_zhida = 0,
+                        cat = 2,
+                        grp = 1,
+                        sin = 0,
+                        sem = 0,
+                    },
+                },
+            };
+
+            string body = JsonSerializer.Serialize(payload);
+            string sign = QqSearchSign(body);
+            string url = QqSearchUrl + "?sign=" + Uri.EscapeDataString(sign);
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Add("User-Agent", QqSearchUa);
+            req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
             using HttpResponseMessage resp = await _http.SendAsync(req, ct);
             string text = await resp.Content.ReadAsStringAsync(ct);
             JsonElement json = JsonDocument.Parse(ParseJsonp(text)).RootElement;
 
             var list = new List<OnlineTrack>();
-
-            // musicu.fcg 响应格式: { "req_0": { "data": { "body": { "song": { "list": [...] } } } } }
-            if (!json.TryGetProperty("req_0", out JsonElement req0))
-                return list;
-            if (!req0.TryGetProperty("data", out JsonElement data))
-                return list;
-            if (!data.TryGetProperty("body", out JsonElement bodyEl))
-                return list;
-            if (!bodyEl.TryGetProperty("song", out JsonElement song))
-                return list;
-            if (!song.TryGetProperty("list", out JsonElement songList))
-                return list;
-
-            foreach (JsonElement track in songList.EnumerateArray())
+            if (!json.TryGetProperty("req", out JsonElement reqNode))
             {
-                OnlineTrack mapped = MapQqTrack(track);
-                if (!string.IsNullOrEmpty(mapped.Name))
-                    list.Add(mapped);
+                _logger.Warn("[QQMusic] 搜索响应无 req 节点：" + Shorten(text));
+                return list;
             }
+
+            JsonElement data = reqNode.TryGetProperty("data", out JsonElement d) ? d : reqNode;
+            JsonElement bodyEl = data.TryGetProperty("body", out JsonElement b) ? b : data;
+
+            JsonElement items = default;
+            if (bodyEl.TryGetProperty("item_song", out JsonElement itemSong) && itemSong.ValueKind == JsonValueKind.Array)
+            {
+                items = itemSong;
+            }
+            else if (bodyEl.TryGetProperty("song", out JsonElement song)
+                     && song.TryGetProperty("list", out JsonElement songList) && songList.ValueKind == JsonValueKind.Array)
+            {
+                items = songList;
+            }
+            else if (bodyEl.TryGetProperty("list", out JsonElement plainList) && plainList.ValueKind == JsonValueKind.Array)
+            {
+                items = plainList;
+            }
+
+            if (items.ValueKind != JsonValueKind.Array)
+            {
+                _logger.Warn("[QQMusic] 搜索响应无歌曲列表：" + Shorten(text));
+                return list;
+            }
+
+            foreach (JsonElement item in items.EnumerateArray())
+            {
+                // item_song 的元素包一层 track_info（NexBox 同处理）
+                JsonElement track = item.TryGetProperty("track_info", out JsonElement ti) ? ti : item;
+                OnlineTrack mapped = MapQqTrack(track);
+                // NexBox 过滤口径：名称非空且（mid 或 id 任一有值）；只认 mid 会误杀部分条目
+                if (string.IsNullOrEmpty(mapped.Name)
+                    || (string.IsNullOrEmpty(mapped.Mid) && string.IsNullOrEmpty(mapped.Id)))
+                {
+                    continue;
+                }
+
+                list.Add(mapped with { Name = StripHighlightTags(mapped.Name) });
+            }
+
+            _logger.Info($"[QQMusic] 搜索「{kw}」命中 {list.Count} 首");
             return list;
         }
         catch (Exception e)
@@ -87,6 +178,14 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             return [];
         }
     }
+
+    /// <summary>剥掉搜索结果里的高亮标签（QQ 返回 &lt;em&gt;周杰伦&lt;/em&gt; 形态，NexBox strip_html_tags 同义）。</summary>
+    private static string StripHighlightTags(string name)
+        => System.Text.RegularExpressions.Regex.Replace(name, "<[^>]+>", string.Empty);
+
+    /// <summary>日志用：截断长响应，避免刷屏。</summary>
+    private static string Shorten(string text)
+        => text.Length <= 200 ? text : text[..200] + "…";
 
     /// <summary>获取播放地址（通过 vkey 请求）。</summary>
     /// <remarks>

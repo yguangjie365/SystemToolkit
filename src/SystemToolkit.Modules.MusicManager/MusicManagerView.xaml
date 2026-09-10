@@ -152,8 +152,9 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <!-- P3a 搜索历史（方案 B 聚焦下拉）：TextBox 外包 Grid 供 Popup 定位；
-                     StaysOpen=False —— 点击外部由 WPF 自动收起，失焦不做强制关闭（避免与点击抢时序） -->
+                <!-- P3a 搜索历史（方案 B 聚焦下拉）：TextBox 外包 Grid 供 Popup 定位。
+                     🔴 StaysOpen 必须为 True：False 会在「点击获焦→弹出」的同一次鼠标事件里自动关闭，
+                     表现为浮层闪一下就消失（2026-09-10 实测）；关闭改由窗口级 PreviewMouseDown 判定 -->
                 <Grid Margin="8,0,0,0">
                     <TextBox x:Name="OnlineSearchBox" Text="{Binding OnlineSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                              Width="220" Padding="8,5" VerticalContentAlignment="Center"
@@ -162,7 +163,7 @@
                     <Popup x:Name="SearchHistoryPopup"
                            PlacementTarget="{Binding ElementName=OnlineSearchBox}"
                            Placement="Bottom"
-                           StaysOpen="False"
+                           StaysOpen="True"
                            AllowsTransparency="True"
                            PopupAnimation="Fade"
                            Width="280">
