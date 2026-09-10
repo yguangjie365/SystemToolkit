@@ -15,15 +15,18 @@
     <Color x:Key="Color_Background">#000000</Color>
     <Color x:Key="Color_SurfaceAlt">#141414</Color>
     <Color x:Key="Color_Surface">#1A1A1A</Color>
-    <Color x:Key="Color_Border">#5E5E5E</Color>
-    <Color x:Key="Color_Track">#5E5E5E</Color>
+    <!-- 2026-09-10 优化：原 #5E5E5E on Surface 仅 2.68（要求 3.0） -->
+    <Color x:Key="Color_Border">#707070</Color>
+    <Color x:Key="Color_Track">#707070</Color>
     <Color x:Key="Color_TextPrimary">#FFFFFF</Color>
     <Color x:Key="Color_TextSecondary">#A7A7A7</Color>
     <Color x:Key="Color_TextMuted">#757575</Color>
     <!-- NVIDIA Green：签名色，仅边框/下划线/CTA 描边/选中指示 -->
     <Color x:Key="Color_Accent">#76B900</Color>
-    <Color x:Key="Color_AccentHover">#1EAEDB</Color>
-    <Color x:Key="Color_AccentPressed">#007FFF</Color>
+    <!-- 2026-09-10 优化：原 #1EAEDB（蓝）与 Accent #76B900（NVIDIA 绿）不同色相，悬停时色相跳变 -->
+    <Color x:Key="Color_AccentHover">#8AD417</Color>
+    <!-- 同上：原 #007FFF（蓝）→ 绿系加深，与 Hover 构成"亮→暗"递进 -->
+    <Color x:Key="Color_AccentPressed">#5E9400</Color>
     <Color x:Key="Color_Success">#3F8500</Color>
     <Color x:Key="Color_Warning">#DF6500</Color>
     <Color x:Key="Color_Danger">#E52020</Color>
@@ -36,10 +39,12 @@
     <Color x:Key="Color_DiscGroove">#2E3A1E</Color>
     <SolidColorBrush x:Key="Brush_DiscGroove" Color="{StaticResource Color_DiscGroove}"/>
     <Color x:Key="Color_OnDark">#F5F5F5</Color>
-    <Color x:Key="Color_Info">#0046A4</Color>
+    <!-- 2026-09-10 优化：原 #0046A4 on Surface 仅 2.00（深蓝在深底几乎不可见） -->
+    <Color x:Key="Color_Info">#5B9BFF</Color>
     <Color x:Key="Color_Disabled">#898989</Color>
     <Color x:Key="Color_Focus">#76B900</Color>
-    <Color x:Key="Color_Selection">#1A2E0A</Color>
+    <!-- 2026-09-10 优化：原 #1A2E0A 与 Surface 比值仅 1.19（选中态几乎不可辨） -->
+    <Color x:Key="Color_Selection">#243A0D</Color>
 
     <!-- ===== 画刷 ===== -->
     <SolidColorBrush x:Key="Brush_Background" Color="{StaticResource Color_Background}"/>
@@ -56,7 +61,7 @@
     <SolidColorBrush x:Key="Brush_Success" Color="{StaticResource Color_Success}"/>
     <SolidColorBrush x:Key="Brush_Warning" Color="{StaticResource Color_Warning}"/>
     <SolidColorBrush x:Key="Brush_SliderTrack" Color="#3D5E5E5E"/>
-    <SolidColorBrush x:Key="Brush_SliderThumb" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush_SliderThumb" Color="{StaticResource Color_TextPrimary}"/>
     <SolidColorBrush x:Key="Brush_SegmentWarn" Color="{StaticResource Color_SegmentWarn}"/>
     <SolidColorBrush x:Key="Brush_Danger" Color="{StaticResource Color_Danger}"/>
     <SolidColorBrush x:Key="Brush_DangerSoft" Color="#1FE52020"/>
@@ -68,7 +73,7 @@
     <SolidColorBrush x:Key="Brush_WarningSoft" Color="#1FDF6500"/>
     <SolidColorBrush x:Key="Brush_NavySoft" Color="#33FFFFFF"/>
     <SolidColorBrush x:Key="Brush_SuccessBorder" Color="#663F8500"/>
-    <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="#898989"/>
+    <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="{StaticResource Color_Disabled}"/>
     <LinearGradientBrush x:Key="Brush_CoverFade" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#00000000" Offset="0"/>
         <GradientStop Color="#33000000" Offset="1"/>
@@ -77,7 +82,7 @@
         <GradientStop Color="#00000000" Offset="0"/>
         <GradientStop Color="#99000000" Offset="1"/>
     </LinearGradientBrush>
-    <SolidColorBrush x:Key="Brush_SuccessOnDark" Color="#76B900"/>
+    <SolidColorBrush x:Key="Brush_SuccessOnDark" Color="{StaticResource Color_Accent}"/>
     <SolidColorBrush x:Key="Brush_DangerOnDark" Color="#FF6B6B"/>
     <SolidColorBrush x:Key="Brush_Info" Color="{StaticResource Color_Info}"/>
     <SolidColorBrush x:Key="Brush_Disabled" Color="{StaticResource Color_Disabled}"/>
@@ -387,7 +392,9 @@
     <Style x:Key="RowPrimaryButton" TargetType="Button" BasedOn="{StaticResource RowActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+        <!-- 2026-09-10 优化：白字(#F5F5F5) on #76B900 对比度仅 2.41（要求 4.5）；
+             改用页底黑 Brush_Background → 8.71 达标 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
     </Style>
 
     <!-- KV 对标签/值（NetManager 网卡详情/优化参数表单用） -->
