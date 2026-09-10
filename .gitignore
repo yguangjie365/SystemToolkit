@@ -12,6 +12,9 @@
 [Ll]ogs/
 artifacts/
 .artifacts/
+# 多 Agent 并行构建的隔离产物目录（各自 --artifacts-path 指向不同目录，避免抢文件锁）
+.artifacts-qing/
+.artifacts-bkp/
 TestResults/
 *.user
 *.suo
