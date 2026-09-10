@@ -24,7 +24,7 @@ public class TokenKeysCoverageTests
         foreach (string pack in ThemePackPaths())
         {
             HashSet<string> defined = KeysOf(pack);
-            List<string> missing = TokenKeys.AllKeys.Where(k => !defined.Contains(k)).ToList();
+            var missing = TokenKeys.AllKeys.Where(k => !defined.Contains(k)).ToList();
             if (missing.Count > 0)
             {
                 failures.Add($"{Path.GetFileName(pack)} 缺少：{string.Join(", ", missing)}");
@@ -43,7 +43,7 @@ public class TokenKeysCoverageTests
         foreach (string pack in ThemePackPaths())
         {
             HashSet<string> defined = KeysOf(pack);
-            List<string> ghosts = defined
+            var ghosts = defined
                 .Where(k => !TokenKeys.AllKeys.Contains(k))
                 .ToList();
             if (ghosts.Count > 0)
