@@ -207,7 +207,8 @@ public partial class MainWindow : Window
     private TextBlock BuildUnderConstruction(string displayName) => new()
     {
         Text = displayName + " 建设中（V0.x 里程碑交付）",
-        FontSize = 18,
+        // 🟡 审查 2026-09-10（🟡-14）：走设计令牌，不再硬编码字号
+        FontSize = (double)FindResource("Font_SizeBodyLg"),
         Foreground = (System.Windows.Media.Brush)FindResource("Brush_TextMuted"),
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,

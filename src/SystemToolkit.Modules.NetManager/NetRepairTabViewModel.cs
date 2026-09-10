@@ -74,9 +74,17 @@ public partial class NetRepairTabViewModel : ObservableObject
         try
         {
             IReadOnlyList<string> executed = await _repair.RunSafeSequenceAsync(_log).ConfigureAwait(true);
-            _log(executed.Count > 0
-                ? "[修复] ✅ 安全修复完成：" + string.Join(" → ", executed)
-                : "[修复] ❌ 安全修复未完成（首步即失败），请查看日志");
+            // 🟡 审查 2026-09-10（🟡-8）：按「计划步数 vs 实际完成步数」分支——原先只看
+            // executed.Count > 0，第一步成功、第二步失败时会打「✅ 安全修复完成」，
+            // 与上一行刚打的「❌ renew 失败」自相矛盾。
+            const int plannedSteps = 2; // 刷新 DNS 缓存 + 重新获取 IP（与上方确认文案一致）
+            _log(executed.Count switch
+            {
+                0 => "[修复] ❌ 安全修复未完成（首步即失败），请查看日志",
+                plannedSteps => "[修复] ✅ 安全修复完成：" + string.Join(" → ", executed),
+                _ => $"[修复] ⚠️ 安全修复部分完成（{executed.Count}/{plannedSteps}）："
+                     + string.Join(" → ", executed) + "——失败项见上方日志",
+            });
             if (executed.Count > 0)
             {
                 SafeSequenceCompleted?.Invoke();

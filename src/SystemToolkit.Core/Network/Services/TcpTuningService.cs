@@ -371,10 +371,13 @@ public sealed class TcpTuningService : ITcpTuningService
     /// <returns>写入是否成功（供还原路径聚合失败，🟠 审查 2026-09-10）。</returns>
     private async Task<bool> WriteInterfaceMetric(string adapter, int metric, Action<string> onLine, CancellationToken ct = default)
     {
-        onLine($"$ netsh interface ipv4 set interface \"{adapter}\" metric={metric}");
+        // 🟡 审查 2026-09-10（🟡-7）：回显与执行共用同一构造——原先回显是手工拼的，
+        // 与 NetshArgs.Name() 的引号卫生不一致，用户看到的命令可能与实际执行的不同。
+        string netshArgs = NetshArgs.SetInterfaceMetric(adapter, metric);
+        onLine($"$ netsh {netshArgs}");
         try
         {
-            int exit = await _runner.RunAsync("netsh", NetshArgs.SetInterfaceMetric(adapter, metric), onLine, ct, timeout: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+            int exit = await _runner.RunAsync("netsh", netshArgs, onLine, ct, timeout: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
             onLine(exit switch
             {
                 0 => $"[调优] ✅ 「{adapter}」跃点数已设为 {metric}",

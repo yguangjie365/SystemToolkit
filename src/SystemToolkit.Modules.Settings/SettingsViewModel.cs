@@ -159,6 +159,13 @@ public partial class SettingsViewModel : ObservableObject
             _config.Settings.MaxWorkers = oldWorkers;
             _config.Settings.DefaultConflictPolicy = oldPolicy;
 
+            // 🟡 审查 2026-09-10（🟡-15）：UI 输入也要一并回滚——否则输入框显示新值、
+            // 引擎用旧值，用户以为已生效（直到下次保存才发现）。
+            BackupRootInput = oldRoot;
+            MaxSnapshotsInput = oldSnapshots.ToString();
+            MaxWorkersInput = oldWorkers.ToString();
+            DefaultConflictPolicy = oldPolicy;
+
             StatusText = "❌ 保存失败：" + ex.Message;
             _logger.Error("备份设置保存失败", ex);
         }
