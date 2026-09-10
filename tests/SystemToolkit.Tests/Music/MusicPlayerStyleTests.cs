@@ -168,10 +168,17 @@ public class MusicPlayerStyleTests
 
         await vm.PlayFromLibraryCommand.ExecuteAsync(null);
 
-        // 时序加固（2026-09-09）：封面装载走异步管线，全量并行时 STA 线程繁忙可能超 3s——
-        // 本测试已两次在全量跑中超时（单测/复跑均过），上限提到 10s 消除脆弱
-        bool loaded = await WaitUntilAsync(() => vm.CurrentCoverImage is not null, timeoutMs: 10000);
-        Assert.True(loaded, "封面应在起播后装载");
+        // 时序加固（2026-09-11 F-1 后）：判据从"仅 CurrentCoverImage 非空"扩到"两个动态背景刷也已 settle 成渐变"。
+        // 根因：封面管线在同一个 RunOnUi 回调里先置 CurrentCoverImage、后置三风格背景刷；
+        // WaitUntilAsync 的 await 续体在全量并行负载下可能落在线程池线程，读到 CurrentCoverImage 已非空、
+        // 却早于背景刷赋值被内存可见 → 断言撞上仍是初始实色刷（ImmersionBackgroundBrush 初值 = DarkImmersive 实心）。
+        // 直接等"断言所依赖的后置状态"，消除该窗口，避免只靠加大 timeoutMs 治标。
+        bool settled = await WaitUntilAsync(
+            () => vm.CurrentCoverImage is not null
+                  && vm.ImmersionBackgroundBrush is System.Windows.Media.LinearGradientBrush
+                  && vm.ModernBackgroundBrush is System.Windows.Media.LinearGradientBrush,
+            timeoutMs: 10000);
+        Assert.True(settled, "封面与三风格背景刷应在起播后 settle（沉浸/现代均已升级为渐变刷）");
         Assert.True(vm.HasCover);
         // 红封面 → 主色偏红（R 明显高），且非中性回退
         System.Windows.Media.Color c = vm.CurrentAccentBrush.Color;
