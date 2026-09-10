@@ -16,7 +16,7 @@ public sealed class GameManagerModule : ModuleBase
 
     public override string DisplayName => "游戏管理";
 
-    public override int Order => 8;
+    public override int Order => 9;
 
     public override bool CanDisable => true;
 

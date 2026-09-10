@@ -25,6 +25,16 @@ public static class ThemeManager
     /// <summary>当前主题 id（未应用过 = Default）。</summary>
     public static string CurrentThemeId { get; private set; } = DefaultThemeId;
 
+    /// <summary>
+    /// 主题已切换（<see cref="Apply"/> 成功后触发）。
+    /// <para>
+    /// 宿主（MainWindow）据此**重建当前视图**：令牌类引用已全部走 <c>DynamicResource</c> 自动刷新，
+    /// 但 <c>Style.BasedOn</c> 不支持 DynamicResource（WPF 硬限制），继承了主题包样式的派生样式
+    /// 仍指向旧包实例——重建视图可让其按新包重新解析，做到真正的"即时切换"。
+    /// </para>
+    /// </summary>
+    public static event Action? ThemeChanged;
+
     /// <summary>按 id 应用主题；未知 id 回退默认。启动（App.xaml.cs，字典 0 占位后）与切换共用。</summary>
     public static void Apply(string? themeId)
     {
@@ -67,6 +77,7 @@ public static class ThemeManager
         string packUri = string.IsNullOrEmpty(match.PackUri) ? Themes[0].PackUri : match.PackUri;
         dicts[0] = new ResourceDictionary { Source = new Uri(packUri) };
         CurrentThemeId = id;
+        ThemeChanged?.Invoke(); // 宿主重建视图（BasedOn 派生样式跟随，见事件注释）
     }
 
     /// <summary>启动入口：读持久化主题应用（损坏/缺失回退默认）。任何视图解析资源前调用。</summary>

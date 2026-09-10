@@ -21,6 +21,12 @@ public static class NetAdapterFilter
         // 绑定在物理网卡上的过滤驱动子接口（与物理卡同类型、同速率、状态 Up）
         "qos packet scheduler", "packet scheduler", "wifi filter", "native wifi",
         "wfp", "windows filter", "npcap", "wintun", "lightweight filter",
+        // 2026-09-10 实机反馈（NetManager 网卡列表「一堆不知什么东西」）：
+        // 第三方安全软件注入的 NDIS 过滤驱动接口，名称形如
+        // 「LAN-Huorong NDIS Filter Driver-0000」「WLAN-Huorong NDIS Filter Driver-0000」
+        // （火绒实测；同类还有 360/卡巴等 NDIS Filter Driver 变体）——描述与真网卡不同，
+        // 故「描述+MAC」去重合并不掉，必须在名称层拦。
+        "ndis filter", "filter driver", "ndis light weight",
         // 外设 / 调试 / 热点
         "bluetooth", "btlan", "wan miniport", "kernel debug", "内核调试器",
         "wi-fi direct", "hosted network", "本地连接*", "microsoft wi-fi",

@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.FileTransfer"
-             Background="{StaticResource Brush_Background}">
+             Background="{DynamicResource Brush_Background}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </UserControl.Resources>
@@ -18,18 +18,18 @@
         <!-- ============ 页头 ============ -->
         <Grid Grid.Row="0" Margin="0,0,0,14">
             <StackPanel>
-                <TextBlock Text="文件互传" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0">
+                <TextBlock Text="文件互传" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" Margin="0,2,0,0">
                     <Run Text="LAN · 设备 "/><Run Text="{Binding Desktop.DiscoveredDevices.Count, Mode=OneWay}"/><Run Text=" 台 · 任务 "/><Run Text="{Binding Desktop.ActiveTasks.Count, Mode=OneWay}"/><Run Text=" 个"/>
                 </TextBlock>
             </StackPanel>
             <Border CornerRadius="{DynamicResource Radius_XS}" Padding="8,4" VerticalAlignment="Center" HorizontalAlignment="Right">
                 <Border.Style>
                     <Style TargetType="Border">
-                        <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
+                        <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
-                                <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
+                                <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -37,13 +37,13 @@
                 <TextBlock>
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
                             <Setter Property="Text" Value="服务未启动"/>
                             <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
-                            <Setter Property="FontWeight" Value="{StaticResource Font_WeightMedium}"/>
+                            <Setter Property="FontWeight" Value="{DynamicResource Font_WeightMedium}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
                                     <Setter Property="Text" Value="服务运行中"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -55,9 +55,9 @@
 
         <!-- ============ Tab 行 ============ -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,14">
-            <RadioButton Style="{StaticResource SectionTab}" GroupName="FtTabs" IsChecked="True"
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="FtTabs" IsChecked="True"
                          Content="电脑互传" Tag="0" Checked="OnTabChecked"/>
-            <RadioButton Style="{StaticResource SectionTab}" GroupName="FtTabs"
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="FtTabs"
                          Content="手机通道" Tag="1" Checked="OnTabChecked"/>
         </StackPanel>
 
@@ -66,7 +66,7 @@
             <ScrollViewer x:Name="DesktopPanel" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- 本机状态与服务 -->
-                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                    <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -74,11 +74,11 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="本机与服务" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Text="本机与服务" Style="{DynamicResource CardTitle}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="设备 ID：" Style="{StaticResource KvLabel}"/>
-                                    <TextBlock Text="{Binding Desktop.DeviceId}" Style="{StaticResource MonoText}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Desktop.TransferPortText, StringFormat=· TCP 端口 {0}}" Style="{StaticResource KvLabel}" Margin="10,0,0,0"/>
+                                    <TextBlock Text="设备 ID：" Style="{DynamicResource KvLabel}"/>
+                                    <TextBlock Text="{Binding Desktop.DeviceId}" Style="{DynamicResource MonoText}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Desktop.TransferPortText, StringFormat=· TCP 端口 {0}}" Style="{DynamicResource KvLabel}" Margin="10,0,0,0"/>
                                 </StackPanel>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -89,17 +89,17 @@
                                         <ColumnDefinition Width="8"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="接收目录" Style="{StaticResource KvLabel}" Margin="0,0,8,0"/>
-                                    <TextBox Grid.Column="1" Style="{StaticResource FieldInput}"
+                                    <TextBlock Grid.Column="0" Text="接收目录" Style="{DynamicResource KvLabel}" Margin="0,0,8,0"/>
+                                    <TextBox Grid.Column="1" Style="{DynamicResource FieldInput}"
                                              Text="{Binding Desktop.ReceiveDirectory, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <Button Grid.Column="3" Style="{StaticResource CardButton}" Content="选择…" Click="OnPickReceiveDirectory"/>
-                                    <Button Grid.Column="5" Style="{StaticResource CardButton}" Content="打开" Click="OnOpenReceiveDirectory"/>
+                                    <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickReceiveDirectory"/>
+                                    <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Click="OnOpenReceiveDirectory"/>
                                 </Grid>
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox Content="仅接受已发现设备（来源白名单）" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,20,0"
-                                              IsChecked="{Binding Desktop.RequireKnownPeer}" Style="{StaticResource ThemedCheckBox}"/>
+                                              IsChecked="{Binding Desktop.RequireKnownPeer}" Style="{DynamicResource ThemedCheckBox}"/>
                                     <CheckBox Content="接收前需本机确认" FontSize="{DynamicResource Font_SizeBodySm}"
-                                              IsChecked="{Binding Desktop.RequireReceiveConfirmation}" Style="{StaticResource ThemedCheckBox}"/>
+                                              IsChecked="{Binding Desktop.RequireReceiveConfirmation}" Style="{DynamicResource ThemedCheckBox}"/>
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -138,14 +138,14 @@
                             <ColumnDefinition Width="14"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Style="{StaticResource ToolCard}">
+                        <Border Grid.Column="0" Style="{DynamicResource ToolCard}">
                             <StackPanel>
                                 <Grid Margin="0,0,0,10">
-                                    <TextBlock Text="已知设备（常用对端）" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock Text="已知设备（常用对端）" Style="{DynamicResource CardTitle}"/>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                        <Button Style="{StaticResource CardButton}" Content="添加" Command="{Binding Desktop.AddKnownPeerCommand}"/>
-                                        <Button Style="{StaticResource CardButton}" Content="移除" Margin="6,0,0,0" Command="{Binding Desktop.RemoveKnownPeerCommand}"/>
-                                        <Button Style="{StaticResource CardButton}" Content="保存" Margin="6,0,0,0" Command="{Binding Desktop.SaveConfigCommand}"/>
+                                        <Button Style="{DynamicResource CardButton}" Content="添加" Command="{Binding Desktop.AddKnownPeerCommand}"/>
+                                        <Button Style="{DynamicResource CardButton}" Content="移除" Margin="6,0,0,0" Command="{Binding Desktop.RemoveKnownPeerCommand}"/>
+                                        <Button Style="{DynamicResource CardButton}" Content="保存" Margin="6,0,0,0" Command="{Binding Desktop.SaveConfigCommand}"/>
                                     </StackPanel>
                                 </Grid>
                                 <ListBox Height="150"
@@ -161,10 +161,10 @@
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="暂无已知设备" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                                        <TextBlock Text="暂无已知设备" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                                         <TextBlock Text="点击'添加'按钮添加常用对端" 
                                                                                    FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{StaticResource Brush_TextMuted}" 
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -178,8 +178,8 @@
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Margin="0,2">
-                                                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextPrimary}" Width="110"/>
-                                                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextMuted}">
+                                                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}" Width="110"/>
+                                                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}">
                                                     <Run Text="{Binding Ip, Mode=OneWay}"/><Run Text=":"/><Run Text="{Binding Port, Mode=OneWay}"/>
                                                 </TextBlock>
                                             </StackPanel>
@@ -196,22 +196,22 @@
                                         <ColumnDefinition Width="8"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBox Grid.Column="0" Style="{StaticResource FieldInput}" ToolTip="设备名称"
+                                    <TextBox Grid.Column="0" Style="{DynamicResource FieldInput}" ToolTip="设备名称"
                                              Text="{Binding Desktop.SelectedKnownPeer.Name, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBox Grid.Column="2" Style="{StaticResource FieldInput}" ToolTip="IP"
+                                    <TextBox Grid.Column="2" Style="{DynamicResource FieldInput}" ToolTip="IP"
                                              Text="{Binding Desktop.SelectedKnownPeer.Ip, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBox Grid.Column="4" Style="{StaticResource FieldInput}" ToolTip="端口"
+                                    <TextBox Grid.Column="4" Style="{DynamicResource FieldInput}" ToolTip="端口"
                                              Text="{Binding Desktop.SelectedKnownPeer.Port, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <Button Grid.Column="6" Style="{StaticResource RowPrimaryButton}" Content="发送文件"
+                                    <Button Grid.Column="6" Style="{DynamicResource RowPrimaryButton}" Content="发送文件"
                                             Command="{Binding Desktop.SendToKnownPeerCommand}"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="2" Style="{StaticResource ToolCard}">
+                        <Border Grid.Column="2" Style="{DynamicResource ToolCard}">
                             <StackPanel>
                                 <Grid Margin="0,0,0,10">
-                                    <TextBlock Text="局域网设备（自动发现）" Style="{StaticResource CardTitle}"/>
-                                    <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}"
+                                    <TextBlock Text="局域网设备（自动发现）" Style="{DynamicResource CardTitle}"/>
+                                    <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}"
                                             Content="刷新" Command="{Binding Desktop.RefreshDevicesCommand}"/>
                                 </Grid>
                                 <ListBox Height="150"
@@ -227,10 +227,10 @@
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="未发现设备" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                                        <TextBlock Text="未发现设备" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                                         <TextBlock Text="请启动服务后点击刷新按钮" 
                                                                                    FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{StaticResource Brush_TextMuted}" 
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -244,36 +244,36 @@
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Margin="0,2">
-                                                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextPrimary}" Width="110"/>
-                                                <TextBlock Text="{Binding EndpointText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}" Width="110"/>
+                                                <TextBlock Text="{Binding EndpointText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <TextBlock Text="{Binding OnlineText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="10,0,0,0"
-                                                           Foreground="{StaticResource Brush_Success}"/>
+                                                           Foreground="{DynamicResource Brush_Success}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button Style="{StaticResource RowPrimaryButton}" Content="发送文件到所选设备"
+                                    <Button Style="{DynamicResource RowPrimaryButton}" Content="发送文件到所选设备"
                                             Command="{Binding Desktop.SendToSelectedDeviceCommand}"/>
-                                    <Button Style="{StaticResource CompactActionButton}" Content="加入已知" 
+                                    <Button Style="{DynamicResource CompactActionButton}" Content="加入已知" 
                                             Command="{Binding Desktop.AddDiscoveredToKnownCommand}" Margin="8,0,0,0"/>
                                     <TextBlock Text="提示：也可把文件拖到目标设备行上" FontSize="{DynamicResource Font_SizeMicro}"
-                                               Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                               Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
                     </Grid>
 
                     <!-- 传输任务 -->
-                    <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                    <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid Grid.Row="0" Margin="0,0,0,10">
-                                <TextBlock Text="传输任务" Style="{StaticResource CardTitle}"/>
-                                <Button HorizontalAlignment="Right" Style="{StaticResource RowDangerButton}" Content="取消所选任务"
+                                <TextBlock Text="传输任务" Style="{DynamicResource CardTitle}"/>
+                                <Button HorizontalAlignment="Right" Style="{DynamicResource RowDangerButton}" Content="取消所选任务"
                                         Command="{Binding Desktop.CancelTaskCommand}"/>
                             </Grid>
                             <ListBox Grid.Row="1" MinHeight="60" MaxHeight="220"
@@ -289,10 +289,10 @@
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" MinHeight="60">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="暂无传输任务" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                                        <TextBlock Text="暂无传输任务" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                                         <TextBlock Text="选择设备后发送文件即可创建任务" 
                                                                                    FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{StaticResource Brush_TextMuted}" 
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -313,12 +313,12 @@
                                                 <ColumnDefinition Width="70"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding DirectionText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextSecondary}"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Brush_TextPrimary}"/>
+                                            <TextBlock Grid.Column="0" Text="{Binding DirectionText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Brush_TextPrimary}"/>
                                             <ProgressBar Grid.Column="2" Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="10"
                                                          VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                            <TextBlock Grid.Column="3" Text="{Binding SpeedText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center"/>
-                                            <Button Grid.Column="4" Style="{StaticResource CardButton}" Content="取消"
+                                            <TextBlock Grid.Column="3" Text="{Binding SpeedText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                                            <Button Grid.Column="4" Style="{DynamicResource CardButton}" Content="取消"
                                                     Command="{Binding DataContext.Desktop.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                     CommandParameter="{Binding}"
                                                     Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
@@ -330,15 +330,15 @@
                     </Border>
 
                     <!-- 传输历史 -->
-                    <Border Style="{StaticResource ToolCard}">
+                    <Border Style="{DynamicResource ToolCard}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="200"/>
                             </Grid.RowDefinitions>
                             <Grid Grid.Row="0" Margin="0,0,0,10">
-                                <TextBlock Text="传输历史" Style="{StaticResource CardTitle}"/>
-                                <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空"
+                                <TextBlock Text="传输历史" Style="{DynamicResource CardTitle}"/>
+                                <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}" Content="清空"
                                         Command="{Binding Desktop.ClearHistoryCommand}"/>
                             </Grid>
                             <ListBox Grid.Row="1"
@@ -353,10 +353,10 @@
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="暂无传输历史" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                                        <TextBlock Text="暂无传输历史" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                                         <TextBlock Text="完成传输后会自动记录到此处" 
                                                                                    FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{StaticResource Brush_TextMuted}" 
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -378,22 +378,22 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="60"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding FinishedAt, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding DirectionText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextSecondary}"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Brush_TextPrimary}"/>
-                                            <TextBlock Grid.Column="3" Text="{Binding PeerEndpoint}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"/>
-                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"/>
+                                            <TextBlock Grid.Column="0" Text="{Binding FinishedAt, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding DirectionText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding PeerEndpoint}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
                                             <TextBlock Grid.Column="5" FontSize="{DynamicResource Font_SizeMicro}">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush_TextSecondary}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
                                                         <Setter Property="Text" Value="{Binding StatusText}"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Status}" Value="Completed">
-                                                                <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -418,15 +418,15 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- 二维码卡 -->
-                    <Border Grid.Column="0" Style="{StaticResource ToolCard}">
+                    <Border Grid.Column="0" Style="{DynamicResource ToolCard}">
                         <StackPanel>
-                            <TextBlock Text="手机扫码访问" Style="{StaticResource CardTitle}"/>
-                            <Border Background="{StaticResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_LG}"
+                            <TextBlock Text="手机扫码访问" Style="{DynamicResource CardTitle}"/>
+                            <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_LG}"
                                     Padding="10" HorizontalAlignment="Center" Margin="0,0,0,10">
                                 <Image Source="{Binding Mobile.QrImage}" Width="200" Height="200"/>
                             </Border>
-                            <TextBlock Text="{Binding Mobile.UrlText}" Style="{StaticResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
-                            <Button Style="{StaticResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
+                            <TextBlock Text="{Binding Mobile.UrlText}" Style="{DynamicResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                            <Button Style="{DynamicResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
                                     Content="打开网页" Click="OnOpenWebPage"
                                     ToolTip="需先启动手机通道 Web 服务" ToolTipService.ShowOnDisabled="True"
                                     IsEnabled="{Binding Mobile.IsWebRunning}"/>
@@ -435,7 +435,7 @@
 
                     <!-- 服务与配对卡 -->
                     <StackPanel Grid.Column="2">
-                        <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
+                        <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -443,7 +443,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Web 服务（Kestrel）" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock Text="Web 服务（Kestrel）" Style="{DynamicResource CardTitle}"/>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -453,13 +453,13 @@
                                             <ColumnDefinition Width="8"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="共享目录" Style="{StaticResource KvLabel}" Margin="0,0,8,0"/>
-                                        <TextBox Grid.Column="1" Style="{StaticResource FieldInput}"
+                                        <TextBlock Grid.Column="0" Text="共享目录" Style="{DynamicResource KvLabel}" Margin="0,0,8,0"/>
+                                        <TextBox Grid.Column="1" Style="{DynamicResource FieldInput}"
                                                  Text="{Binding Mobile.ShareDirectory, UpdateSourceTrigger=PropertyChanged}"/>
-                                        <Button Grid.Column="3" Style="{StaticResource CardButton}" Content="选择…" Click="OnPickShareDirectory"/>
-                                        <Button Grid.Column="5" Style="{StaticResource CardButton}" Content="打开" Command="{Binding Mobile.OpenShareDirectoryCommand}"/>
+                                        <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickShareDirectory"/>
+                                        <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Command="{Binding Mobile.OpenShareDirectoryCommand}"/>
                                     </Grid>
-                                    <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{StaticResource Brush_TextMuted}"
+                                    <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}"
                                                Text="手机与电脑需在同一局域网；首次连接触发防火墙提示属预期。共享目录下的文件可被手机浏览与下载。"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -490,18 +490,18 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
-                        <Border Style="{StaticResource ToolCard}">
+                        <Border Style="{DynamicResource ToolCard}">
                             <StackPanel>
-                                <TextBlock Text="一次性配对码（10 分钟轮换，用后即失效）" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Text="一次性配对码（10 分钟轮换，用后即失效）" Style="{DynamicResource CardTitle}"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <TextBlock Text="{Binding Mobile.PairCodeText}" FontSize="{DynamicResource Font_SizeTitleLg}" FontWeight="Bold"
-                                               FontFamily="{StaticResource Font_Mono}" Foreground="{StaticResource Brush_Accent}" VerticalAlignment="Center"/>
-                                    <Button Style="{StaticResource CompactActionButton}" Content="复制" Margin="8,0,0,0"
+                                               FontFamily="{DynamicResource Font_Mono}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center"/>
+                                    <Button Style="{DynamicResource CompactActionButton}" Content="复制" Margin="8,0,0,0"
                                             Command="{Binding Mobile.CopyPairCodeCommand}" Height="26" MinWidth="48"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding Mobile.PairExpiresText}" FontSize="{DynamicResource Font_SizeMicro}"
-                                           Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
-                                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{StaticResource Brush_TextMuted}" Margin="0,10,0,0"
+                                           Foreground="{DynamicResource Brush_TextMuted}" HorizontalAlignment="Center"/>
+                                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}" Margin="0,10,0,0"
                                            Text="手机打开页面后输入此配对码换取访问令牌；配对码绝不进入长期访问 URL。"/>
                             </StackPanel>
                         </Border>
@@ -511,7 +511,7 @@
         </Grid>
 
         <!-- ============ 底部操作日志 ============ -->
-        <Border Grid.Row="3" Margin="0,14,0,0" BorderBrush="{StaticResource Brush_Border}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Margin="0,14,0,0" BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -520,18 +520,18 @@
                 <Grid Grid.Row="0" Margin="0,8,0,6">
                     <StackPanel Orientation="Horizontal">
                         <ToggleButton x:Name="LogToggle" IsChecked="True" Content="▾ 操作日志" FontSize="{DynamicResource Font_SizeBodySm}"
-                                      Foreground="{StaticResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                      Style="{StaticResource ThemedToggleButton}"/>
-                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0">
+                                      Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                      Style="{DynamicResource ThemedToggleButton}"/>
+                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0">
                             <Run Text="{Binding LogLines.Count, Mode=OneWay}"/><Run Text=" 行"/>
                         </TextBlock>
                     </StackPanel>
-                    <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
+                    <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
                 </Grid>
-                <Border Grid.Row="1" x:Name="LogHost" Background="{StaticResource Brush_DarkSurface}"
+                <Border Grid.Row="1" x:Name="LogHost" Background="{DynamicResource Brush_DarkSurface}"
                         CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="160">
-                    <ListBox Style="{StaticResource ListLog}" ItemsSource="{Binding LogLines}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource Font_Mono}">
+                    <ListBox Style="{DynamicResource ListLog}" ItemsSource="{Binding LogLines}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{DynamicResource Font_Mono}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Text}" Foreground="{Binding Color}" TextWrapping="NoWrap" FontSize="{DynamicResource Font_SizeMicro}"/>

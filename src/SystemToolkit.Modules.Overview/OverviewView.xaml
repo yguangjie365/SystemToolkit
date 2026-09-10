@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
              xmlns:local="clr-namespace:SystemToolkit.Modules.Overview"
-             Background="{StaticResource Brush_Background}">
+             Background="{DynamicResource Brush_Background}">
 
     <UserControl.Resources>
         <FontFamily x:Key="IconFont">Segoe MDL2 Assets</FontFamily>
@@ -11,8 +11,8 @@
             <Setter Property="Margin" Value="0,22,0,14"/>
         </Style>
         <Style x:Key="AppListHeader" TargetType="GridViewColumnHeader">
-            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
             <Setter Property="Padding" Value="10,7"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -26,7 +26,7 @@
             <Setter Property="Background" Value="Transparent"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -43,17 +43,17 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="{DynamicResource Radius_XL}" Background="{StaticResource Brush_DarkSurface}">
-                    <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="{DynamicResource Radius_XL}" Background="{DynamicResource Brush_DarkSurface}">
+                    <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="本机概览" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                    <TextBlock Text="{Binding HeaderSubtitle}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0"/>
+                    <TextBlock Text="本机概览" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                    <TextBlock Text="{Binding HeaderSubtitle}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" Margin="0,2,0,0"/>
                 </StackPanel>
-                <Border Grid.Column="2" Style="{StaticResource LiveBadge}" Height="30" Margin="16,0,12,0">
+                <Border Grid.Column="2" Style="{DynamicResource LiveBadge}" Height="30" Margin="16,0,12,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- LIVE 脉动圆点（IsLive=True 时显示；M-UI-2 加 Storyboard 启动） -->
-                        <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,6,0" Fill="{StaticResource Brush_Success}" VerticalAlignment="Center">
+                        <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,6,0" Fill="{DynamicResource Brush_Success}" VerticalAlignment="Center">
                             <Ellipse.Style>
                                 <Style TargetType="Ellipse">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -71,7 +71,7 @@
                             </Ellipse.Triggers>
                         </Ellipse>
                         <!-- PAUSED 静态圆点（IsLive=False 时显示） -->
-                        <Ellipse Width="8" Height="8" Margin="0,0,6,0" Fill="{StaticResource Brush_TextMuted}" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Margin="0,0,6,0" Fill="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center">
                             <Ellipse.Style>
                                 <Style TargetType="Ellipse">
                                     <Setter Property="Visibility" Value="Visible"/>
@@ -83,14 +83,14 @@
                                 </Style>
                             </Ellipse.Style>
                         </Ellipse>
-                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{StaticResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
+                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{DynamicResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
                                     <Setter Property="Text" Value="已暂停"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsLive}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                                             <Setter Property="Text" Value="LIVE · 每 2 秒"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -99,10 +99,10 @@
                         </TextBlock>
                     </StackPanel>
                 </Border>
-                <Button Grid.Column="3" Style="{StaticResource PrimaryButton}" Height="30" Content="导出报告"
+                <Button Grid.Column="3" Style="{DynamicResource PrimaryButton}" Height="30" Content="导出报告"
                         Margin="0,0,8,0" Command="{Binding ExportReportCommand}"/>
                 <!-- UI 审计采纳：刷新为辅助操作，降为图标按钮（高度与按钮组对齐）；M2 补接线 -->
-                <Button Grid.Column="4" Style="{StaticResource SecondaryButton}" Height="30" Width="32"
+                <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" Width="32"
                         Padding="0" ToolTip="立即刷新" Command="{Binding RefreshFullCommand}">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeCaption}"/>
                 </Button>
@@ -110,10 +110,10 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="实时概览" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                    <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="实时概览" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>
-                <TextBlock Text="OVERVIEW" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{StaticResource MonoText}"/>
+                <TextBlock Text="OVERVIEW" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>
             </StackPanel>
 
             <ItemsControl ItemsSource="{Binding StatCards}">
@@ -124,7 +124,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource CardBorderInteractive}" Margin="0,0,12,14">
+                        <Border Style="{DynamicResource CardBorderInteractive}" Margin="0,0,12,14">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -138,29 +138,29 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{StaticResource Brush_AccentSoft}">
-                                        <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeBodyLg}" Foreground="{StaticResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{DynamicResource Brush_AccentSoft}">
+                                        <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeBodyLg}" Foreground="{DynamicResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <Border Grid.Column="2" CornerRadius="{DynamicResource Radius_SM}" Padding="8,3" VerticalAlignment="Top" Height="22"
                                             Visibility="{Binding BadgeText, Converter={x:Static local:NullToCollapsedConverter.Instance}}">
                                         <Border.Style>
                                             <Style TargetType="Border">
-                                                <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+                                                <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
                                                 <Setter Property="BorderThickness" Value="0"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding BadgeLevel}" Value="0">
-                                                        <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
-                                                        <Setter Property="BorderBrush" Value="{StaticResource Brush_SuccessBorder}"/>
+                                                        <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush_SuccessBorder}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding BadgeLevel}" Value="1">
-                                                        <Setter Property="Background" Value="{StaticResource Brush_WarningSoft}"/>
-                                                        <Setter Property="BorderBrush" Value="{StaticResource Brush_Warning}"/>
+                                                        <Setter Property="Background" Value="{DynamicResource Brush_WarningSoft}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush_Warning}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding BadgeLevel}" Value="2">
-                                                        <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
-                                                        <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
+                                                        <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding BadgeLevel}" Value="3">
@@ -170,19 +170,19 @@
                                                 </Style.Triggers>
                                             </Style>
                                         </Border.Style>
-                                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{StaticResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center" Text="{Binding BadgeText}">
+                                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{DynamicResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center" Text="{Binding BadgeText}">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
-                                                    <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding BadgeLevel}" Value="0">
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding BadgeLevel}" Value="1">
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush_Warning}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding BadgeLevel}" Value="2">
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -192,29 +192,29 @@
                                 </Grid>
                                 <StackPanel Grid.Row="1" Margin="0,12,0,0">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding NameZh}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                                        <TextBlock Text="{Binding NameEn}" FontSize="{DynamicResource Font_SizeNano}" Style="{StaticResource MonoText}" Margin="6,0,0,0" VerticalAlignment="Bottom"/>
+                                        <TextBlock Text="{Binding NameZh}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                        <TextBlock Text="{Binding NameEn}" FontSize="{DynamicResource Font_SizeNano}" Style="{DynamicResource MonoText}" Margin="6,0,0,0" VerticalAlignment="Bottom"/>
                                     </StackPanel>
-                                    <TextBlock Text="{Binding Model}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Model}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{Binding Model}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Model}" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <Grid Grid.Row="2" Margin="0,12,0,0">
-                                    <TextBlock Text="{Binding UsageLabel}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Bottom"/>
-                                    <TextBlock Text="{Binding UsageText}" FontSize="{DynamicResource Font_SizeMetric}" FontWeight="Bold" FontFamily="{StaticResource Font_Mono}" Foreground="{StaticResource Brush_TextPrimary}" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{Binding UsageLabel}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Bottom"/>
+                                    <TextBlock Text="{Binding UsageText}" FontSize="{DynamicResource Font_SizeMetric}" FontWeight="Bold" FontFamily="{DynamicResource Font_Mono}" Foreground="{DynamicResource Brush_TextPrimary}" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <controls:SegBar Grid.Row="3" Height="9" Margin="0,10,0,0" Segments="14"
                                                  Value="{Binding Percent, Mode=OneWay}"
-                                                 TrackBrush="{StaticResource Brush_Track}"
-                                                 ActiveBrush="{StaticResource Brush_Success}"
+                                                 TrackBrush="{DynamicResource Brush_Track}"
+                                                 ActiveBrush="{DynamicResource Brush_Success}"
                                                  x:Name="Seg"/>
                             </Grid>
                         </Border>
 
 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding SegLevel}" Value="1">
-                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{StaticResource Brush_SegmentWarn}"/>
+                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{DynamicResource Brush_SegmentWarn}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding SegLevel}" Value="2">
-                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{StaticResource Brush_Danger}"/>
+                                        <Setter TargetName="Seg" Property="controls:SegBar.ActiveBrush" Value="{DynamicResource Brush_Danger}"/>
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                     </DataTemplate>
@@ -223,10 +223,10 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE7F4;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="详细信息" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                    <TextBlock Text="&#xE7F4;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="详细信息" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>
-                <TextBlock Text="DETAILS" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{StaticResource MonoText}"/>
+                <TextBlock Text="DETAILS" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>
             </StackPanel>
             <ItemsControl ItemsSource="{Binding DetailCards}">
                 <ItemsControl.ItemsPanel>
@@ -236,18 +236,18 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource CardBorder}" Padding="16" Margin="0,0,12,14">
+                        <Border Style="{DynamicResource CardBorder}" Padding="16" Margin="0,0,12,14">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="22" Height="22" CornerRadius="{DynamicResource Radius_SM}" Background="{StaticResource Brush_NavySoft}" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="22" Height="22" CornerRadius="{DynamicResource Radius_SM}" Background="{DynamicResource Brush_NavySoft}" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Label}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                                        <TextBlock Text="{Binding Label}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                                         <!-- Sub 为空时收起：否则空行高度把图标垂直居中位置挤偏（用户两轮反馈） -->
                                         <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextTrimming="CharacterEllipsis" Text="{Binding Sub}">
                                             <TextBlock.Style>
@@ -274,9 +274,9 @@
                                                     <ColumnDefinition Width="120"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Key}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="SemiBold" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                <TextBlock Text="{Binding Key}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <!-- SemiBold 而非 Medium：CJK 回退字体（雅黑）无 Medium 权重，500 会被就近降为 Regular 显细（用户两轮反馈） -->
-                                                <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="{DynamicResource Font_SizeBodyLg}" Style="{StaticResource MonoText}" FontWeight="SemiBold" Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" TextAlignment="Right" ToolTip="{Binding Value}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="{DynamicResource Font_SizeBodyLg}" Style="{DynamicResource MonoText}" FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" TextAlignment="Right" ToolTip="{Binding Value}"/>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -289,10 +289,10 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE770;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="系统信息" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                    <TextBlock Text="&#xE770;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="系统信息" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>
-                <TextBlock Text="SYSTEM INFORMATION" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{StaticResource MonoText}"/>
+                <TextBlock Text="SYSTEM INFORMATION" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>
             </StackPanel>
             <ItemsControl ItemsSource="{Binding SystemPanels}">
                 <ItemsControl.ItemsPanel>
@@ -302,23 +302,23 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource CardBorder}" Padding="16" Margin="0,0,12,14">
+                        <Border Style="{DynamicResource CardBorder}" Padding="16" Margin="0,0,12,14">
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Accent}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Label}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}" Margin="6,0,0,0"/>
+                                    <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Label}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <ItemsControl ItemsSource="{Binding Rows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1" Padding="0,5">
+                                            <Border BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1" Padding="0,5">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="110"/>
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding Key}" FontSize="{DynamicResource Font_SizeBody}" Foreground="{StaticResource Brush_TextMuted}"/>
-                                                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="{DynamicResource Font_SizeBody}" Style="{StaticResource MonoText}" Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" TextAlignment="Right" ToolTip="{Binding Value}"/>
+                                                    <TextBlock Text="{Binding Key}" FontSize="{DynamicResource Font_SizeBody}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="{DynamicResource Font_SizeBody}" Style="{DynamicResource MonoText}" Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" TextAlignment="Right" ToolTip="{Binding Value}"/>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -332,10 +332,10 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{StaticResource Brush_Success}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="已安装软件" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                    <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Success}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="已安装软件" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>
-                <TextBlock Text="INSTALLED APPLICATIONS" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{StaticResource MonoText}"/>
+                <TextBlock Text="INSTALLED APPLICATIONS" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>
             </StackPanel>
 
             <Grid Margin="0,0,0,8">
@@ -344,10 +344,10 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <TextBox Height="30" VerticalContentAlignment="Center" Padding="6,0" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" FontSize="{DynamicResource Font_SizeTiny}"/>
-                <TextBlock Grid.Column="1" Text="{Binding AppCountText}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="{Binding AppCountText}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
 
-            <Border Style="{StaticResource CardBorder}" Padding="0">
+            <Border Style="{DynamicResource CardBorder}" Padding="0">
                 <!-- 审查 S-4：ListView 置于页面级 ScrollViewer 内会得到无限测量高度，导致虚拟化失效（数百条即卡顿）。
      给 ListView 一个有界视口让其内部 VirtualizingStackPanel 生效；顶部卡片仍在页面 ScrollViewer 中滚动。 -->
                 <ListView x:Name="InstalledAppsList" ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -359,16 +359,16 @@
                             <Setter Property="Padding" Value="10,9"/>
                             <Setter Property="MinHeight" Value="52"/>
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="{StaticResource Brush_TextPrimary}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
-                                        <Border x:Name="Row" Background="{TemplateBinding Background}" BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
+                                        <Border x:Name="Row" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
                                             <GridViewRowPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Row" Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

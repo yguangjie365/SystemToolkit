@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.GameManager"
              xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
-             Background="{StaticResource Brush_Background}">
+             Background="{DynamicResource Brush_Background}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 封面限宽解码（REVIEW-3 S-4：直绑 string 按原始尺寸解码，1200×1800 竖版 4 倍冗余内存） -->
@@ -13,8 +13,8 @@
         <Style x:Key="GameCard" TargetType="Border">
             <Setter Property="Width" Value="320"/>
             <Setter Property="Margin" Value="0,0,14,18"/>
-            <Setter Property="Background" Value="{StaticResource Brush_Surface}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Brush_Border}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_XLLg}"/>
             <Setter Property="Padding" Value="0"/>
@@ -28,7 +28,7 @@
                      上浮位移由 DataTemplate 内 Border.RenderTransform + EventTrigger 动画完成
                      （Style.Triggers 不支持 EventTrigger，无法承载 Storyboard） -->
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush_Accent}"/>
                     <Setter Property="BorderThickness" Value="1.5"/>
                 </Trigger>
             </Style.Triggers>
@@ -40,9 +40,9 @@
         </Style>
         <!-- 卡片元数据文本（HTML .meta-item：mono 微字弱色） -->
         <Style x:Key="CardMetaText" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{StaticResource Font_Mono}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource Font_Mono}"/>
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeTiny}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </UserControl.Resources>
@@ -66,15 +66,15 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="游戏管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0">
+                <TextBlock Text="游戏管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" Margin="0,2,0,0">
                     <Run Text="{Binding HeaderSubtitle, Mode=OneWay}"/>
                 </TextBlock>
             </StackPanel>
             <!-- 账户区：头像 + 账户名（本地 avatarcache PNG；缺失字母占位） -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
                 <Border Width="34" Height="34" CornerRadius="{DynamicResource Radius_XLLg}" ClipToBounds="True"
-                        Background="{StaticResource Brush_DarkSurface}">
+                        Background="{DynamicResource Brush_DarkSurface}">
                     <Grid>
                         <Image Source="{Binding AvatarPath}" Stretch="UniformToFill">
                             <Image.Style>
@@ -89,7 +89,7 @@
                             </Image.Style>
                         </Image>
                         <TextBlock Text="{Binding AvatarInitial}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                                   Foreground="{StaticResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                   Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -105,20 +105,20 @@
                 </Border>
                 <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
                     <TextBlock Text="{Binding AccountName}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
-                               Foreground="{StaticResource Brush_TextPrimary}"/>
+                               Foreground="{DynamicResource Brush_TextPrimary}"/>
                     <TextBlock Text="Steam 账户" FontSize="{DynamicResource Font_SizeMicro}"
-                               Foreground="{StaticResource Brush_TextMuted}"/>
+                               Foreground="{DynamicResource Brush_TextMuted}"/>
                 </StackPanel>
             </StackPanel>
-            <Border Grid.Column="3" Style="{StaticResource LiveBadge}" Height="30" Margin="0,0,12,0">
-                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{StaticResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
+            <Border Grid.Column="3" Style="{DynamicResource LiveBadge}" Height="30" Margin="0,0,12,0">
+                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{DynamicResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
-                            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
                             <Setter Property="Text" Value="● Steam 未运行"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SteamRunning}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                                     <Setter Property="Text" Value="● Steam 运行中"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -126,7 +126,7 @@
                     </TextBlock.Style>
                 </TextBlock>
             </Border>
-            <Button Grid.Column="4" Style="{StaticResource SecondaryButton}" Height="30" Content="刷新"
+            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" Content="刷新"
                     Command="{Binding LoadCommand}"/>
         </Grid>
 
@@ -138,14 +138,14 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Border Width="320" Height="30" HorizontalAlignment="Left"
-                    Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}">
+                    Background="{DynamicResource Brush_Surface}"
+                    BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
                              Background="Transparent" BorderThickness="0"/>
                     <TextBlock Text="搜索游戏名称…" FontSize="{DynamicResource Font_SizeBodySm}"
-                               Foreground="{StaticResource Brush_TextMuted}" Margin="9,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                               Foreground="{DynamicResource Brush_TextMuted}" Margin="9,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -163,40 +163,40 @@
                 <!-- M-UI-2 审查处置：系统 Radio 圆点 → SegmentedRadioItem 选中态 pill（参考稿 .sort-group 语义；
                      命令绑定/GroupName 不变，仅外观替换） -->
                 <RadioButton Content="最近游玩" IsChecked="True" GroupName="GameSort" Margin="6,0,0,0"
-                             Style="{StaticResource SegmentedRadioItem}"
+                             Style="{DynamicResource SegmentedRadioItem}"
                              Command="{Binding SetSortCommand}" CommandParameter="0"/>
                 <RadioButton Content="时长" GroupName="GameSort" Margin="4,0,0,0"
-                             Style="{StaticResource SegmentedRadioItem}"
+                             Style="{DynamicResource SegmentedRadioItem}"
                              Command="{Binding SetSortCommand}" CommandParameter="1"/>
                 <RadioButton Content="占用" GroupName="GameSort" Margin="4,0,0,0"
-                             Style="{StaticResource SegmentedRadioItem}"
+                             Style="{DynamicResource SegmentedRadioItem}"
                              Command="{Binding SetSortCommand}" CommandParameter="2"/>
                 <RadioButton Content="名称" GroupName="GameSort" Margin="4,0,0,0"
-                             Style="{StaticResource SegmentedRadioItem}"
+                             Style="{DynamicResource SegmentedRadioItem}"
                              Command="{Binding SetSortCommand}" CommandParameter="3"/>
             </StackPanel>
-            <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="12,0,0,0"
+            <Button Grid.Column="2" Style="{DynamicResource SecondaryButton}" Height="30" Padding="12,0" Margin="12,0,0,0"
                     Content="启动 Steam" Command="{Binding LaunchClientCommand}"/>
         </Grid>
 
         <!-- ============ 状态栏（参考稿：内容区上方单行 mono 统计） ============ -->
-        <TextBlock Grid.Row="2" Style="{StaticResource MonoText}" FontSize="{DynamicResource Font_SizeMicro}"
-                   Foreground="{StaticResource Brush_TextMuted}" Margin="2,0,0,12"
+        <TextBlock Grid.Row="2" Style="{DynamicResource MonoText}" FontSize="{DynamicResource Font_SizeMicro}"
+                   Foreground="{DynamicResource Brush_TextMuted}" Margin="2,0,0,12"
                    Text="{Binding InstalledSummary, Mode=OneWay}"/>
 
         <!-- ============ 内容区：三态 ============ -->
         <Grid Grid.Row="3">
             <!-- 未安装 Steam -->
-            <Border Background="{StaticResource Brush_Surface}" CornerRadius="{DynamicResource Radius_XLLg}"
+            <Border Background="{DynamicResource Brush_Surface}" CornerRadius="{DynamicResource Radius_XLLg}"
                     Padding="{DynamicResource Space_LG}" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Visibility="{Binding SteamInstalled, Converter={x:Static local:InverseBoolConverter.Instance}}">
                 <StackPanel>
                     <TextBlock Text="&#xE9F5;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
-                               Foreground="{StaticResource Brush_TextMuted}"/>
+                               Foreground="{DynamicResource Brush_TextMuted}"/>
                     <TextBlock Text="未检测到 Steam 客户端" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold"
-                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{StaticResource Brush_TextPrimary}"/>
+                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Brush_TextPrimary}"/>
                     <TextBlock Text="请确认 Steam 已安装；安装后点击「刷新」重新扫描。" FontSize="{DynamicResource Font_SizeBody}"
-                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{StaticResource Brush_TextMuted}" TextWrapping="Wrap"/>
+                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 
@@ -243,7 +243,7 @@
                                 <StackPanel>
                                     <!-- 封面（参考稿：175px 高 + 底部微遮罩 + hover 缩放 + 未安装徽章覆盖；
                                          缺失用字母占位。header.jpg 横版优先见 SteamService.FindCoverArt 注释） -->
-                                    <Border Height="175" ClipToBounds="True" Background="{StaticResource Brush_SurfaceAlt}">
+                                    <Border Height="175" ClipToBounds="True" Background="{DynamicResource Brush_SurfaceAlt}">
                                         <Border.Triggers>
                                             <!-- hover 封面轻微放大（参考稿 scale 1.04，0.35s） -->
                                             <EventTrigger RoutedEvent="Border.MouseEnter">
@@ -291,12 +291,12 @@
                                                 </Image.Style>
                                             </Image>
                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeMetric}" FontWeight="Bold"
-                                                       Foreground="{StaticResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" Padding="10,0"
                                                        Visibility="{Binding HasCover, Converter={x:Static local:InverseBoolConverter.Instance}}"/>
                                             <!-- 底部微遮罩（参考稿 ::after：40px 渐变压暗，封面与卡片过渡更柔） -->
                                             <Rectangle Height="42" VerticalAlignment="Bottom" IsHitTestVisible="False"
-                                                       Fill="{StaticResource Brush_CoverFade}"/>
+                                                       Fill="{DynamicResource Brush_CoverFade}"/>
                                             <!-- 未安装：徽章覆盖在封面底部（参考稿 .card-cover-overlay + .badge-state） -->
                                             <StackPanel VerticalAlignment="Bottom"
                                                         Visibility="{Binding IsFullyInstalled, Converter={x:Static local:InverseBoolConverter.Instance}}">
@@ -304,11 +304,11 @@
                                                     <StaticResource ResourceKey="Brush_CoverOverlay"/>
                                                 </StackPanel.Background>
                                                 <Border HorizontalAlignment="Right" Margin="12,8,12,8"
-                                                        Background="{StaticResource Brush_WarningSoft}"
-                                                        BorderBrush="{StaticResource Brush_Warning}" BorderThickness="1"
+                                                        Background="{DynamicResource Brush_WarningSoft}"
+                                                        BorderBrush="{DynamicResource Brush_Warning}" BorderThickness="1"
                                                         CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
-                                                    <TextBlock Text="下载/更新中" FontFamily="{StaticResource Font_Mono}"
-                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Warning}"/>
+                                                    <TextBlock Text="下载/更新中" FontFamily="{DynamicResource Font_Mono}"
+                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Warning}"/>
                                                 </Border>
                                             </StackPanel>
                                             <!-- 库离线：同位置徽章（M-UI-2 审查处置：离线此前只有整卡降透明，
@@ -319,11 +319,11 @@
                                                     <StaticResource ResourceKey="Brush_CoverOverlay"/>
                                                 </StackPanel.Background>
                                                 <Border HorizontalAlignment="Right" Margin="12,8,12,8"
-                                                        Background="{StaticResource Brush_DangerSoft}"
-                                                        BorderBrush="{StaticResource Brush_Danger}" BorderThickness="1"
+                                                        Background="{DynamicResource Brush_DangerSoft}"
+                                                        BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1"
                                                         CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
-                                                    <TextBlock Text="库离线" FontFamily="{StaticResource Font_Mono}"
-                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_Danger}"/>
+                                                    <TextBlock Text="库离线" FontFamily="{DynamicResource Font_Mono}"
+                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Danger}"/>
                                                 </Border>
                                             </StackPanel>
                                         </Grid>
@@ -336,7 +336,7 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                                                       Foreground="{StaticResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                                       Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                                             <Button Grid.Column="1" Style="{StaticResource CardActionButton}" Content="⋯"
                                                     Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" ToolTip="更多操作"
                                                     MinWidth="28" MinHeight="24"
@@ -346,13 +346,13 @@
                                                     <!-- ContextMenu 属独立可视树：DataContext 走 PlacementTarget.Tag（页级 VM），
                                                          CommandParameter 走 PlacementTarget.DataContext（单卡 GameCardVm）。
                                                          M-UI-2：主题化三件套（ToolkitContextMenu/MenuItem），告别系统原生观感 -->
-                                                    <ContextMenu Style="{StaticResource ToolkitContextMenu}"
+                                                    <ContextMenu Style="{DynamicResource ToolkitContextMenu}"
                                                                  DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
-                                                        <MenuItem Header="打开安装目录" Style="{StaticResource ToolkitMenuItem}"
+                                                        <MenuItem Header="打开安装目录" Style="{DynamicResource ToolkitMenuItem}"
                                                                   Command="{Binding OpenFolderCommand}"
                                                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                                        <Separator Style="{StaticResource ToolkitMenuSeparator}"/>
-                                                        <MenuItem Header="⚠ 卸载此游戏" Style="{StaticResource ToolkitMenuItemDanger}"
+                                                        <Separator Style="{DynamicResource ToolkitMenuSeparator}"/>
+                                                        <MenuItem Header="⚠ 卸载此游戏" Style="{DynamicResource ToolkitMenuItemDanger}"
                                                                   Command="{Binding UninstallGameCommand}"
                                                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                                     </ContextMenu>
@@ -363,14 +363,14 @@
                                         <!-- 元数据行（参考稿：占用 · 时长 单行 mono，圆点分隔） -->
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                             <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding SizeOnDiskText}"/>
-                                            <Ellipse Width="3" Height="3" Fill="{StaticResource Brush_Track}" Margin="7,0" VerticalAlignment="Center"/>
+                                            <Ellipse Width="3" Height="3" Fill="{DynamicResource Brush_Track}" Margin="7,0" VerticalAlignment="Center"/>
                                             <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding PlaytimeText}"/>
                                         </StackPanel>
                                         <!-- 最近游玩日期单独一行（参考稿 .card-last-played） -->
                                         <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding LastPlayedText}" Margin="0,5,0,0"/>
 
                                         <!-- 操作行（参考稿：顶部分隔线 + 商店/启动两键均分等宽） -->
-                                        <Border BorderBrush="{StaticResource Brush_Border}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,10,0,0">
+                                        <Border BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,10,0,0">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -379,7 +379,7 @@
                                                 <Button Style="{StaticResource CardActionButton}" Content="商店页面" Margin="0,0,4,0"
                                                         Command="{Binding DataContext.OpenStoreCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
-                                                <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="启动" Margin="4,0,0,0"
+                                                <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="启动" Margin="4,0,0,0"
                                                         Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
                                             </Grid>
@@ -392,39 +392,39 @@
             </vwp:VirtualizingItemsControl>
 
             <!-- 态：搜索无结果（过滤后空 + 有游戏数据；参考稿「未找到匹配的游戏」） -->
-            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
+            <Border Background="{DynamicResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding ShowNoResultEmpty, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
-                               Foreground="{StaticResource Brush_TextMuted}"/>
+                               Foreground="{DynamicResource Brush_TextMuted}"/>
                     <TextBlock Text="未找到匹配的游戏" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{StaticResource Brush_TextPrimary}"/>
+                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Brush_TextPrimary}"/>
                     <TextBlock Text="换个关键词试试，或清空搜索查看全部。" FontSize="{DynamicResource Font_SizeBody}"
-                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{StaticResource Brush_TextMuted}"/>
+                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}"/>
                 </StackPanel>
             </Border>
 
             <!-- 态：库为空（Steam 已安装但没有任何游戏） -->
-            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
+            <Border Background="{DynamicResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding ShowEmptyLibrary, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE719;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
-                               Foreground="{StaticResource Brush_TextMuted}"/>
+                               Foreground="{DynamicResource Brush_TextMuted}"/>
                     <TextBlock Text="未发现已安装的游戏" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{StaticResource Brush_TextPrimary}"/>
+                               HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Brush_TextPrimary}"/>
                     <TextBlock Text="Steam 已就绪；安装游戏后点击「刷新」重新扫描。" FontSize="{DynamicResource Font_SizeBody}"
-                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{StaticResource Brush_TextMuted}"/>
+                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}"/>
                 </StackPanel>
             </Border>
 
             <!-- 态：加载中（压最上层；IsLoading 由 LoadAsync 驱动，此前该状态无 UI 消费——审查核验属实） -->
-            <Border Background="{StaticResource Brush_Background}" Padding="{DynamicResource Space_LG}"
+            <Border Background="{DynamicResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <!-- 旋转圆环：Accent 弧 + Track 底环，Loaded 触发无限旋转 -->
                     <Grid Width="26" Height="26" HorizontalAlignment="Center">
-                        <Ellipse Stroke="{StaticResource Brush_Track}" StrokeThickness="2.5"/>
-                        <Ellipse Stroke="{StaticResource Brush_Accent}" StrokeThickness="2.5" StrokeDashArray="8 100" StrokeDashCap="Round">
+                        <Ellipse Stroke="{DynamicResource Brush_Track}" StrokeThickness="2.5"/>
+                        <Ellipse Stroke="{DynamicResource Brush_Accent}" StrokeThickness="2.5" StrokeDashArray="8 100" StrokeDashCap="Round">
                             <Ellipse.RenderTransform>
                                 <RotateTransform x:Name="SpinnerRotate" CenterX="13" CenterY="13"/>
                             </Ellipse.RenderTransform>
@@ -441,7 +441,7 @@
                             </Ellipse.Triggers>
                         </Ellipse>
                     </Grid>
-                    <TextBlock Text="正在读取 Steam 库…" Style="{StaticResource MonoText}" FontSize="{DynamicResource Font_SizeTiny}"
+                    <TextBlock Text="正在读取 Steam 库…" Style="{DynamicResource MonoText}" FontSize="{DynamicResource Font_SizeTiny}"
                                HorizontalAlignment="Center" Margin="0,12,0,0"/>
                 </StackPanel>
             </Border>
@@ -449,18 +449,18 @@
 
         <!-- ============ 底部状态栏（操作反馈通道，HTML toast 的 WPF 等效；
              M-UI-2：按 StatusLevel 语义着色——0 信息/1 成功/2 失败，深色底用 400 档亮色变体） ============ -->
-        <Border Grid.Row="4" Margin="0,12,0,0" Background="{StaticResource Brush_DarkSurface}"
+        <Border Grid.Row="4" Margin="0,12,0,0" Background="{DynamicResource Brush_DarkSurface}"
                 CornerRadius="{DynamicResource Radius_LG}" Padding="{DynamicResource Space_SM}">
             <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{StaticResource Brush_OnDarkMuted}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource Brush_OnDarkMuted}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding StatusLevel}" Value="1">
-                                <Setter Property="Foreground" Value="{StaticResource Brush_SuccessOnDark}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessOnDark}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding StatusLevel}" Value="2">
-                                <Setter Property="Foreground" Value="{StaticResource Brush_DangerOnDark}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush_DangerOnDark}"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>

@@ -8,41 +8,41 @@
         MaxWidth="1920" MaxHeight="1200"
         WindowStartupLocation="CenterScreen"
         WindowState="Normal"
-        FontFamily="{StaticResource Font_Body}">
-    <Grid Background="{StaticResource Brush_Background}">
+        FontFamily="{DynamicResource Font_Body}">
+    <Grid Background="{DynamicResource Brush_Background}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- ============ 左侧导航（用户 2026-09-04：按仪表盘风格重做） ============ -->
-        <Border Grid.Column="0" Background="{StaticResource Brush_SurfaceAlt}">
+        <Border Grid.Column="0" Background="{DynamicResource Brush_SurfaceAlt}">
             <DockPanel>
                 <!-- 品牌区 -->
                 <StackPanel DockPanel.Dock="Top" Margin="14,14,14,10">
                     <StackPanel Orientation="Horizontal">
                         <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius_LG}"
-                                Background="{StaticResource Brush_DarkSurface}">
+                                Background="{DynamicResource Brush_DarkSurface}">
                             <TextBlock Text="St" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="Bold"
-                                       Foreground="{StaticResource Brush_OnDark}"
+                                       Foreground="{DynamicResource Brush_OnDark}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <TextBlock Text="SystemToolkit" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold"
-                                   Foreground="{StaticResource Brush_TextPrimary}"
+                                   Foreground="{DynamicResource Brush_TextPrimary}"
                                    VerticalAlignment="Center" Margin="8,0,0,0"/>
                     </StackPanel>
                     <TextBlock x:Name="ToolkitVersionText" Text="DESKTOP TOOLKIT" FontSize="{DynamicResource Font_SizeMicro}"
-                               Style="{StaticResource MonoText}" Margin="0,6,0,0"/>
+                               Style="{DynamicResource MonoText}" Margin="0,6,0,0"/>
                 </StackPanel>
 
                 <Line DockPanel.Dock="Top" X1="0" X2="1" Y1="0" Y2="0"
-                      Stroke="{StaticResource Brush_Border}" Margin="14,0"/>
+                      Stroke="{DynamicResource Brush_Border}" Margin="14,0"/>
 
                 <!-- 版本脚注 -->
                 <StackPanel DockPanel.Dock="Bottom" Margin="14,0,14,12">
                     <Line X1="0" X2="1" Y1="0" Y2="0"
-                          Stroke="{StaticResource Brush_Border}" Margin="0,0,0,10"/>
-                    <TextBlock Text="非商业开源 · GPL-3.0" FontSize="{DynamicResource Font_SizeMicro}" Style="{StaticResource MonoText}"/>
+                          Stroke="{DynamicResource Brush_Border}" Margin="0,0,0,10"/>
+                    <TextBlock Text="非商业开源 · GPL-3.0" FontSize="{DynamicResource Font_SizeMicro}" Style="{DynamicResource MonoText}"/>
                 </StackPanel>
 
                 <!-- 导航项（UI 审计采纳：分组层级 + 图标文字收紧） -->
@@ -98,13 +98,13 @@
                         <!-- 组头：小号 mono 大写标签，不可选中 -->
                         <DataTemplate DataType="{x:Type local:NavGroupHeader}">
                             <TextBlock Text="{Binding Title}" FontSize="{DynamicResource Font_SizeNano}"
-                                       Style="{StaticResource MonoText}"
+                                       Style="{DynamicResource MonoText}"
                                        Margin="14,8,0,2"/>
                         </DataTemplate>
                     </ListBox.Resources>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
-                            <Setter Property="Foreground" Value="{StaticResource Brush_TextSecondary}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
                             <Setter Property="Padding" Value="10,5"/>
                             <Setter Property="Margin" Value="0,2"/>
                             <Setter Property="Cursor" Value="Hand"/>
@@ -120,19 +120,19 @@
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle x:Name="Indicator" Width="3" RadiusX="1.5" RadiusY="1.5"
-                                                           Fill="{StaticResource Brush_Accent}"
+                                                           Fill="{DynamicResource Brush_Accent}"
                                                            Margin="-15,0,6,0" Visibility="Collapsed"/>
                                                 <ContentPresenter Grid.Column="1" VerticalAlignment="Center"/>
                                             </Grid>
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Track}"/>
+                                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Brush_Track}"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush_Accent}"/>
+                                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Brush_Accent}"/>
                                                 <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
-                                                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

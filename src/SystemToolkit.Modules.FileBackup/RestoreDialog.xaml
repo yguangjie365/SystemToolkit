@@ -5,8 +5,8 @@
         Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Background}"
-        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
+        Background="{DynamicResource Brush_Background}"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <!-- 2026-09-07 补齐旧版 RestoreDialog 能力：恢复目标二选一（原位置 / 指定目录）
          + 冲突策略三选一。只负责收集用户选择，预演与执行由 VM 负责。 -->
     <StackPanel Margin="18,16">
@@ -14,12 +14,12 @@
         <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <!-- 恢复目标 -->
-        <TextBlock Text="恢复目标" Style="{StaticResource CardTitle}" Margin="0,0,0,6"/>
+        <TextBlock Text="恢复目标" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="OriginalRadio" GroupName="Target" IsChecked="True" Margin="0,0,0,4"
                      Checked="OnTargetModeChanged">
             <TextBlock TextWrapping="Wrap">
                 <Run Text="恢复到原始位置："/>
-                <Run x:Name="OriginalPathRun" Foreground="{StaticResource Brush_TextMuted}"/>
+                <Run x:Name="OriginalPathRun" Foreground="{DynamicResource Brush_TextMuted}"/>
             </TextBlock>
         </RadioButton>
         <RadioButton x:Name="CustomRadio" GroupName="Target" Margin="0,0,0,6" Checked="OnTargetModeChanged"
@@ -30,13 +30,13 @@
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="TargetBox" Style="{StaticResource FieldInput}" Height="30"
+            <TextBox x:Name="TargetBox" Style="{DynamicResource FieldInput}" Height="30"
                      VerticalContentAlignment="Center" Padding="6,0"/>
-            <Button Grid.Column="2" Content="浏览…" Style="{StaticResource CardButton}" Click="OnBrowseClick"/>
+            <Button Grid.Column="2" Content="浏览…" Style="{DynamicResource CardButton}" Click="OnBrowseClick"/>
         </Grid>
 
         <!-- 冲突策略 -->
-        <TextBlock Text="同名文件冲突时" Style="{StaticResource CardTitle}" Margin="0,0,0,6"/>
+        <TextBlock Text="同名文件冲突时" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="RenameRadio" GroupName="Policy" IsChecked="True" Margin="0,0,0,4"
                      Content="重命名保留两者（推荐：不覆盖现有文件）"/>
         <RadioButton x:Name="OverwriteRadio" GroupName="Policy" Margin="0,0,0,4"
@@ -46,15 +46,15 @@
 
 
         <TextBlock Text="⚠️ 恢复会写入目标目录；选择「覆盖」时现有同名文件将被替换。"
-                   FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                   FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
                    TextWrapping="Wrap" Margin="0,8,0,0"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="开始恢复" Width="96" Height="32" IsDefault="True" Click="OnOkClick"
-                    Style="{StaticResource RowPrimaryButton}"/>
+                    Style="{DynamicResource RowPrimaryButton}"/>
         </StackPanel>
     </StackPanel>
 </Window>

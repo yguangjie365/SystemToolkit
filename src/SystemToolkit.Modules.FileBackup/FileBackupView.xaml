@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.FileBackup"
              xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
-             Background="{StaticResource Brush_Background}">
+             Background="{DynamicResource Brush_Background}">
     <!-- 2026-09-07 单屏改造（用户拍板，参考旧版单功能版截图）：
          原「备份规则 / 快照与恢复」两 Tab 合并为一屏——左规则列表、右所选规则快照表，
          选规则即见快照，不再来回切换；编辑表单迁至 RuleEditWindow 弹窗；
@@ -14,8 +14,8 @@
         <local:InverseBoolConverter x:Key="Inverse"/>
         <!-- 快照表头（对齐 AppManagerView.AppListHeader 口径；页面级局部资源） -->
         <Style x:Key="SnapHeader" TargetType="GridViewColumnHeader">
-            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
             <Setter Property="Padding" Value="10,8"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -25,20 +25,20 @@
         <Style x:Key="SnapStatusBadge" TargetType="Border">
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
-            <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusText}" Value="失败">
-                    <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="SnapStatusText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusText}" Value="失败">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -46,26 +46,26 @@
         <Style x:Key="SnapChecksumBadge" TargetType="Border">
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
-            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding ChecksumText}" Value="通过">
-                    <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding ChecksumText}" Value="失败">
-                    <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="SnapChecksumText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding ChecksumText}" Value="通过">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding ChecksumText}" Value="失败">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -81,23 +81,23 @@
         <!-- ============ 页头 + 顶部动作 ============ -->
         <Grid Grid.Row="0" Margin="0,0,0,14">
             <StackPanel>
-                <TextBlock Text="文件备份" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{StaticResource MonoText}" Margin="0,2,0,0">
+                <TextBlock Text="文件备份" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" Margin="0,2,0,0">
                     <Run Text="BACKUP · 规则 "/><Run Text="{Binding Rules.Count, Mode=OneWay}"/><Run Text=" 条 · 快照 "/><Run Text="{Binding Snapshots.Count, Mode=OneWay}"/><Run Text=" 份"/>
                 </TextBlock>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Button Style="{StaticResource RowActionButton}" Height="32" Content="导入规则" Margin="0,0,6,0"
+                <Button Style="{DynamicResource RowActionButton}" Height="32" Content="导入规则" Margin="0,0,6,0"
                         Command="{Binding ImportRulesCommand}"/>
-                <Button Style="{StaticResource RowActionButton}" Height="32" Content="导出规则" Margin="0,0,6,0"
+                <Button Style="{DynamicResource RowActionButton}" Height="32" Content="导出规则" Margin="0,0,6,0"
                         Command="{Binding ExportRulesCommand}"/>
-                <Button Style="{StaticResource RowActionButton}" Height="32" Content="备份全部" Margin="0,0,6,0"
+                <Button Style="{DynamicResource RowActionButton}" Height="32" Content="备份全部" Margin="0,0,6,0"
                         ToolTip="按顺序备份所有已启用规则，逐项执行、可随时取消"
                         Command="{Binding BackupAllCommand}"/>
-                <Button Style="{StaticResource RowDangerButton}" Height="32" Content="恢复全部" Margin="0,0,8,0"
+                <Button Style="{DynamicResource RowDangerButton}" Height="32" Content="恢复全部" Margin="0,0,8,0"
                         ToolTip="按启用规则各自恢复最新快照，逐项执行；恢复前可选择冲突策略"
                         Command="{Binding RestoreAllCommand}"/>
-                <Button Style="{StaticResource RowPrimaryButton}" Height="32" Content="+ 新建规则"
+                <Button Style="{DynamicResource RowPrimaryButton}" Height="32" Content="+ 新建规则"
                         Command="{Binding NewRuleCommand}"/>
             </StackPanel>
         </Grid>
@@ -111,7 +111,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- 规则列表 -->
-            <Border Grid.Column="0" Style="{StaticResource ToolCard}">
+            <Border Grid.Column="0" Style="{DynamicResource ToolCard}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -119,14 +119,14 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <TextBlock Text="备份规则" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="备份规则" Style="{DynamicResource CardTitle}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource CardButton}" Content="刷新" Command="{Binding ReloadRulesCommand}"/>
+                            <Button Style="{DynamicResource CardButton}" Content="刷新" Command="{Binding ReloadRulesCommand}"/>
                         </StackPanel>
                     </Grid>
                     <!-- 拖拽排序（2026-09-07 用户裁定替代上移/下移按钮）：事件逻辑见 code-behind -->
                     <Grid Grid.Row="1">
-                    <ListBox x:Name="RuleList" Style="{StaticResource ListLog}"
+                    <ListBox x:Name="RuleList" Style="{DynamicResource ListLog}"
                              AllowDrop="True"
                              ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
@@ -139,20 +139,20 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <!-- 2026-09-08 用户反馈：每条规则加边框 + 条目间距，增强区分（参考旧版卡片样式） -->
-                                <Border Background="{StaticResource Brush_Surface}"
-                                        BorderBrush="{StaticResource Brush_Border}" BorderThickness="1"
+                                <Border Background="{DynamicResource Brush_Surface}"
+                                        BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
                                         CornerRadius="{DynamicResource Radius_SM}" Padding="10,7"
                                         Margin="0,0,0,6"
                                         ToolTip="{Binding ToolTipText}" ToolTipService.InitialShowDelay="300">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding RuleName}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
+                                            <TextBlock Text="{Binding RuleName}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                                             <TextBlock Text="{Binding EnabledText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="8,0,0,0"
                                                        Foreground="{Binding Enabled, Converter={StaticResource EnabledBrush}}"/>
                                         </StackPanel>
                                         <TextBlock Text="{Binding Description}" FontSize="{DynamicResource Font_SizeMicro}"
                                                    Margin="0,2,0,0"
-                                                   TextTrimming="CharacterEllipsis" Foreground="{StaticResource Brush_TextMuted}"/>
+                                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Brush_TextMuted}"/>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -160,23 +160,23 @@
                     </ListBox>
                     <!-- 拖拽插入指示线（旧版有此引导，P2 补齐）：DragOver 计算落点 Y，Drop/DragLeave 隐藏 -->
                     <Rectangle x:Name="DropIndicator" Height="2" IsHitTestVisible="False"
-                               Fill="{StaticResource Brush_Accent}" RadiusX="1" RadiusY="1"
+                               Fill="{DynamicResource Brush_Accent}" RadiusX="1" RadiusY="1"
                                VerticalAlignment="Top" HorizontalAlignment="Stretch"
                                Margin="2,0,8,0" Visibility="Collapsed" Panel.ZIndex="10"/>
                     </Grid>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Style="{StaticResource RowActionButton}" Height="28" Content="编辑"
+                        <Button Style="{DynamicResource RowActionButton}" Height="28" Content="编辑"
                                 Command="{Binding EditRuleCommand}"/>
-                        <Button Style="{StaticResource RowActionButton}" Height="28" Content="停用/启用" Margin="6,0,0,0"
+                        <Button Style="{DynamicResource RowActionButton}" Height="28" Content="停用/启用" Margin="6,0,0,0"
                                 Command="{Binding ToggleEnableCommand}"/>
-                        <Button Style="{StaticResource RowDangerButton}" Height="28" Content="删除" Margin="6,0,0,0"
+                        <Button Style="{DynamicResource RowDangerButton}" Height="28" Content="删除" Margin="6,0,0,0"
                                 Command="{Binding DeleteRuleCommand}"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- 快照（选中规则后展示） -->
-            <Border Grid.Column="2" Style="{StaticResource ToolCard}">
+            <Border Grid.Column="2" Style="{DynamicResource ToolCard}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -185,26 +185,26 @@
                     </Grid.RowDefinitions>
                     <Grid Grid.Row="0" Margin="0,0,0,10">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource CardTitle}">
+                            <TextBlock Style="{DynamicResource CardTitle}">
                                 <Run Text="快照 · "/><Run Text="{Binding SelectedRule.RuleName, Mode=OneWay, FallbackValue='未选择规则'}"/>
                             </TextBlock>
-                            <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                            <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
                                        VerticalAlignment="Center" Margin="10,0,0,0">
                                 <Run Text="共 "/><Run Text="{Binding Snapshots.Count, Mode=OneWay}"/><Run Text=" 个"/>
                             </TextBlock>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource RowPrimaryButton}" Height="28" Content="开始备份"
+                            <Button Style="{DynamicResource RowPrimaryButton}" Height="28" Content="开始备份"
                                     Command="{Binding BackupNowCommand}"/>
-                            <Button Style="{StaticResource RowActionButton}" Height="28" Content="取消" Margin="6,0,0,0"
+                            <Button Style="{DynamicResource RowActionButton}" Height="28" Content="取消" Margin="6,0,0,0"
                                     Command="{Binding CancelBackupCommand}"/>
-                            <Button Style="{StaticResource CardButton}" Content="打开目录" Margin="6,0,0,0" Command="{Binding OpenSnapshotDirCommand}"/>
-                            <Button Style="{StaticResource CardButton}" Content="校验" Margin="6,0,0,0"
+                            <Button Style="{DynamicResource CardButton}" Content="打开目录" Margin="6,0,0,0" Command="{Binding OpenSnapshotDirCommand}"/>
+                            <Button Style="{DynamicResource CardButton}" Content="校验" Margin="6,0,0,0"
                                     ToolTip="重算快照文件哈希并与清单比对，校验结果更新到「校验」列徽章"
                                     Command="{Binding VerifySnapshotCommand}"/>
-                            <Button Style="{StaticResource CardButton}" Content="刷新" Margin="6,0,0,0" Command="{Binding ReloadSnapshotsCommand}"/>
-                            <Button Style="{StaticResource CardButton}" Content="恢复…" Margin="6,0,0,0" Command="{Binding RestoreSnapshotCommand}"/>
-                            <Button Style="{StaticResource RowDangerButton}" Height="28" Content="删除" Margin="6,0,0,0"
+                            <Button Style="{DynamicResource CardButton}" Content="刷新" Margin="6,0,0,0" Command="{Binding ReloadSnapshotsCommand}"/>
+                            <Button Style="{DynamicResource CardButton}" Content="恢复…" Margin="6,0,0,0" Command="{Binding RestoreSnapshotCommand}"/>
+                            <Button Style="{DynamicResource RowDangerButton}" Height="28" Content="删除" Margin="6,0,0,0"
                                     Command="{Binding DeleteSnapshotCommand}"/>
                         </StackPanel>
                     </Grid>
@@ -237,7 +237,7 @@
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding FileCount}" FontSize="{DynamicResource Font_SizeMicro}"
-                                                       Foreground="{StaticResource Brush_TextSecondary}" HorizontalAlignment="Center"/>
+                                                       Foreground="{DynamicResource Brush_TextSecondary}" HorizontalAlignment="Center"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
@@ -245,7 +245,7 @@
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding SizeText}" FontSize="{DynamicResource Font_SizeMicro}"
-                                                       Foreground="{StaticResource Brush_TextSecondary}" HorizontalAlignment="Center"/>
+                                                       Foreground="{DynamicResource Brush_TextSecondary}" HorizontalAlignment="Center"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
@@ -271,7 +271,7 @@
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayPath}" FontSize="{DynamicResource Font_SizeMicro}"
-                                                       Foreground="{StaticResource Brush_Accent}" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource Brush_Accent}" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding BackupPath}"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
@@ -280,7 +280,7 @@
                         </ListView.View>
                     </ListView>
                         <!-- 空态覆盖层（不用 Template 替换：显式 Style 会丢主题默认 ListView 模板） -->
-                        <Border Background="{StaticResource Brush_Background}">
+                        <Border Background="{DynamicResource Brush_Background}">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -292,10 +292,10 @@
                                 </Style>
                             </Border.Style>
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="还没有备份快照" Foreground="{StaticResource Brush_TextMuted}"/>
+                                <TextBlock Text="还没有备份快照" Foreground="{DynamicResource Brush_TextMuted}"/>
                                 <TextBlock Text="选择左侧规则后，点「开始备份」即产生第一份快照"
                                            FontSize="{DynamicResource Font_SizeMicro}"
-                                           Foreground="{StaticResource Brush_TextMuted}"
+                                           Foreground="{DynamicResource Brush_TextMuted}"
                                            Margin="0,4,0,0"/>
                             </StackPanel>
                         </Border>
@@ -304,14 +304,14 @@
                                 Visibility="{Binding HasProgress, Converter={StaticResource BoolToVis}}">
                         <ProgressBar Value="{Binding ProgressValue, Mode=OneWay}" Maximum="100" Height="8"/>
                         <TextBlock Text="{Binding ProgressText}" FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{StaticResource Brush_TextSecondary}" Margin="0,6,0,0"/>
+                                   Foreground="{DynamicResource Brush_TextSecondary}" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Grid>
             </Border>
         </Grid>
 
         <!-- ============ 底部操作日志 ============ -->
-        <Border Grid.Row="2" Margin="0,14,0,0" BorderBrush="{StaticResource Brush_Border}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Margin="0,14,0,0" BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -321,17 +321,17 @@
                     <StackPanel Orientation="Horizontal">
                         <ToggleButton x:Name="LogToggle" IsChecked="True" Content="▾ 操作日志" FontSize="{DynamicResource Font_SizeBodySm}"
                                       Checked="OnLogToggleChanged" Unchecked="OnLogToggleChanged"
-                                      Foreground="{StaticResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
-                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0">
+                                      Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                        <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0">
                             <Run Text="{Binding LogLines.Count, Mode=OneWay}"/><Run Text=" 行"/>
                         </TextBlock>
                     </StackPanel>
-                    <Button HorizontalAlignment="Right" Style="{StaticResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
+                    <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}" Content="清空" Command="{Binding ClearLogCommand}"/>
                 </Grid>
-                <Border Grid.Row="1" x:Name="LogHost" Background="{StaticResource Brush_DarkSurface}"
+                <Border Grid.Row="1" x:Name="LogHost" Background="{DynamicResource Brush_DarkSurface}"
                         CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="160">
-                    <ListBox Style="{StaticResource ListLog}" ItemsSource="{Binding LogLines}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource Font_Mono}">
+                    <ListBox Style="{DynamicResource ListLog}" ItemsSource="{Binding LogLines}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{DynamicResource Font_Mono}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Text}" Foreground="{Binding Color}" TextWrapping="NoWrap" FontSize="{DynamicResource Font_SizeMicro}"/>

@@ -21,7 +21,7 @@ public sealed class MusicManagerModule : ModuleBase
 
     public override string DisplayName => "音乐管理";
 
-    public override int Order => 9;
+    public override int Order => 8;
 
     public override bool CanDisable => true;
 

@@ -5,8 +5,8 @@
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Brush_Background}"
-        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{StaticResource Font_Body}">
+        Background="{DynamicResource Brush_Background}"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <!-- 规则编辑弹窗「手动输入」路径的小输入窗（2026-09-07 用户裁定对齐旧版四按钮） -->
     <StackPanel Margin="18,16">
         <TextBlock Text="输入要备份的文件或文件夹路径（可粘贴，自动去引号）：" TextWrapping="Wrap"/>
@@ -14,10 +14,10 @@
                  VerticalContentAlignment="Center" Padding="6,0"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="取消" Width="76" Height="30" Margin="0,0,8,0" IsCancel="True"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="添加" Width="76" Height="30" IsDefault="True" Click="OnAddClick"
-                    Style="{StaticResource RowPrimaryButton}"/>
+                    Style="{DynamicResource RowPrimaryButton}"/>
         </StackPanel>
     </StackPanel>
 </Window>

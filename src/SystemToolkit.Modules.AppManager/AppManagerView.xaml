@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:SystemToolkit.Modules.AppManager"
              xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
 xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
-Background="{StaticResource Brush_Background}">
+Background="{DynamicResource Brush_Background}">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -15,46 +15,46 @@ Background="{StaticResource Brush_Background}">
         <Style x:Key="StatusTagBorder" TargetType="Border">
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusKey}" Value="0">
-                    <Setter Property="Background" Value="{StaticResource Brush_SuccessSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="1">
-                    <Setter Property="Background" Value="{StaticResource Brush_WarningSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_WarningSoft}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="2">
-                    <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="3">
-                    <Setter Property="Background" Value="{StaticResource Brush_AccentSoft}"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush_AccentSoft}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="StatusTagText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11.5"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusKey}" Value="0">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Success}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="1">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Warning}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="2">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusKey}" Value="3">
-                    <Setter Property="Foreground" Value="{StaticResource Brush_Accent}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Accent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
         <!-- 软件清单表格复用模板（用户 2026-09-07：标题列左右居中） -->
         <Style x:Key="AppListHeader" TargetType="GridViewColumnHeader">
-            <Setter Property="Background" Value="{StaticResource Brush_SurfaceAlt}"/>
-            <Setter Property="Foreground" Value="{StaticResource Brush_TextMuted}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
             <Setter Property="Padding" Value="10,10"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -84,20 +84,20 @@ Background="{StaticResource Brush_Background}">
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{StaticResource Brush_AccentSoft}">
+            <Border Width="30" Height="30" CornerRadius="{DynamicResource Radius_LG}" Background="{DynamicResource Brush_AccentSoft}">
                 <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeBody}"
-                           Foreground="{StaticResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                           Foreground="{DynamicResource Brush_Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="软件管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{StaticResource Brush_TextPrimary}"/>
-                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Style="{StaticResource MonoText}" Margin="0,2,0,0">
+                <TextBlock Text="软件管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Style="{DynamicResource MonoText}" Margin="0,2,0,0">
                     <Run Text="APP MANAGER · "/><Run Text="{Binding RefreshStatus, Mode=OneWay}"/>
                 </TextBlock>
             </StackPanel>
             <!-- 软件源下拉 -->
             <Button Grid.Column="2" Height="30" Padding="12,0" FontSize="{DynamicResource Font_SizeBodySm}"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" Foreground="{StaticResource Brush_TextSecondary}" Cursor="Hand"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
+                    BorderThickness="1" Foreground="{DynamicResource Brush_TextSecondary}" Cursor="Hand"
                     x:Name="SourceMenuButton" Click="OnSourceMenuClick">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="软件源: "/>
@@ -106,52 +106,52 @@ Background="{StaticResource Brush_Background}">
                 </StackPanel>
             </Button>
             <Button Grid.Column="3" Height="30" Padding="12,0" Margin="8,0,0,0" FontSize="{DynamicResource Font_SizeBodySm}"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" Foreground="{StaticResource Brush_TextSecondary}" Cursor="Hand"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
+                    BorderThickness="1" Foreground="{DynamicResource Brush_TextSecondary}" Cursor="Hand"
                     Command="{Binding RefreshStatesCommand}" Content="⟳ 检测状态"/>
             <Button Grid.Column="4" Height="30" Padding="12,0" Margin="8,0,0,0" FontSize="{DynamicResource Font_SizeBodySm}"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" Foreground="{StaticResource Brush_TextSecondary}" Cursor="Hand"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
+                    BorderThickness="1" Foreground="{DynamicResource Brush_TextSecondary}" Cursor="Hand"
                     Command="{Binding ImportListCommand}" Content="导入"/>
             <Button Grid.Column="5" Height="30" Padding="12,0" Margin="8,0,0,0" FontSize="{DynamicResource Font_SizeBodySm}"
-                    Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
-                    BorderThickness="1" Foreground="{StaticResource Brush_TextSecondary}" Cursor="Hand"
+                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
+                    BorderThickness="1" Foreground="{DynamicResource Brush_TextSecondary}" Cursor="Hand"
                     Command="{Binding ExportListCommand}" Content="导出"/>
             <Button Grid.Column="6" Height="30" Padding="12,0" Margin="8,0,0,0" FontSize="{DynamicResource Font_SizeBodySm}"
-                    Background="{StaticResource Brush_Accent}" BorderThickness="0"
-                    Foreground="{StaticResource Brush_OnDark}" Cursor="Hand"
+                    Background="{DynamicResource Brush_Accent}" BorderThickness="0"
+                    Foreground="{DynamicResource Brush_OnDark}" Cursor="Hand"
                     Command="{Binding AddManualSoftwareCommand}" Content="+ 添加软件"/>
         </Grid>
 
         <!-- ============ Tab 行 ============ -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,14">
-            <RadioButton Style="{StaticResource SectionTab}" GroupName="Tabs" IsChecked="True"
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="Tabs" IsChecked="True"
                          Content="微软商店应用" Tag="store" Checked="OnTabChecked"/>
-            <RadioButton Style="{StaticResource SectionTab}" GroupName="Tabs"
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="Tabs"
                          Content="第三方应用" Tag="thirdparty" Checked="OnTabChecked"/>
-            <RadioButton Style="{StaticResource SectionTab}" GroupName="Tabs"
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="Tabs"
                          Content="环境档案" Tag="archives" Checked="OnTabChecked"/>
         </StackPanel>
 
         <!-- ============ 筛选行（仅软件 Tab 显示；chips 左，源搜索框独立最右且仅商店 Tab） ============ -->
         <Grid Grid.Row="2" Margin="0,0,0,12" x:Name="FilterRow">
             <StackPanel Orientation="Horizontal">
-                <RadioButton Style="{StaticResource FilterChip}" GroupName="StatusFilter" IsChecked="True"
+                <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter" IsChecked="True"
                              Content="全部" Command="{Binding SetFilterCommand}" CommandParameter="0"/>
-                <RadioButton Style="{StaticResource FilterChip}" GroupName="StatusFilter"
+                <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter"
                              Content="已安装" Command="{Binding SetFilterCommand}" CommandParameter="1"/>
-                <RadioButton Style="{StaticResource FilterChip}" GroupName="StatusFilter"
+                <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter"
                              Content="有更新" Command="{Binding SetFilterCommand}" CommandParameter="2"/>
-                <RadioButton Style="{StaticResource FilterChip}" GroupName="StatusFilter"
+                <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter"
                              Content="未安装" Command="{Binding SetFilterCommand}" CommandParameter="3"/>
-                <Button Style="{StaticResource RowActionButton}" Height="26" Content="全选"
+                <Button Style="{DynamicResource RowActionButton}" Height="26" Content="全选"
                         Command="{Binding SelectAllCommand}" Margin="6,0,0,0"/>
-                <Button Style="{StaticResource RowActionButton}" Height="26" Content="反选"
+                <Button Style="{DynamicResource RowActionButton}" Height="26" Content="反选"
                         Command="{Binding InvertSelectionCommand}"/>
             </StackPanel>
             <!-- 源搜索框：用户 2026-09-04 移到最右，且仅微软商店应用 Tab 显示 -->
-            <Border x:Name="SearchHost" Width="320" Height="32" Background="{StaticResource Brush_Surface}"
-                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}"
+            <Border x:Name="SearchHost" Width="320" Height="32" Background="{DynamicResource Brush_Surface}"
+                    BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}"
                     HorizontalAlignment="Right">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
@@ -162,7 +162,7 @@ Background="{StaticResource Brush_Background}">
                         </TextBox.InputBindings>
                     </TextBox>
                     <TextBlock Text="搜索 winget 源，回车执行（可安装并加入清单）" FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{StaticResource Brush_TextMuted}" Margin="9,0,0,0"
+                               Foreground="{DynamicResource Brush_TextMuted}" Margin="9,0,0,0"
                                VerticalAlignment="Center" IsHitTestVisible="False">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -187,7 +187,7 @@ Background="{StaticResource Brush_Background}">
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Border Style="{StaticResource CardBorder}" Padding="0">
+                <Border Style="{DynamicResource CardBorder}" Padding="0">
                     <Grid>
                         <!-- 微软商店应用 -->
                         <ListView ItemsSource="{Binding StoreView}"
@@ -203,7 +203,7 @@ Background="{StaticResource Brush_Background}">
                                     <GridViewColumn Width="36">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
-                                                <CheckBox Style="{StaticResource ThemedCheckBox}" 
+                                                <CheckBox Style="{DynamicResource ThemedCheckBox}" 
                                                           IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
                                                           VerticalAlignment="Center"/>
                                             </DataTemplate>
@@ -220,9 +220,9 @@ Background="{StaticResource Brush_Background}">
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal">
                                                     <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_SM}"
-                                                            Background="{StaticResource Brush_AccentSoft}">
+                                                            Background="{DynamicResource Brush_AccentSoft}">
                                                         <TextBlock Text="{Binding Initial}" FontSize="{DynamicResource Font_SizeNano}" FontWeight="Bold"
-                                                                   Foreground="{StaticResource Brush_Accent}"
+                                                                   Foreground="{DynamicResource Brush_Accent}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>
                                                     <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Margin="8,0,0,0"
@@ -236,7 +236,7 @@ Background="{StaticResource Brush_Background}">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding VersionText}" FontSize="{DynamicResource Font_SizeMono}"
-                                                           FontFamily="{StaticResource Font_Mono}" TextAlignment="Center"
+                                                           FontFamily="{DynamicResource Font_Mono}" TextAlignment="Center"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center" Width="120"/>
                                             </DataTemplate>
@@ -245,7 +245,7 @@ Background="{StaticResource Brush_Background}">
                                     <GridViewColumn Header="来源" Width="80">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="Store" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="Store" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}" HorizontalAlignment="Center"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
@@ -263,19 +263,19 @@ Background="{StaticResource Brush_Background}">
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                     <!-- 2026-09-07 用户拍板：恢复固定四按钮（按状态显隐），不再用动态 2+1 -->
-                                                    <Button Style="{StaticResource RowActionButton}" Content="安装" Margin="0,0,8,0"
+                                                    <Button Style="{DynamicResource RowActionButton}" Content="安装" Margin="0,0,8,0"
                                                             Visibility="{Binding IsInstallVisible}"
                                                             Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Style="{StaticResource RowActionButton}" Content="升级" Margin="0,0,8,0"
+                                                    <Button Style="{DynamicResource RowActionButton}" Content="升级" Margin="0,0,8,0"
                                                             Visibility="{Binding IsUpgradeVisible}"
                                                             Command="{Binding DataContext.UpgradeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Style="{StaticResource RowDangerButton}" Content="卸载" Margin="0,0,8,0"
+                                                    <Button Style="{DynamicResource RowDangerButton}" Content="卸载" Margin="0,0,8,0"
                                                             Visibility="{Binding IsUninstallVisible}"
                                                             Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Style="{StaticResource RowActionButton}" Content="编辑"
+                                                    <Button Style="{DynamicResource RowActionButton}" Content="编辑"
                                                             Command="{Binding DataContext.EditSoftwareCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                 </StackPanel>
@@ -305,7 +305,7 @@ Background="{StaticResource Brush_Background}">
                                         <GridViewColumn Width="36">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <CheckBox Style="{StaticResource ThemedCheckBox}" 
+                                                    <CheckBox Style="{DynamicResource ThemedCheckBox}" 
                                                               IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
                                                               VerticalAlignment="Center"/>
                                                 </DataTemplate>
@@ -322,9 +322,9 @@ Background="{StaticResource Brush_Background}">
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal">
                                                         <Border Width="20" Height="20" CornerRadius="{DynamicResource Radius_SM}"
-                                                                Background="{StaticResource Brush_AccentSoft}">
+                                                                Background="{DynamicResource Brush_AccentSoft}">
                                                             <TextBlock Text="{Binding Initial}" FontSize="{DynamicResource Font_SizeNano}" FontWeight="Bold"
-                                                                       Foreground="{StaticResource Brush_Accent}"
+                                                                       Foreground="{DynamicResource Brush_Accent}"
                                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                         </Border>
                                                         <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Margin="8,0,0,0"
@@ -337,7 +337,7 @@ Background="{StaticResource Brush_Background}">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Text="{Binding VersionText}" FontSize="{DynamicResource Font_SizeBody}"
-                                                               FontFamily="{StaticResource Font_Mono}" TextAlignment="Center"
+                                                               FontFamily="{DynamicResource Font_Mono}" TextAlignment="Center"
                                                                HorizontalAlignment="Center"
                                                                VerticalAlignment="Center" Width="120"/>
                                                 </DataTemplate>
@@ -346,7 +346,7 @@ Background="{StaticResource Brush_Background}">
                                         <GridViewColumn Header="来源" Width="80">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <TextBlock Text="{Binding Model.Source}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{StaticResource Brush_TextMuted}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Model.Source}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}" HorizontalAlignment="Center"/>
                                                 </DataTemplate>
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
@@ -364,19 +364,19 @@ Background="{StaticResource Brush_Background}">
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                         <!-- 2026-09-07 用户拍板：恢复固定四按钮（按状态显隐），与商店 Tab 同序 -->
-                                                        <Button Style="{StaticResource RowActionButton}" Content="安装" Margin="0,0,8,0"
+                                                        <Button Style="{DynamicResource RowActionButton}" Content="安装" Margin="0,0,8,0"
                                                                 Visibility="{Binding IsInstallVisible}"
                                                                 Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"/>
-                                                        <Button Style="{StaticResource RowActionButton}" Content="升级" Margin="0,0,8,0"
+                                                        <Button Style="{DynamicResource RowActionButton}" Content="升级" Margin="0,0,8,0"
                                                                 Visibility="{Binding IsUpgradeVisible}"
                                                                 Command="{Binding DataContext.UpgradeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"/>
-                                                        <Button Style="{StaticResource RowDangerButton}" Content="卸载" Margin="0,0,8,0"
+                                                        <Button Style="{DynamicResource RowDangerButton}" Content="卸载" Margin="0,0,8,0"
                                                                 Visibility="{Binding IsUninstallVisible}"
                                                                 Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"/>
-                                                        <Button Style="{StaticResource RowActionButton}" Content="编辑"
+                                                        <Button Style="{DynamicResource RowActionButton}" Content="编辑"
                                                                 Command="{Binding DataContext.EditSoftwareCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"/>
                                                     </StackPanel>
@@ -391,7 +391,7 @@ Background="{StaticResource Brush_Background}">
                             <TextBlock Grid.Row="0" Text="暂无软件 · 点击'+添加软件'或从商店导入" 
                                        Visibility="{Binding ThirdPartyView.Count, Converter={StaticResource ZeroToVis}}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{StaticResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}"/>
+                                       Foreground="{DynamicResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}"/>
                             
                             <!-- 手动软件区 -->
                             <StackPanel Grid.Row="1" Margin="12,8,12,10">
@@ -405,11 +405,11 @@ Background="{StaticResource Brush_Background}">
                                     </Style>
                                 </StackPanel.Style>
                                 <TextBlock Text="手动维护的软件（下载链接 / 本地安装包）" FontSize="{DynamicResource Font_SizeCaption}"
-                                           Style="{StaticResource MonoText}" Margin="0,0,0,4"/>
+                                           Style="{DynamicResource MonoText}" Margin="0,0,0,4"/>
                                 <ItemsControl ItemsSource="{Binding ManualSoftwares}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1"
+                                            <Border BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1"
                                                     Padding="0,4">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -422,17 +422,17 @@ Background="{StaticResource Brush_Background}">
                                                     <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
                                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding Description}"/>
-                                                    <Button Grid.Column="1" Style="{StaticResource RowActionButton}" Content="下载"
+                                                    <Button Grid.Column="1" Style="{DynamicResource RowActionButton}" Content="下载"
                                                             Margin="0,0,8,0" Command="{Binding DataContext.DownloadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Grid.Column="2" Style="{StaticResource RowActionButton}" Content="编辑"
+                                                    <Button Grid.Column="2" Style="{DynamicResource RowActionButton}" Content="编辑"
                                                             Margin="0,0,8,0"
                                                             Command="{Binding DataContext.EditManualSoftwareCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Grid.Column="3" Style="{StaticResource RowDangerButton}" Content="删除" Margin="0,0,8,0"
+                                                    <Button Grid.Column="3" Style="{DynamicResource RowDangerButton}" Content="删除" Margin="0,0,8,0"
                                                             Command="{Binding DataContext.DeleteManualSoftwareCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Grid.Column="4" Style="{StaticResource RowActionButton}" Content="打开安装包"
+                                                    <Button Grid.Column="4" Style="{DynamicResource RowActionButton}" Content="打开安装包"
                                                             Command="{Binding DataContext.OpenInstallerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                 </Grid>
@@ -456,15 +456,15 @@ Background="{StaticResource Brush_Background}">
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource CardBorder}" Width="230" Margin="0,0,12,12">
+                                <Border Style="{DynamicResource CardBorder}" Width="230" Margin="0,0,12,12">
                                     <StackPanel>
                                         <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
-                                                   Foreground="{StaticResource Brush_TextPrimary}"/>
-                                        <TextBlock FontSize="{DynamicResource Font_SizeCaption}" Style="{StaticResource MonoText}" Margin="0,3,0,8">
+                                                   Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                        <TextBlock FontSize="{DynamicResource Font_SizeCaption}" Style="{DynamicResource MonoText}" Margin="0,3,0,8">
                                             <Run Text="{Binding Count, Mode=OneWay}"/><Run Text=" 个软件"/>
                                         </TextBlock>
                                         <Button Content="恢复此环境" Height="32" FontSize="{DynamicResource Font_SizeBodySm}"
-                                                Background="{StaticResource Brush_Accent}" Foreground="{StaticResource Brush_OnDark}"
+                                                Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
                                                 BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left" Padding="10,0"
                                                 Command="{Binding DataContext.RestoreEnvironmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"/>
@@ -481,7 +481,7 @@ Background="{StaticResource Brush_Background}">
              · SelectedCount==0 时整条淡出（DataTrigger Collapsed）
              · 新增「批量升级」/「批量卸载」入口（VM 命令已加，串行 winget 流水线留 V0.x 后续补）
              · 视觉：深底白字、强对比、与"导出报告"等主色操作形成层次） ============ -->
-        <Border Grid.Row="4" Background="{StaticResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_XL}"
+        <Border Grid.Row="4" Background="{DynamicResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_XL}"
                 Padding="14,10" Margin="0,10,0,8">
             <Border.Style>
                 <Style TargetType="Border">
@@ -505,45 +505,45 @@ Background="{StaticResource Brush_Background}">
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Foreground="{StaticResource Brush_OnDark}" VerticalAlignment="Center">
+                <TextBlock FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Foreground="{DynamicResource Brush_OnDark}" VerticalAlignment="Center">
                     <Run Text="已选 "/><Run Text="{Binding SelectedCount, Mode=OneWay}"/><Run Text=" 项"/>
                 </TextBlock>
                 <TextBlock Grid.Column="1" Text="批量安装逐项执行 · 可取消 · 失败项标注原因（关闭窗口即停止后续项）"
-                           FontSize="{DynamicResource Font_SizeCaption}" Foreground="{StaticResource Brush_OnDarkMuted}" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                           FontSize="{DynamicResource Font_SizeCaption}" Foreground="{DynamicResource Brush_OnDarkMuted}" VerticalAlignment="Center" Margin="14,0,0,0"/>
                 <!-- M-UI-2：新增批量升级/卸载入口（VM 命令占位，逻辑后续 V0.x 补） -->
                 <!-- 审查 02-1 🔴 采纳（2026-09-09）：按钮恒禁用时用户分不清"未实现"还是"坏了"——
                      保留禁用（9-8 审查 S-7：不做"能点但不响应"的按钮），改用 ToolTip 明示原因 -->
                 <Button Grid.Column="2" Content="批量升级" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
-                        Background="Transparent" BorderBrush="{StaticResource Brush_Success}" BorderThickness="1"
-                        Foreground="{StaticResource Brush_Success}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        Background="Transparent" BorderBrush="{DynamicResource Brush_Success}" BorderThickness="1"
+                        Foreground="{DynamicResource Brush_Success}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
                         ToolTip="批量升级功能开发中（V0.x 后续版本提供），当前请先逐条升级"
                         Command="{Binding BatchUpgradeSelectedCommand}"/>
                 <Button Grid.Column="3" Content="批量卸载" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
-                        Background="Transparent" BorderBrush="{StaticResource Brush_Danger}" BorderThickness="1"
-                        Foreground="{StaticResource Brush_Danger}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        Background="Transparent" BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1"
+                        Foreground="{DynamicResource Brush_Danger}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
                         ToolTip="批量卸载功能开发中（V0.x 后续版本提供），当前请先逐条卸载"
                         Command="{Binding BatchUninstallSelectedCommand}"/>
-                <Button Grid.Column="4" Style="{StaticResource RowActionButton}" Content="清空选择" Margin="8,0,0,0"
-                        Command="{Binding ClearSelectionCommand}" Background="{StaticResource Brush_OnDark}"
-                        BorderThickness="0" Foreground="{StaticResource Brush_DarkSurface}"/>
+                <Button Grid.Column="4" Style="{DynamicResource RowActionButton}" Content="清空选择" Margin="8,0,0,0"
+                        Command="{Binding ClearSelectionCommand}" Background="{DynamicResource Brush_OnDark}"
+                        BorderThickness="0" Foreground="{DynamicResource Brush_DarkSurface}"/>
                 <Button Grid.Column="5" Height="32" MinWidth="72" Padding="10,0" FontSize="{DynamicResource Font_SizeCaption}" Content="批量安装"
-                        Background="{StaticResource Brush_Accent}" Foreground="{StaticResource Brush_OnDark}"
+                        Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
                         BorderThickness="0" Cursor="Hand" Margin="8,0,0,0"
                         Command="{Binding BatchInstallCommand}"/>
                 <Button Grid.Column="6" Content="取消当前操作" Command="{Binding CancelOperationCommand}"
-                        Style="{StaticResource CardButton}" Margin="{DynamicResource Space_XS}"
-                        Foreground="{StaticResource Brush_Danger}"
+                        Style="{DynamicResource CardButton}" Margin="{DynamicResource Space_XS}"
+                        Foreground="{DynamicResource Brush_Danger}"
                         Visibility="{Binding IsOperating, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </Border>
 
         <!-- ============ 操作日志 ============ -->
-        <Expander Grid.Row="5" Header="操作日志" FontSize="{DynamicResource Font_SizeCaption}" Foreground="{StaticResource Brush_TextMuted}"
+        <Expander Grid.Row="5" Header="操作日志" FontSize="{DynamicResource Font_SizeCaption}" Foreground="{DynamicResource Brush_TextMuted}"
                   Margin="0,0,0,10" IsExpanded="False">
-            <Border Style="{StaticResource CardBorder}" Padding="8" MaxHeight="140">
+            <Border Style="{DynamicResource CardBorder}" Padding="8" MaxHeight="140">
                 <ListBox ItemsSource="{Binding LogLines}" BorderThickness="0" Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         FontFamily="{StaticResource Font_Mono}">
+                         FontFamily="{DynamicResource Font_Mono}">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="2,1"/>
@@ -564,17 +564,17 @@ Background="{StaticResource Brush_Background}">
         <Popup x:Name="SearchPopup" IsOpen="{Binding IsSearchPopupOpen, Mode=TwoWay}"
                PlacementTarget="{Binding ElementName=SearchHost}" Placement="Bottom"
                HorizontalOffset="-100" StaysOpen="False" Width="420" MaxHeight="320" AllowsTransparency="True">
-            <Border Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+            <Border Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}" Padding="8">
                 <StackPanel>
                     <TextBlock Text="winget 源搜索结果（点击安装并加入清单）" FontSize="{DynamicResource Font_SizeNano}"
-                               Style="{StaticResource MonoText}" Margin="4,0,0,6"/>
+                               Style="{DynamicResource MonoText}" Margin="4,0,0,6"/>
                     <ListBox ItemsSource="{Binding SearchResults}" MaxHeight="240" BorderThickness="0"
                              Background="Transparent" HorizontalContentAlignment="Stretch"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="{StaticResource Brush_Track}" BorderThickness="0,0,0,1" Padding="4,6">
+                                <Border BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1" Padding="4,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -582,11 +582,11 @@ Background="{StaticResource Brush_Background}">
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="SemiBold"/>
-                                            <TextBlock FontSize="{DynamicResource Font_SizeNano}" Style="{StaticResource MonoText}">
+                                            <TextBlock FontSize="{DynamicResource Font_SizeNano}" Style="{DynamicResource MonoText}">
                                                 <Run Text="{Binding Id, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding Version, Mode=OneWay}"/>
                                             </TextBlock>
                                         </StackPanel>
-                                        <Button Grid.Column="1" Style="{StaticResource RowPrimaryButton}" Content="安装"
+                                        <Button Grid.Column="1" Style="{DynamicResource RowPrimaryButton}" Content="安装"
                                                 Command="{Binding DataContext.InstallSearchResultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"/>
                                     </Grid>
@@ -594,7 +594,7 @@ Background="{StaticResource Brush_Background}">
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <Button Content="关闭" Style="{StaticResource RowActionButton}" Width="60" Margin="0,6,0,0"
+                    <Button Content="关闭" Style="{DynamicResource RowActionButton}" Width="60" Margin="0,6,0,0"
                             HorizontalAlignment="Right" Command="{Binding CloseSearchCommand}"/>
                 </StackPanel>
             </Border>
@@ -603,16 +603,16 @@ Background="{StaticResource Brush_Background}">
         <!-- 软件源下拉浮层 -->
         <Popup x:Name="SourcePopup" PlacementTarget="{Binding ElementName=SourceMenuButton}"
                Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-            <Border Background="{StaticResource Brush_Surface}" BorderBrush="{StaticResource Brush_Border}"
+            <Border Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" CornerRadius="{DynamicResource Radius_LG}" Padding="6" Width="200" Margin="0,4,0,0">
                 <StackPanel>
-                    <Button Content="⟳ 更新软件源" Style="{StaticResource RowActionButton}" Height="24"
+                    <Button Content="⟳ 更新软件源" Style="{DynamicResource RowActionButton}" Height="24"
                             HorizontalContentAlignment="Left" Padding="10,0"
                             Command="{Binding UpdateSourceCommand}" Click="OnSourceMenuItemClick"/>
-                    <Button Content="切换中科大镜像源" Style="{StaticResource RowPrimaryButton}" Height="24"
+                    <Button Content="切换中科大镜像源" Style="{DynamicResource RowPrimaryButton}" Height="24"
                             HorizontalContentAlignment="Left" Padding="10,0" Margin="0,4,0,0"
                             Command="{Binding SwitchToMirrorCommand}" Click="OnSourceMenuItemClick"/>
-                    <Button Content="恢复官方源" Style="{StaticResource RowActionButton}" Height="24"
+                    <Button Content="恢复官方源" Style="{DynamicResource RowActionButton}" Height="24"
                             HorizontalContentAlignment="Left" Padding="10,0" Margin="0,4,0,0"
                             Command="{Binding RestoreOfficialSourceCommand}" Click="OnSourceMenuItemClick"/>
                 </StackPanel>

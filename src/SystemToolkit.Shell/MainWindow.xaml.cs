@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using SystemToolkit.Abstractions;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Shell;
 
@@ -128,6 +129,24 @@ public partial class MainWindow : Window
                 _ = _pausable.ActivateAsync();
             }
         };
+
+        // 2026-09-10：主题切换后重建当前视图，做到真正"即时切换"。
+        // 令牌引用已全部 DynamicResource（自动刷新），但 BasedOn 不支持 DynamicResource
+        // （WPF 硬限制，实测抛 XamlParseException）——这些派生样式需重建视图才会按新包解析。
+        // 视图由模块 CreateView 产生、VM 为 DI 单例 → 重建只重置 UI 局部状态，业务状态保留。
+        ThemeManager.ThemeChanged += OnThemeChanged;
+        Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
+    }
+
+    /// <summary>主题切换 → 重新装载当前模块视图（继承主题包样式的控件随之刷新）。</summary>
+    private void OnThemeChanged()
+    {
+        if (!IsLoaded)
+        {
+            return; // 启动期应用主题（App 在窗口之前调用）无需重建
+        }
+
+        LoadSelectedModule();
     }
 
     /// <summary>
@@ -144,7 +163,12 @@ public partial class MainWindow : Window
         return Application.Current?.TryFindResource(key) as System.Windows.Media.Geometry;
     }
 
-    private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e) => LoadSelectedModule();
+
+    /// <summary>
+    /// 为当前选中的导航项装载视图（导航切换与主题切换后重建共用）。
+    /// </summary>
+    private void LoadSelectedModule()
     {
         if (NavList.SelectedItem is not NavItem nav)
         {

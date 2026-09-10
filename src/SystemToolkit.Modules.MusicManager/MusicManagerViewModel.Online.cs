@@ -715,6 +715,12 @@ public partial class MusicManagerViewModel
     /// <summary>是否有榜单可显示（决定右栏榜单区是否出现）。</summary>
     public bool HasRankBoards => RankBoards.Count > 0;
 
+    /// <summary>
+    /// 每日推荐是否非空（P3 布局：为空时榜单区改两列大卡片占据右卡空间，
+    /// 不至于让右栏空一大块）。
+    /// </summary>
+    public bool HasDailyRecommend => DailyRecommend.Count > 0;
+
 
     public ObservableCollection<PlaylistRowVm> RecommendedPlaylists { get; } = [];
 
@@ -743,6 +749,7 @@ public partial class MusicManagerViewModel
                 DailyRecommend.Add(new OnlineResultRowVm(track));
             }
             BeginCoverLoads(DailyRecommend); // 实机反馈（图3）：每日推荐曲目也要显示封面（此前漏挂）
+            OnPropertyChanged(nameof(HasDailyRecommend)); // P3：右卡布局随空态切换
 
             List<OnlinePlaylist> recommended = await _catalog.LoadRecommendationsAsync(SelectedPlatform);
             RecommendedPlaylists.Clear();

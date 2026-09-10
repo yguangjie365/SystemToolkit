@@ -42,10 +42,25 @@ public sealed class NetworkInfoService : INetworkInfoService
                     ni.Name,
                     ni.GetPhysicalAddress().GetAddressBytes().Length))
                 // 同一物理卡经过滤驱动枚举出多条时（连接名形如 WLAN / WLAN 2 / WLAN 5），
-                // 只保留主连接名（名称最短者）。去重键 = 描述 + MAC：过滤驱动子接口与宿主
-                // 同 MAC，会被合并；双物理网卡（同型号双 LAN）MAC 不同，不会被误伤
-                .GroupBy(ni => ni.Description.Trim().ToUpperInvariant() + "|" + ni.GetPhysicalAddress().ToString())
-                .Select(g => g.OrderBy(ni => ni.Name.Length).First())
+                // 只保留主连接名（名称最短者）。
+                // 🔴 2026-09-10 强化：去重键改为 **MAC 优先**（无 MAC 才回退描述+名称）。
+                // 原「描述+MAC」键无法合并描述不同的过滤驱动接口——实机反馈网卡列表出现
+                // 「WLAN-Huorong NDIS Filter Driver-0000」等一批条目（火绒注入，描述与真网卡不同、
+                // 但通常共享宿主 MAC）。纯 MAC 分组可合并同 MAC 的宿主与过滤接口；
+                // 双物理网卡 MAC 天然不同，不会误伤；MAC 缺失（全 0/空）时回退原键避免过度合并。
+                .GroupBy(ni =>
+                {
+                    string mac = ni.GetPhysicalAddress().ToString();
+                    return string.IsNullOrWhiteSpace(mac) || mac.Trim('0') == string.Empty
+                        ? ni.Description.Trim().ToUpperInvariant() + "|" + ni.Name
+                        : "MAC:" + mac;
+                })
+                .Select(g => g
+                    // 组内优先保留"描述不含 filter"的真网卡（过滤驱动接口描述常含 Filter），
+                    // 其次保留连接名最短者（主连接名，如 LAN / WLAN）
+                    .OrderBy(ni => ni.Description.Contains("filter", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                    .ThenBy(ni => ni.Name.Length)
+                    .First())
                 .Select(ToInfo)
                 .ToArray();
         });
