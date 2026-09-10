@@ -146,6 +146,14 @@ public partial class MusicManagerViewModel : ObservableObject
         _credentials = credentials;
         _searchHistoryStore = searchHistory;
 
+        // 🔴 审查 2026-09-11（🔴-3）：主题切换后重取播放器三刷。
+        // 三个 Brush 字段是**初始化即定值**（Player.cs），而本 VM 是 DI 单例、主题切换只重建
+        // 视图不重建 VM——没有这条订阅，切到 Nvidia 深色后播放器前景/高亮/次要色会停留旧主题
+        // （浅色字压黑底），直到用户切歌或切风格才刷新。
+        // 注：ThemeManager.ThemeChanged 事件本就存在（宿主 MainWindow 也订阅它重建视图），
+        // 此处是 VM 侧补齐消费；VM 为单例、生命周期与进程同长，故不做退订。
+        SystemToolkit.UI.Common.ThemeManager.ThemeChanged += OnThemeChangedRefreshBrushes;
+
         Songs.CollectionChanged += (_, _) =>
         {
             if (!_bulkLoadingSongs)

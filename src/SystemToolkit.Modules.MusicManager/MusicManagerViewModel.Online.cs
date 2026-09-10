@@ -87,10 +87,13 @@ public partial class MusicManagerViewModel
     {
         SelectedPlatform = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
         RefreshAccountArea(); // P3：账号区随平台联动（下拉里的"当前"标记与胶囊内容）
-        await LoadRankBoardsAsync(); // P3：榜单随平台（网易无来源 → 整区隐藏）
         // 审查 F-02：网络命令异常必须落用户可见状态（🔴 不静默——否则表现为"点击没反应"）
         try
         {
+            // 🔴 审查 2026-09-11（🔴-2）：推荐区必须随平台刷新（官方榜单由它内部一并刷新）。
+            // 原实现只刷榜单 + 歌单 → 切到 QQ 后右卡长期显示网易的每日推荐/推荐歌单
+            // （chip 已变、内容没变），或刷新(A) 在飞期间切平台、被 A 的迟到结果覆盖。
+            await LoadRecommendationsAsync();
             await LoadPlaylistsAsync(); // 歌单面板跟随平台（双平台用户歌单均已接线）
             await RefreshLoginStateAsync();
         }
@@ -194,6 +197,9 @@ public partial class MusicManagerViewModel
     private readonly ISearchHistoryStore? _searchHistoryStore; // 仅构造注入（Release 分析器 IDE0044 要求 readonly）
     private const int SearchHistoryCapacity = 10;
 
+    /// <summary>单条搜索历史的长度上限（🟠 审查 2026-09-11，🟠-7：超长粘贴不入库）。</summary>
+    private const int MaxSearchHistoryLength = 64;
+
     public ObservableCollection<string> SearchHistory { get; } = [];
 
     public bool HasSearchHistory => SearchHistory.Count > 0;
@@ -216,6 +222,20 @@ public partial class MusicManagerViewModel
 
     /// <summary>用户歌单加载代际（🟠-7：切换平台会连发两次加载，旧平台的歌单不得覆盖新平台）。</summary>
     private int _playlistSeq;
+
+    /// <summary>
+    /// 推荐区代际（🔴 审查 2026-09-11，🔴-2）。每日推荐 / 推荐歌单 / 榜单三者总是一起刷新，
+    /// 故共用一个号。此处是 🟠-7 的**漏网点**：原实现只给搜索/歌单/榜单打开装了代际，
+    /// 推荐区的三个写入点（以及"切平台不刷推荐"）没跟上。
+    /// </summary>
+    private int _recommendSeq;
+
+    /// <summary>
+    /// 歌单详情曲目代际（🔴-2）。**刻意与 <c>_onlineSeq</c> 分开**：两者写的是不同集合、
+    /// 对应不同视图（歌单详情 vs 搜索结果），共用一个号会让"打开歌单"无谓作废进行中的搜索、
+    /// 反之亦然。
+    /// </summary>
+    private int _playlistTracksSeq;
 
     [RelayCommand(CanExecute = nameof(CanSearchOnline))]
     private async Task SearchOnlineAsync()
@@ -272,7 +292,20 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        string q = query.Trim();
+        // 🟠 审查 2026-09-11（🟠-7）：外部输入先剥离零宽不可见字符再 Trim。
+        // StripInvisible 覆盖 U+200B/200C/200D/2060/FEFF，而 Trim/正则 \s 都不匹配它们——
+        // 否则含零宽的关键词会原样入库/渲染/落盘，且用户肉眼永远无法复现并删除该历史项。
+        string q = (SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(query) ?? string.Empty).Trim();
+        if (q.Length == 0)
+        {
+            return; // 剥完变空（整词都是零宽）：不入库
+        }
+
+        if (q.Length > MaxSearchHistoryLength)
+        {
+            q = q[..MaxSearchHistoryLength]; // 超长粘贴不入库（历史项只作展示与复搜用）
+        }
+
         string? existing = SearchHistory.FirstOrDefault(h => string.Equals(h, q, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
@@ -664,11 +697,17 @@ public partial class MusicManagerViewModel
         OpenPlaylist = row.Playlist;
         OnPropertyChanged(nameof(ViewTitle));
         PlaylistFilterText = string.Empty; // 换歌单即清空上一次的站内搜索
+        int seq = ++_playlistTracksSeq; // 🔴-2：连点两个歌单时，A 的迟到结果不得覆盖 B
         // 审查 F-02：取曲目失败要可见（登录过期/网络/接口变更），不能 Task Faulted 静默
         try
         {
             List<OnlineTrack> tracks = await _catalog.LoadPlaylistTracksAsync(
                 row.Playlist.Provider, row.Playlist.Id);
+            if (seq != _playlistTracksSeq)
+            {
+                return; // 期间用户又打开了另一个歌单 → 本次结果已过期（不切视图、不写集合）
+            }
+
             PlaylistTracks.Clear();
             foreach (OnlineTrack track in tracks)
             {
@@ -770,10 +809,16 @@ public partial class MusicManagerViewModel
             return;
         }
 
+        int seq = ++_recommendSeq; // 🔴-2：推荐区代际（与切平台 / 榜单刷新共用同一个号）
         IsLoadingRecommendations = true;
         try
         {
             List<OnlineTrack> daily = await _catalog.LoadDailyRecommendSongsAsync(SelectedPlatform);
+            if (seq != _recommendSeq)
+            {
+                return; // 期间切了平台 / 又刷了一次 → 本次结果已过期
+            }
+
             DailyRecommend.Clear();
             foreach (OnlineTrack track in daily)
             {
@@ -783,13 +828,23 @@ public partial class MusicManagerViewModel
             OnPropertyChanged(nameof(HasDailyRecommend)); // P3：右卡布局随空态切换
 
             List<OnlinePlaylist> recommended = await _catalog.LoadRecommendationsAsync(SelectedPlatform);
+            if (seq != _recommendSeq)
+            {
+                return;
+            }
+
             RecommendedPlaylists.Clear();
             foreach (OnlinePlaylist playlist in recommended)
             {
                 RecommendedPlaylists.Add(new PlaylistRowVm(playlist));
             }
 
-            await LoadRankBoardsAsync(); // P3：官方榜单（网易为空 → 整区隐藏）
+            await LoadRankBoardsAsync(seq); // P3：官方榜单（网易为空 → 整区隐藏）
+
+            if (seq != _recommendSeq)
+            {
+                return;
+            }
 
             // 空态原因可见：未登录 / QQ 不支持 / 网络失败（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
@@ -802,12 +857,17 @@ public partial class MusicManagerViewModel
         }
         finally
         {
-            IsLoadingRecommendations = false;
+            // 🔴-2：只在仍是最新代时复位——迟到者不得清掉后一代的「加载中」标记
+            if (seq == _recommendSeq)
+            {
+                IsLoadingRecommendations = false;
+            }
         }
     }
 
     /// <summary>P3：加载官方榜单（网易无来源 → 空集合，UI 整区隐藏）。</summary>
-    private async Task LoadRankBoardsAsync()
+    /// <param name="seq">调用方（推荐区）的代际号——本方法写的是推荐区同一批 UI 状态。</param>
+    private async Task LoadRankBoardsAsync(int seq)
     {
         if (_catalog is null)
         {
@@ -817,6 +877,11 @@ public partial class MusicManagerViewModel
         try
         {
             List<OnlineRankBoard> boards = await _catalog.LoadRankListAsync(SelectedPlatform);
+            if (seq != _recommendSeq)
+            {
+                return; // 🔴-2：旧平台的结果不得覆盖新平台
+            }
+
             RankBoards.Clear();
             foreach (OnlineRankBoard board in boards)
             {
@@ -827,8 +892,14 @@ public partial class MusicManagerViewModel
         }
         catch (Exception ex)
         {
-            // 🔴 不静默：榜单加载失败要可见（但右栏其它区不受影响）
-            _log.Warn($"[Music] 榜单加载失败：{ex.Message}");
+            // 🟠 审查 2026-09-11（🟠-5）：原实现只 _log.Warn，而注释自称"🔴 不静默"——
+            // UI 上表现为榜单区整块消失，用户无法区分「网易无此来源（设计如此）」与
+            // 「QQ 加载失败」。失败必须落到用户可见处。
+            if (seq == _recommendSeq)
+            {
+                _log.Warn($"[Music] 榜单加载失败：{ex.Message}");
+                OnlineStatusText = $"榜单加载失败：{ex.Message}";
+            }
         }
     }
 
@@ -947,6 +1018,26 @@ public partial class MusicManagerViewModel
         get => _isCurrentAccountLoggedIn;
         private set => SetProperty(ref _isCurrentAccountLoggedIn, value);
     }
+
+    private bool _isCheckingLogin;
+
+    /// <summary>
+    /// 登录态检测进行中（🟠 审查 2026-09-11，🟠-3）。
+    /// <para>
+    /// 背景：<see cref="RefreshLoginStateAsync"/> 两个平台是**串行 await**，期间
+    /// <see cref="IsCurrentAccountLoggedIn"/> 仍是上一次的值（首屏为默认 <c>false</c>）——
+    /// 已登录用户会短暂看到"登录"按钮，网络差时窗口更长，会诱导重复登录。
+    /// View 据此显示"检测中…"且禁用，构成三态：检测中 / 已登录 / 未登录。
+    /// </para>
+    /// </summary>
+    public bool IsCheckingLogin
+    {
+        get => _isCheckingLogin;
+        private set => SetProperty(ref _isCheckingLogin, value);
+    }
+
+    /// <summary>登录态检测代际（🟠-3：初始化与切平台可能各发一次，迟到者不得复位后一代的标记）。</summary>
+    private int _loginCheckSeq;
 
     private string _currentAccountName = "未登录";
 
@@ -1103,6 +1194,10 @@ public partial class MusicManagerViewModel
             return;
         }
 
+        // 🟠 审查 2026-09-11（🟠-3）：进入"检测中"——View 据此显示"检测中…"并禁用，
+        // 避免已登录用户在网络慢时看到"登录"按钮而重复点击。
+        int seq = ++_loginCheckSeq;
+        IsCheckingLogin = true;
         try
         {
             OnlineLoginInfo netEase = await _catalog.GetLoginStatusAsync(OnlineProvider.NetEase);
@@ -1128,6 +1223,14 @@ public partial class MusicManagerViewModel
             // 审查 Y13（2026-09-10）：命令直调，异常必须落用户可见处（AsyncRelayCommand 会吞）
             OnlineStatusText = "登录状态刷新失败：" + ex.Message;
             _log.Error("[Music] 登录状态刷新异常", ex);
+        }
+        finally
+        {
+            // 🟠-3：只在仍是最新一代时退出"检测中"（迟到者不得清掉后一代的标记）
+            if (seq == _loginCheckSeq)
+            {
+                IsCheckingLogin = false;
+            }
         }
     }
 }

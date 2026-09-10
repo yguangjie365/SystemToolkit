@@ -244,6 +244,13 @@ public partial class MusicManagerViewModel
         }
     }
 
+    /// <summary>
+    /// 主题切换回调（🔴 审查 2026-09-11，🔴-3）。三个 Brush 字段是**初始化即定值**，
+    /// 而 VM 是 DI 单例、主题切换只重建视图不重建 VM——由 <see cref="RefreshPlayerChromeBrushes"/>
+    /// 把三刷重取到新主题，否则切换后播放器会停留旧主题配色。
+    /// </summary>
+    private void OnThemeChangedRefreshBrushes() => RefreshPlayerChromeBrushes();
+
     /// <summary>起播/切歌后装载封面与主色（后台 IO；结果经 RunOnUi 回 UI）。</summary>
     private async Task LoadCoverAsync(MusicSong song)
     {
