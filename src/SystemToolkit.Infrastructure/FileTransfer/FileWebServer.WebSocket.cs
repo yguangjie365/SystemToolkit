@@ -29,6 +29,9 @@ namespace SystemToolkit.Infrastructure.FileTransfer;
 /// </summary>
 public sealed partial class FileWebServer
 {
+    /// <summary>实时推送连接数上限（🟡 审查 2026-09-11：防已配对设备开大量 upgrade 造成资源压力）。</summary>
+    private const int MaxWsClients = 16;
+
     /// <summary>活跃的实时推送连接。键仅用于移除；值为连接包装（内部串行化发送）。</summary>
     private readonly ConcurrentDictionary<Guid, WsClient> _wsClients = new();
 
@@ -48,6 +51,16 @@ public sealed partial class FileWebServer
         {
             ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
             await ctx.Response.WriteAsync("该端点仅接受 WebSocket 升级请求。", ctx.RequestAborted);
+            return;
+        }
+
+        // 🟡 审查 2026-09-11（🟡-1）：连接数上限。token 门已挡住外部未授权者，
+        // 此处防的是「已配对设备开数千 upgrade」造成的内存/FD 压力（每个连接 = 一个 socket + 闸 + 缓冲）。
+        // 局域网多设备+多浏览器场景下 16 足够；如需更多，调此常量即可。
+        if (_wsClients.Count >= MaxWsClients)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await ctx.Response.WriteAsync("实时推送连接数已达上限，请稍后重试。", ctx.RequestAborted);
             return;
         }
 
@@ -137,10 +150,15 @@ public sealed partial class FileWebServer
             _deviceChangedHandler = null;
         }
 
+        // 🔴-1：并行关闭——串行时每个连接的握手超时会累加（N 个不配合的连接 × 3s
+        // 可以把「停止服务」挂住数十秒）；并行后最坏只等一个 IoTimeout
+        var closing = new List<Task>();
         foreach (WsClient client in _wsClients.Values)
         {
-            await client.CloseAsync();
+            closing.Add(client.CloseAsync());
         }
+
+        await Task.WhenAll(closing);
 
         _wsClients.Clear();
     }
@@ -151,6 +169,18 @@ public sealed partial class FileWebServer
     /// </summary>
     private sealed class WsClient(WebSocket socket)
     {
+        /// <summary>
+        /// 单次对外 IO（发送 / 关闭握手）的超时上界。🔴 审查 2026-09-11（🔴-1）。
+        /// <para>
+        /// 对端「消失但无 RST」时（手机断 Wi-Fi、被系统回收、锁屏切后台），<c>SendAsync</c> 会阻塞
+        /// 到 TCP 自身超时（数十秒~分钟级）。广播是**顺序** <c>foreach await</c>——一个这样的连接
+        /// 会**饿死其余所有浏览器端**；而每个新的 <c>deviceChange</c> 还会继续堆到同一连接的闸上，
+        /// 形成「越堵越堆」。关闭握手同理：不响应 close 的对端可把 <c>StopAsync</c> 无限期挂起。
+        /// 故所有对外 IO 都必须有上界。
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(3);
+
         private readonly SemaphoreSlim _sendGate = new(1, 1);
 
         public async Task SendJsonAsync(string json, CancellationToken ct)
@@ -178,11 +208,13 @@ public sealed partial class FileWebServer
         {
             try
             {
-                await SendJsonAsync(json, CancellationToken.None).ConfigureAwait(false);
+                // 🔴-1：必须有超时——无界等待会让一个半开连接卡死整轮顺序广播
+                using var cts = new CancellationTokenSource(IoTimeout);
+                await SendJsonAsync(json, cts.Token).ConfigureAwait(false);
             }
             catch (Exception)
             {
-                // 该连接已不可用（对端已断/半关）；其读循环会自行收尾移除
+                // 该连接已不可用（对端已断/半关/发送超时）；其读循环会自行收尾移除
             }
         }
 
@@ -192,13 +224,24 @@ public sealed partial class FileWebServer
             {
                 if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
                 {
+                    // 🔴-1：正常关闭握手也要有上界；超时即走下方硬断
+                    using var cts = new CancellationTokenSource(IoTimeout);
                     await socket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure, null, CancellationToken.None).ConfigureAwait(false);
+                        WebSocketCloseStatus.NormalClosure, null, cts.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception)
             {
-                // 关闭失败无补救动作（socket 随 using 释放）
+                // 🔴-1：握手超时/失败 → 硬断。宁可让对端把它当异常断连（前端本就带 3s 重连），
+                // 也绝不让一个不配合的对端把 StopAsync 挂住（socket 随 using 释放）
+                try
+                {
+                    socket.Abort();
+                }
+                catch (Exception)
+                {
+                    // 已释放/已中止：无补救动作
+                }
             }
         }
     }

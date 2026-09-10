@@ -58,7 +58,25 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// 分块上传串行化闸门（按 uploadId）。前端本就逐块顺序传，这里防的是失败重试与多端同传同一文件。
     /// <para>定稿后主动移除；意外中断残留的只是一个 SemaphoreSlim 小对象，不构成泄漏。</para>
     /// </summary>
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _uploadGates = new();
+    /// <summary>
+    /// 同一 uploadId 的写入串行闸。**带引用计数**（🟠 审查 2026-09-11，🟠-1）。
+    /// <para>
+    /// 为什么不能"用完直接 TryRemove"：A 持闸执行、B 在旧闸上排队；A 失败时把它从字典摘掉，
+    /// B 仍在等**同一个旧对象**；C 随后 GetOrAdd 拿到**新闸**并立即进入 —— C 与 B 并发写同一个
+    /// <c>.part</c>，恰好绕过闸要防的写入交错（:409 注释所述）。故摘除必须满足两个条件：
+    /// ① 已无人持有/等待（<see cref="RefCount"/> 归零）；② 字典里存的**仍是本对象**。
+    /// </para>
+    /// </summary>
+    private sealed class UploadGate
+    {
+        public SemaphoreSlim Semaphore { get; } = new(1, 1);
+
+        /// <summary>持有者 + 等待者计数（Interlocked 维护）。归零才允许摘除。</summary>
+        public int RefCount;
+    }
+
+    /// <summary>上传闸字典（键 = uploadId）；条目生命周期由 <see cref="UploadGate.RefCount"/> 决定。</summary>
+    private readonly ConcurrentDictionary<string, UploadGate> _uploadGates = new();
 
     private WebApplication? _app;
     private string _shareDirectory = string.Empty;
@@ -407,13 +425,17 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 string partPath = Path.Combine(root, $".upload_{uploadId}.part");
 
                 // 同一 uploadId 串行化：避免并发块写入把文件写乱（前端本就逐块传，这里防的是异常重试与多端同传）
-                // 🟡-4：闸门生命周期与「这次上传」绑定——未完待续保留复用；定稿/失败/异常一律移除，
-                // 否则失败分支的条目会一直躺在字典里（无法回收）。权衡与原先的定稿路径一致：以闸门复用为先。
-                SemaphoreSlim gate = _uploadGates.GetOrAdd(uploadId, static _ => new SemaphoreSlim(1, 1));
-                bool keepGate = false;
+                // 🟠 审查 2026-09-11（🟠-1）：闸门改为**引用计数**托管（见 UploadGate 注释）。
+                // 原"失败即 TryRemove"会摘掉仍被排队者持有的闸（B 还在等旧对象），
+                // 新请求随后拿到新闸即可与 B 并发写同一个 .part。
+                UploadGate gate = _uploadGates.AddOrUpdate(
+                    uploadId,
+                    static _ => new UploadGate(),
+                    static (_, existing) => existing);
+                Interlocked.Increment(ref gate.RefCount);
                 try
                 {
-                    await gate.WaitAsync(reqCt);
+                    await gate.Semaphore.WaitAsync(reqCt);
                     try
                     {
                         long current = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
@@ -435,13 +457,13 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                     }
                     finally
                     {
-                        gate.Release();
+                        gate.Semaphore.Release();
                     }
 
                     long received = new FileInfo(partPath).Length;
                     if (received < size)
                     {
-                        keepGate = true; // 还有后续块：保留闸门继续串行化
+                        // 还有后续块：返回后由 finally 递减引用计数；若仍有排队者则闸门保留复用
                         return Results.Ok(new { received, total = size, done = false });
                     }
 
@@ -472,10 +494,12 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 }
                 finally
                 {
-                    // 未完待续保留闸门（后续块复用）；定稿/失败/异常一律清理，避免条目滞留字典
-                    if (!keepGate)
+                    // 🟠 审查 2026-09-11（🟠-1）：引用计数归零才摘除，且只摘「值仍是本对象」的那条
+                    // （TryRemove 的 KeyValuePair 重载做原子比较）——既不摘仍在被使用的闸，
+                    // 也不会误删同键的新一代条目。
+                    if (Interlocked.Decrement(ref gate.RefCount) == 0)
                     {
-                        _uploadGates.TryRemove(uploadId, out _);
+                        _uploadGates.TryRemove(new KeyValuePair<string, UploadGate>(uploadId, gate));
                     }
                 }
             }
@@ -750,6 +774,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// </summary>
     private static string? SanitizeRelativePath(string raw)
     {
+        // 🟡 审查 2026-09-11（🟡-2）：单段长度上限（NTFS 255 UTF-16 码元）
+        const int MaxSegmentLength = 255;
+
         if (string.IsNullOrWhiteSpace(raw))
         {
             return null;
@@ -778,6 +805,18 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 return null;
             }
             if (IsWindowsReservedDeviceName(part))
+            {
+                return null;
+            }
+            // 🟡-2：Win32 落盘会**静默裁掉**尾随的 '.' 与空格 —— 后果是日志/响应里报的文件名
+            // ≠ 磁盘上的实际名，且 GetUniqueDestination 的「重名探测」按未裁剪的名字去探、
+            // 与真实落点错位。此处**拒绝**而非悄悄裁剪改名（改名会让用户找不到自己的文件）。
+            if (part.EndsWith('.') || part.EndsWith(' '))
+            {
+                return null;
+            }
+            // 🟡-2：超长段会在落盘中途抛 PathTooLongException，在入口拒绝更易排查
+            if (part.Length > MaxSegmentLength)
             {
                 return null;
             }
