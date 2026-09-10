@@ -20,11 +20,11 @@ public class TokenKeysCoverageTests
     [Fact]
     public void TokenGuard_EveryThemePack_MustCoverFullTokenKeysContract()
     {
-        var failures = new List<string>();
+        List<string> failures = new();
         foreach (string pack in ThemePackPaths())
         {
-            var defined = KeysOf(pack);
-            var missing = TokenKeys.AllKeys.Where(k => !defined.Contains(k)).ToList();
+            HashSet<string> defined = KeysOf(pack);
+            List<string> missing = TokenKeys.AllKeys.Where(k => !defined.Contains(k)).ToList();
             if (missing.Count > 0)
             {
                 failures.Add($"{Path.GetFileName(pack)} 缺少：{string.Join(", ", missing)}");
@@ -39,11 +39,11 @@ public class TokenKeysCoverageTests
     public void TokenGuard_EveryThemePack_MustNotContainGhostKeys()
     {
         // 反向约束：包里的 key 必须真实存在于契约，防止契约与字典漂移
-        var failures = new List<string>();
+        List<string> failures = new();
         foreach (string pack in ThemePackPaths())
         {
-            var defined = KeysOf(pack);
-            var ghosts = defined
+            HashSet<string> defined = KeysOf(pack);
+            List<string> ghosts = defined
                 .Where(k => !TokenKeys.AllKeys.Contains(k))
                 .ToList();
             if (ghosts.Count > 0)
