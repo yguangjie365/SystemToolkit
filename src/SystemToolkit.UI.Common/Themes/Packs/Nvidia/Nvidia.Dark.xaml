@@ -260,7 +260,11 @@
          （与 GameManager.html 参考稿 button:disabled 语义一致；对 Secondary 同样生效） -->
     <Style x:Key="PrimaryButton" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+        <!-- 🟠 审查 2026-09-11（F-2）：白字 Brush_OnDark(#F5F5F5) on #76B900 对比度仅 **2.21:1**，
+             未达正文 4.5（甚至未达大字 3:1）。改用页底黑 Brush_Background → **8.71:1** 达标。
+             ⚠️ 这是"单点已修、同款残留"：下方 RowPrimaryButton 早已修过完全相同的缺陷，此处与
+             FilterChip 选中态两处遗留——修改时务必同时改，勿只改一处。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="14,7"/>
         <Setter Property="FontSize" Value="12"/>
@@ -327,7 +331,9 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="ChipBg" Property="Background" Value="{StaticResource Brush_Accent}"/>
-                            <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                            <!-- 🟠 审查 2026-09-11（F-2）：同 PrimaryButton——OnDark(#F5F5F5) on #76B900
+                                 仅 2.21:1，改页底黑 → 8.71:1（与 RowPrimaryButton 统一） -->
+                            <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
                             <Setter TargetName="ChipBg" Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
