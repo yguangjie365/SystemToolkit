@@ -352,7 +352,7 @@
      给 ListView 一个有界视口让其内部 VirtualizingStackPanel 生效；顶部卡片仍在页面 ScrollViewer 中滚动。 -->
                 <ListView x:Name="InstalledAppsList" ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                  SizeChanged="OnAppsListSizeChanged">
+                                  controls:GridViewColumnSizing.AutoFillLastColumn="True">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

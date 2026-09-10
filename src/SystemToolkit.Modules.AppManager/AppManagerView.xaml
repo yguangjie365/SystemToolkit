@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.AppManager"
+             xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
 xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
 Background="{StaticResource Brush_Background}">
 
@@ -190,6 +191,7 @@ Background="{StaticResource Brush_Background}">
                     <Grid>
                         <!-- 微软商店应用 -->
                         <ListView ItemsSource="{Binding StoreView}"
+                            controls:GridViewColumnSizing.AutoFillLastColumn="True"
                                   BorderThickness="0" Background="Transparent"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   x:Name="StoreList" SizeChanged="OnListSizeChanged">
@@ -291,6 +293,7 @@ Background="{StaticResource Brush_Background}">
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <ListView ItemsSource="{Binding ThirdPartyView}"
+                            controls:GridViewColumnSizing.AutoFillLastColumn="True"
                                       BorderThickness="0" Background="Transparent"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       SizeChanged="OnListSizeChanged">

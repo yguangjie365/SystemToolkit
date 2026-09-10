@@ -1,5 +1,4 @@
 using System.Windows.Controls;
-using System.Windows;
 
 namespace SystemToolkit.Modules.Overview;
 
@@ -32,10 +31,6 @@ public partial class OverviewView : UserControl
         _vm.NotifyUser = (message, title) => System.Windows.MessageBox.Show(
             message, title, System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
 
-        // 2026-09-10：GridView 末列自适应填充——固定列宽不足视口时 GridView 会自动补一个
-        // 空白表头列（现象：表头 6 列、内容 5 列）。让「大小」列吃掉剩余宽度即可消除。
-        InstalledAppsList.SizeChanged += OnAppsListSizeChanged;
-
         // 但 VM 构造/依赖解析等边界异常会在此处逃逸成未处理异常（进程级崩溃）
         Loaded += async (_, _) =>
         {
@@ -54,28 +49,4 @@ public partial class OverviewView : UserControl
         Unloaded += (_, _) => _vm.Pause();
     }
 
-    private void OnAppsListSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.ListView list
-            || list.View is not System.Windows.Controls.GridView grid
-            || grid.Columns.Count == 0)
-        {
-            return;
-        }
-
-        const double MinLastColumn = 100;
-        double scrollbar = System.Windows.SystemParameters.VerticalScrollBarWidth;
-        double others = 0;
-        for (int i = 0; i < grid.Columns.Count - 1; i++)
-        {
-            others += grid.Columns[i].ActualWidth;
-        }
-
-        double target = Math.Max(MinLastColumn, list.ActualWidth - others - scrollbar);
-        System.Windows.Controls.GridViewColumn last = grid.Columns[^1];
-        if (Math.Abs((last.ActualWidth) - target) > 1) // 防止设置宽度再次触发 SizeChanged 的抖动
-        {
-            last.Width = target;
-        }
-    }
 }
