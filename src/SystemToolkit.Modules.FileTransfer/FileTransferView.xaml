@@ -31,6 +31,10 @@
                             <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
                                 <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
                             </DataTrigger>
+                            <!-- 2026-09-11 主人反馈：Web 服务已开启，右上角仍显示「服务未启动」 -->
+                            <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
@@ -42,10 +46,28 @@
                             <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
                             <Setter Property="FontWeight" Value="{DynamicResource Font_WeightMedium}"/>
                             <Style.Triggers>
+                                <!-- 🔴 2026-09-11 主人反馈：原标签只反映 Desktop.IsTransferRunning（电脑互传
+                                     TCP+UDP），与「手机通道」的 Web 服务（Kestrel）毫无关系——只启动 Web 服务
+                                     时这里恒显「服务未启动」，与同一张卡片上的「停止 Web 服务」按钮自相矛盾。
+                                     两个通道各自独立启停，故状态逐通道标注；同时运行给合并文案。
+                                     ⚠️ WPF 同 Style 内多个 Trigger 同时命中时**后声明者优先**，
+                                     故 MultiDataTrigger 必须放最后。 -->
                                 <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
-                                    <Setter Property="Text" Value="服务运行中"/>
+                                    <Setter Property="Text" Value="电脑互传运行中"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                    <Setter Property="Text" Value="手机通道运行中"/>
+                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding Desktop.IsTransferRunning}" Value="True"/>
+                                        <Condition Binding="{Binding Mobile.IsWebRunning}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                    <Setter Property="Text" Value="服务运行中（双通道）"/>
+                                </MultiDataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
