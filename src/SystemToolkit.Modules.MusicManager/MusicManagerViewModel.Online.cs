@@ -204,6 +204,19 @@ public partial class MusicManagerViewModel
 
     private bool CanSearchOnline() => !IsSearchingOnline;
 
+    /// <summary>
+    /// 在线目录请求代际（🟠 审查 2026-09-10）。
+    /// <para>
+    /// 播放链路有 <c>playSeq</c> 防护，在线目录此前没有：搜索/榜单/用户歌单三条命令互不等待，
+    /// 用户搜 A 未完成就点赞榜（或改搜 B）时，A 迟到的结果会 Clear+Add 覆盖后来者的列表。
+    /// 每个入口取号，await 回来先比号，不是最新一代即整批丢弃。
+    /// </para>
+    /// </summary>
+    private int _onlineSeq;
+
+    /// <summary>用户歌单加载代际（🟠-7：切换平台会连发两次加载，旧平台的歌单不得覆盖新平台）。</summary>
+    private int _playlistSeq;
+
     [RelayCommand(CanExecute = nameof(CanSearchOnline))]
     private async Task SearchOnlineAsync()
     {
@@ -219,10 +232,16 @@ public partial class MusicManagerViewModel
             return;
         }
 
+        int seq = ++_onlineSeq; // 🟠-7：本代请求号（迟到的旧结果整批丢弃）
         IsSearchingOnline = true;
         try
         {
             List<OnlineTrack> tracks = await _catalog.SearchAsync(SelectedPlatform, OnlineSearchText.Trim());
+            if (seq != _onlineSeq)
+            {
+                return; // 期间用户点了榜单或又搜了一次 → 本次结果已过期
+            }
+
             SearchResults.Clear();
             foreach (OnlineTrack track in tracks)
             {
@@ -236,7 +255,10 @@ public partial class MusicManagerViewModel
         }
         finally
         {
-            IsSearchingOnline = false;
+            if (seq == _onlineSeq)
+            {
+                IsSearchingOnline = false; // 只有最新一代才复位（迟到者不得清掉后一代的"进行中"）
+            }
         }
     }
 
@@ -485,10 +507,16 @@ public partial class MusicManagerViewModel
             return;
         }
 
+        int seq = ++_playlistSeq; // 🟠-7
         IsLoadingPlaylists = true;
         try
         {
             List<OnlinePlaylist> playlists = await _catalog.LoadUserPlaylistsAsync(SelectedPlatform);
+            if (seq != _playlistSeq)
+            {
+                return; // 平台已切换/再次加载 → 本批已过期
+            }
+
             UserPlaylists.Clear();
             foreach (OnlinePlaylist playlist in playlists)
             {
@@ -502,7 +530,10 @@ public partial class MusicManagerViewModel
         }
         finally
         {
-            IsLoadingPlaylists = false;
+            if (seq == _playlistSeq)
+            {
+                IsLoadingPlaylists = false;
+            }
         }
     }
 
@@ -818,10 +849,16 @@ public partial class MusicManagerViewModel
             return;
         }
 
+        int seq = ++_onlineSeq; // 🟠-7：与搜索共用代际（两者写同一个 SearchResults）
         IsSearchingOnline = true;
         try
         {
             List<OnlineTrack> songs = await _catalog.LoadRankSongsAsync(SelectedPlatform, board.Id, 30);
+            if (seq != _onlineSeq)
+            {
+                return; // 期间用户又搜了一次/换了榜 → 本次结果已过期
+            }
+
             SearchResults.Clear();
             foreach (OnlineTrack track in songs)
             {
@@ -841,7 +878,10 @@ public partial class MusicManagerViewModel
         }
         finally
         {
-            IsSearchingOnline = false;
+            if (seq == _onlineSeq)
+            {
+                IsSearchingOnline = false;
+            }
         }
     }
 

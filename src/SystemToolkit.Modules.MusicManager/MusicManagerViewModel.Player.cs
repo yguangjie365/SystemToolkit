@@ -277,6 +277,14 @@ public partial class MusicManagerViewModel
 
         RunOnUi(() =>
         {
+            // 🟠 审查 2026-09-10（🟠-6）：seq 复检必须在 UI 线程内完成——上面的 `seq != _coverSeq`
+            // 是 IO 线程上的判定，RunOnUi 走 BeginInvoke；入队到执行之间用户切歌的话，
+            // 旧封面仍会覆盖新曲显示。
+            if (seq != _coverSeq)
+            {
+                return;
+            }
+
             CurrentCoverImage = image;
             SolidColorBrush accent = image is null ? CoverColorFactory.Neutral : CoverColorFactory.FromBitmap(image);
             CurrentAccentBrush = accent;

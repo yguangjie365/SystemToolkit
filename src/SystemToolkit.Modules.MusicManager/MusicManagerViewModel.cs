@@ -1182,7 +1182,16 @@ public partial class MusicManagerViewModel : ObservableObject
             return;
         }
 
-        RunOnUi(() => ApplyLyrics(doc));
+        // 🟠 审查 2026-09-10（🟠-6）：判等必须放进 lambda 内复检——RunOnUi 走 BeginInvoke
+        // 异步派发，上面的 ReferenceEquals 只在 IO 线程上判定；派发入队到 UI 线程真正执行
+        // 之间用户可能已切歌，旧歌歌词仍会覆盖新曲（TOCTOU 窗口）。
+        RunOnUi(() =>
+        {
+            if (ReferenceEquals(song, _queue.Current))
+            {
+                ApplyLyrics(doc);
+            }
+        });
     }
 
     private void ApplyLyrics(LyricDocument doc)

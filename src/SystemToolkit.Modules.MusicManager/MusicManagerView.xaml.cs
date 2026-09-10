@@ -97,6 +97,10 @@ public partial class MusicManagerView : UserControl
         }
 
         UpdateDiscSpin(); // 重挂后同步黑胶状态（Unloaded 时已暂停；若正在播放需恢复旋转）
+        // 🟠 审查 2026-09-10（🟠-10）：Unloaded 已把水波发射器/呼吸光晕停掉并置 null，
+        // 重挂时须按当前状态重建，否则切回来水波与呼吸光晕都不再出现。
+        UpdateRippleFieldActive();
+        UpdateVinylGlowBreath();
 
         _ = InitializeOnceAsync();
     }
@@ -113,6 +117,17 @@ public partial class MusicManagerView : UserControl
         AccountMenuPopup.IsOpen = false;
         SetKaraokeRenderHook(false); // P0：静态 CompositionTarget.Rendering 必须随卸载解绑，防视图泄漏
         _discSpin?.Pause(DiscHost); // 切走页面：黑胶暂停，避免不可见空转（审查 🟠-1 采纳——修正其论据后落地）
+
+        // 🟠 审查 2026-09-10（🟠-10）：切页必须停掉长驻定时器/动画——否则它们继续在已脱离
+        // 可视树的元素上跑（水波每 900ms new Ellipse + Storyboard、平滑滚动继续
+        // ScrollToVerticalOffset），切页后白耗 CPU、对象图悬挂，且 SpawnRipplePair 异常会
+        // 走 DispatcherUnhandledException。置 null 以便重挂时按状态重建（见 OnLoaded）。
+        _rippleTimer?.Stop();
+        _rippleTimer = null;
+        _scrollTimer?.Stop();
+        _scrollTimer = null;
+        _glowBreath?.Stop(DiscGlow);
+        _glowBreath = null;
     }
 
     /// <summary>
@@ -958,20 +973,30 @@ public partial class MusicManagerView : UserControl
 
     private void OnKaraokeRender(object? sender, EventArgs e)
     {
-        if (!_vm.IsPlaying || _vm.ActiveLyricIndex < 0)
+        // 🟠 审查 2026-09-10（🟠-12）：CompositionTarget.Rendering 是**静态**事件，其回调异常
+        // 走 DispatcherUnhandledException 直接崩进程（R1 纪律：框架/Timer 回调必须整体兜底）。
+        // 本方法只做渲染，失败即跳过本帧（下一帧重试），不得让异常逃逸。
+        try
         {
-            return;
-        }
+            if (!_vm.IsPlaying || _vm.ActiveLyricIndex < 0)
+            {
+                return;
+            }
 
-        double p = _vm.SampleLyricFillProgress();
-        if (Math.Abs(p - _lastFillP) < 0.0015)
+            double p = _vm.SampleLyricFillProgress();
+            if (Math.Abs(p - _lastFillP) < 0.0015)
+            {
+                return; // 抑制无实质变化的帧（暂停/静止时不重绘）
+            }
+
+            _lastFillP = p;
+            ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock, p);
+            ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock, p);
+        }
+        catch (Exception)
         {
-            return; // 抑制无实质变化的帧（暂停/静止时不重绘）
+            // 渲染帧失败：静默跳过（60fps 下不打日志，避免刷屏；下一帧自然重试）
         }
-
-        _lastFillP = p;
-        ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock, p);
-        ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock, p);
     }
 
     private static void ResetKaraokeRow(ref System.Windows.Controls.TextBlock? block)
@@ -999,7 +1024,13 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
-        Brush? baseBrush = text.Foreground; // 本地值未设 → 样式静音色
+        // 🟠 审查 2026-09-10（🟠-9）：**必须先清本地值再读基准色**。上一帧本方法写入的是
+        // LinearGradientBrush；不清掉的话 text.Foreground 读回的是自己写的渐变，
+        // 下面 `baseBrush is not SolidColorBrush` 立即早退 —— 60fps 钩子第二帧起永久自冻结，
+        // 逐字填充实际退化为 100ms（INPC 频率），整套 60fps 基建空转。
+        text.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);
+
+        Brush? baseBrush = text.Foreground; // 清掉本地值后即样式静音色
         if (_vm.PlayerAccentBrush is not SolidColorBrush accent
             || baseBrush is not SolidColorBrush muted)
         {
