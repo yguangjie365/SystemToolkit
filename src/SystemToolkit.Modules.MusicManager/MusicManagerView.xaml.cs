@@ -129,7 +129,27 @@ public partial class MusicManagerView : UserControl
         {
             _vm.SearchOnlineCommand.Execute(null);
             e.Handled = true;
+            return;
         }
+
+        // P3a：Esc 收起搜索历史浮层
+        if (e.Key == Key.Escape && SearchHistoryPopup.IsOpen)
+        {
+            SearchHistoryPopup.IsOpen = false;
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>P3a：搜索框获焦且有历史时浮出下拉（空态 = 不弹，无需占位）。</summary>
+    private void OnOnlineSearchGotFocus(object sender, RoutedEventArgs e)
+    {
+        SearchHistoryPopup.IsOpen = _vm.HasSearchHistory;
+    }
+
+    /// <summary>P3a：点历史项复搜后收起（命令已由 VM 执行）。</summary>
+    private void OnSearchHistoryItemClick(object sender, RoutedEventArgs e)
+    {
+        SearchHistoryPopup.IsOpen = false;
     }
 
     /// <summary>列表选中事件取行 VM：SelectedItem 语义（SelectionChanged 用它正确）。</summary>

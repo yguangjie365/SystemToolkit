@@ -152,9 +152,72 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <TextBox x:Name="OnlineSearchBox" Text="{Binding OnlineSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                         Width="220" Padding="8,5" VerticalContentAlignment="Center" Margin="8,0,0,0"
-                         KeyDown="OnOnlineSearchKeyDown"/>
+                <!-- P3a 搜索历史（方案 B 聚焦下拉）：TextBox 外包 Grid 供 Popup 定位；
+                     StaysOpen=False —— 点击外部由 WPF 自动收起，失焦不做强制关闭（避免与点击抢时序） -->
+                <Grid Margin="8,0,0,0">
+                    <TextBox x:Name="OnlineSearchBox" Text="{Binding OnlineSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                             Width="220" Padding="8,5" VerticalContentAlignment="Center"
+                             KeyDown="OnOnlineSearchKeyDown"
+                             GotFocus="OnOnlineSearchGotFocus"/>
+                    <Popup x:Name="SearchHistoryPopup"
+                           PlacementTarget="{Binding ElementName=OnlineSearchBox}"
+                           Placement="Bottom"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade"
+                           Width="280">
+                        <Border Background="{StaticResource Brush_Surface}"
+                                BorderBrush="{StaticResource Brush_SurfaceAlt}" BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius_MD}"
+                                Margin="0,4,0,0" Padding="6">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#1F2937" Opacity="0.16" BlurRadius="16" ShadowDepth="2"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Grid Margin="8,6,8,4">
+                                    <TextBlock Text="搜索历史" VerticalAlignment="Center"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextMuted}"/>
+                                    <Button Content="清空" HorizontalAlignment="Right"
+                                            Command="{Binding ClearSearchHistoryCommand}"
+                                            AutomationProperties.Name="清空搜索历史">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
+                                        </Button.Style>
+                                    </Button>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding SearchHistory, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Button Grid.Column="0" Content="{Binding Mode=OneWay}"
+                                                        HorizontalContentAlignment="Left"
+                                                        Padding="8,6" Background="Transparent" BorderThickness="0"
+                                                        Foreground="{StaticResource Brush_TextPrimary}"
+                                                        FontSize="{DynamicResource Font_SizeBodySm}"
+                                                        Command="{Binding DataContext.ApplySearchHistoryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding Mode=OneWay}"
+                                                        Click="OnSearchHistoryItemClick"
+                                                        AutomationProperties.Name="搜索历史项"/>
+                                                <Button Grid.Column="1" Content="✕" Width="24" Height="24"
+                                                        Padding="0" Background="Transparent" BorderThickness="0"
+                                                        Foreground="{StaticResource Brush_TextMuted}"
+                                                        Command="{Binding DataContext.RemoveSearchHistoryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding Mode=OneWay}"
+                                                        AutomationProperties.Name="删除该条历史"
+                                                        ToolTip="删除"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
                 <Button Height="32" Content="搜索" Margin="6,0,0,0" Command="{Binding SearchOnlineCommand}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
