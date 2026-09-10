@@ -115,10 +115,18 @@ public sealed partial class FileWebServer
         try
         {
             string json = BuildEnvelope("deviceChange", e.Device, e.ChangeType.ToString());
+
+            // 🟡 审查 2026-09-11（R-1）：**并行**派发而非顺序 await。单条发送虽已带 IoTimeout
+            // （不会永久挂死，区别于 v3 🔴-1 的无界饿死），但顺序循环下 N 个半开连接会把尾延迟
+            // 累加成 N × 3s，期间**所有**浏览器端都收不到推送。并行后最坏只等一个 IoTimeout。
+            // TrySendJsonAsync 自身已吞掉单连接异常，故 WhenAll 不会因个别连接失败而抛出。
+            var sends = new List<Task>();
             foreach (WsClient client in _wsClients.Values)
             {
-                await client.TrySendJsonAsync(json);
+                sends.Add(client.TrySendJsonAsync(json));
             }
+
+            await Task.WhenAll(sends);
         }
         catch (Exception ex)
         {

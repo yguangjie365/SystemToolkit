@@ -375,14 +375,22 @@ public sealed class DeviceDiscoveryService : IDeviceDiscoveryService, IDisposabl
                         continue;
                     if (now - dev.LastSeen >= _offlineTimeout)
                     {
-                        if (_devices.TryRemove(key, out DiscoveredDevice? removed))
+                        // 🟠 审查 2026-09-11（F-4）：**必须按对象身份摘除**，不能只按 key。
+                        // TryGetValue（:374）与 TryRemove 之间，接收路径可能已用新实例替换该键
+                        // （心跳刷新），裸键摘除会摘掉刚刷新的**活设备**，并向订阅者误发 Offline
+                        // → 在线设备从列表消失。
+                        // DiscoveredDevice 是 sealed class 且未重写 Equals → KeyValuePair 比较
+                        // 即引用相等语义（已核实）。单参数 TryRemove(KVP) 语义 = 仅当键值对匹配时移除；
+                        // 写法与 FileWebServer 上传闸归还侧保持一致。
+                        if (_devices.TryRemove(new KeyValuePair<string, DiscoveredDevice>(key, dev)))
                         {
-                            _logger.Info($"设备离线：{removed.Name}（{removed.DisplayAddress}）——超过 {_offlineTimeout.TotalSeconds:F0}s 未收到心跳。");
+                            // 身份校验通过才走到这里 → 被移除的就是 dev 本身
+                            _logger.Info($"设备离线：{dev.Name}（{dev.DisplayAddress}）——超过 {_offlineTimeout.TotalSeconds:F0}s 未收到心跳。");
                             try
                             {
                                 DeviceChanged?.Invoke(this, new DeviceChangeEventArgs
                                 {
-                                    Device = removed,
+                                    Device = dev,
                                     ChangeType = DeviceChangeType.Offline,
                                 });
                             }

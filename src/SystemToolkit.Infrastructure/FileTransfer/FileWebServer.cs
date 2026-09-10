@@ -71,12 +71,24 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     {
         public SemaphoreSlim Semaphore { get; } = new(1, 1);
 
-        /// <summary>持有者 + 等待者计数（Interlocked 维护）。归零才允许摘除。</summary>
+        /// <summary>持有者 + 等待者计数（由 <c>_uploadGateSync</c> 锁维护）。归零才允许摘除。</summary>
         public int RefCount;
     }
 
     /// <summary>上传闸字典（键 = uploadId）；条目生命周期由 <see cref="UploadGate.RefCount"/> 决定。</summary>
     private readonly ConcurrentDictionary<string, UploadGate> _uploadGates = new();
+
+    /// <summary>
+    /// 上传闸的取用/归还互斥（🟠 审查 2026-09-11，F-3）：把「取闸 + 加计数」与「减计数 + 摘除」
+    /// 各自括成原子段。
+    /// <para>
+    /// 原实现是 <c>AddOrUpdate</c> + <c>Interlocked.Increment</c> **两步**，其间存在窗口：
+    /// 在飞的持有者 A 可在此刻把计数减到 0 并摘除该闸，于是后者的 Increment 落在**孤儿对象**上，
+    /// 而下一个到达者会为同一 uploadId **新建一把闸** → 两人各持不同信号量、**并发写同一 .part**。
+    /// 临界区**不含 await**（纯内存操作），故普通 lock 足够。
+    /// </para>
+    /// </summary>
+    private readonly object _uploadGateSync = new();
 
     private WebApplication? _app;
     private string _shareDirectory = string.Empty;
@@ -428,11 +440,14 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 // 🟠 审查 2026-09-11（🟠-1）：闸门改为**引用计数**托管（见 UploadGate 注释）。
                 // 原"失败即 TryRemove"会摘掉仍被排队者持有的闸（B 还在等旧对象），
                 // 新请求随后拿到新闸即可与 B 并发写同一个 .part。
-                UploadGate gate = _uploadGates.AddOrUpdate(
-                    uploadId,
-                    static _ => new UploadGate(),
-                    static (_, existing) => existing);
-                Interlocked.Increment(ref gate.RefCount);
+                UploadGate gate;
+                lock (_uploadGateSync)
+                {
+                    // F-3：取闸与计数必须同处一个临界区——否则在飞持有者可在两步之间摘除该闸
+                    gate = _uploadGates.GetOrAdd(uploadId, static _ => new UploadGate());
+                    gate.RefCount++;
+                }
+
                 try
                 {
                     await gate.Semaphore.WaitAsync(reqCt);
@@ -494,12 +509,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 }
                 finally
                 {
-                    // 🟠 审查 2026-09-11（🟠-1）：引用计数归零才摘除，且只摘「值仍是本对象」的那条
-                    // （TryRemove 的 KeyValuePair 重载做原子比较）——既不摘仍在被使用的闸，
-                    // 也不会误删同键的新一代条目。
-                    if (Interlocked.Decrement(ref gate.RefCount) == 0)
+                    // 🟠-1：引用计数归零才摘除，且只摘「值仍是本对象」的那条
+                    // （TryRemove 的 KeyValuePair 重载做原子比较）。
+                    // F-3：减计数与摘除同处一个临界区——与获取侧配对，消除「摘除仍在被取用的闸」的窗口。
+                    lock (_uploadGateSync)
                     {
-                        _uploadGates.TryRemove(new KeyValuePair<string, UploadGate>(uploadId, gate));
+                        if (--gate.RefCount == 0)
+                        {
+                            _uploadGates.TryRemove(new KeyValuePair<string, UploadGate>(uploadId, gate));
+                        }
                     }
                 }
             }
