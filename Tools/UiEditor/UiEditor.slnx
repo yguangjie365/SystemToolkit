@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/UiEditor.App/UiEditor.App.csproj" />
     <Project Path="src/UiEditor.Core/UiEditor.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">

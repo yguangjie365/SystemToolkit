@@ -46,6 +46,28 @@ public static class SourceMap
         return list;
     }
 
+    /// <summary>解析为作者元素<b>树</b>（含父子层级），供 UI 树与示意式布局预览同源渲染。根被排除时返回 null。</summary>
+    public static SourceNode? BuildTree(string xamlText)
+    {
+        XDocument doc = XDocument.Parse(xamlText, LoadOptions.SetLineInfo);
+        return doc.Root is null || IsExcluded(doc.Root) ? null : BuildNode(doc.Root);
+    }
+
+    private static SourceNode BuildNode(XElement el)
+    {
+        InputElement info = ToElement(el);
+        var children = new List<SourceNode>();
+        foreach (XElement child in el.Elements())
+        {
+            if (!IsExcluded(child))
+            {
+                children.Add(BuildNode(child));
+            }
+        }
+
+        return new SourceNode(info.LocalName, info.Name, info.Line, info.Attributes, children);
+    }
+
     private static void Walk(XElement el, bool insideExcluded, List<InputElement> outList)
     {
         bool excluded = insideExcluded || IsExcluded(el);

@@ -48,6 +48,26 @@ public class CoreLogicTests
         Assert.Equal(2, body.Line);
     }
 
+    [Fact]
+    public void SourceMap_BuildTree_PreservesHierarchyAndExcludesTemplates()
+    {
+        string xaml =
+            $"<Grid xmlns=\"{Pres}\" xmlns:x=\"{Xns}\">" +
+            "  <Border x:Name=\"Header\">" +
+            "    <Border.Template><ControlTemplate><ContentPresenter x:Name=\"PART_X\"/></ControlTemplate></Border.Template>" +
+            "    <TextBlock x:Name=\"Title\"/>" +
+            "  </Border>" +
+            "</Grid>";
+
+        SourceNode? root = SourceMap.BuildTree(xaml);
+        Assert.NotNull(root);
+        Assert.Equal("Grid", root!.LocalName);
+        SourceNode header = root.Children.Single(c => c.Name == "Header");
+        // 模板内部件不进树；作者子元素保留
+        Assert.DoesNotContain(header.Children, c => c.Name == "PART_X");
+        Assert.Contains(header.Children, c => c.Name == "Title");
+    }
+
     // ───────────── XamlSplicer：字节级、改一处=一行、拒绝非唯一名 ─────────────
     [Fact]
     public void Splicer_SetAttributeByName_ChangesExactlyOneLine()

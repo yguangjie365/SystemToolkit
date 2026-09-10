@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- UI 编辑器主程序（dev 工具）。独立 UiEditor.slnx，不并入产品 SystemToolkit.sln。
+       只引用 UI.Common（取真实令牌包 + ThemeManager）与 UiEditor.Core（纯逻辑）。
+       刻意不引用业务模块程序集：渲染走"示意式布局预览"，与模块的 local/第三方类型解析解耦。 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>UiEditor</AssemblyName>
+    <RootNamespace>UiEditor.App</RootNamespace>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UiEditor.Core\UiEditor.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\src\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />
+  </ItemGroup>
+
+</Project>
