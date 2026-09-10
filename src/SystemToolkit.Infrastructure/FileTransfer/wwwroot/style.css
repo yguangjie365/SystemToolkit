@@ -566,7 +566,27 @@ a {
     background: var(--accent-pressed);
 }
 
-/* 上传任务列表 */
+/* 上传记录汇总条（2026-09-11 新增：记录可清除） */
+.upload-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-md);
+    margin: var(--sp-lg) 0 0;
+}
+
+/* ⚠️ 必须显式声明：display:flex 会盖掉 [hidden] 的默认 display:none，
+   否则列表空了这条还会一直显示 */
+.upload-summary[hidden] {
+    display: none;
+}
+
+.upload-summary__text {
+    margin-right: auto;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 上传任务列表（下方的 margin-top 同时充当汇总条与列表之间的间距） */
 .upload-list {
     margin-top: var(--sp-xl);
     display: flex;
@@ -711,6 +731,28 @@ a {
     display: flex;
     align-items: center;
     gap: var(--sp-sm);
+}
+
+/* 身份角标（主机 / 本机）：与名称同行、胶囊底，不抢视觉但能一眼分辨 */
+.device-card__badge {
+    flex: 0 0 auto;
+    font-size: var(--fs-caption);
+    font-weight: 400;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: var(--r-full);
+    padding: 1px 6px;
+    line-height: 1.5;
+}
+
+/* 名称行内的弱化副信息（如浏览器 IP） */
+.device-card__sub {
+    flex: 0 1 auto;
+    font-size: var(--fs-caption);
+    font-weight: 400;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .device-card__addr {

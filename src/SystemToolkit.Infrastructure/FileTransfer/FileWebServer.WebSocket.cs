@@ -86,8 +86,10 @@ public sealed partial class FileWebServer
             await client.SendJsonAsync(
                 BuildEnvelope("browserList", BuildBrowserList()),
                 ctx.RequestAborted);
+            // clientId = 本连接的 id：前端据此在 browserList 里认出「哪一条是我」
+            // （手机端需要知道"浏览器那条里哪个是我"，而不是把电脑当成"本机"）
             await client.SendJsonAsync(
-                BuildEnvelope("serverInfo", new { host = _lanIp }),
+                BuildEnvelope("serverInfo", new { host = _lanIp, clientId = id }),
                 ctx.RequestAborted);
 
             // 已在线的其它浏览器需要看到本连接加入（在线数变化）——不推的话，
@@ -142,12 +144,14 @@ public sealed partial class FileWebServer
 
     /// <summary>
     /// 在线浏览器快照。前端 <c>renderDevices</c> 读 <c>ipAddress</c> 与 <c>connectedAt</c>
-    /// （后者经 <c>formatTime</c> 显示为「连接于 …」）。
+    /// （后者经 <c>formatTime</c> 显示为「连接于 …」）；<c>Id</c> 供前端与 <c>serverInfo.clientId</c>
+    /// 比对，认出「哪一条是我自己」并打上「本机」角标（2026-09-11 主人反馈：
+    /// 原先服务端合成的电脑条目被打成「本机」，在手机上极易误会成手机自己）。
     /// </summary>
     private IReadOnlyList<BrowserInfo> BuildBrowserList() =>
-        _wsClients.Values
-            .OrderBy(c => c.ConnectedAt)
-            .Select(c => new BrowserInfo(c.IpAddress, c.ConnectedAt))
+        _wsClients
+            .OrderBy(kv => kv.Value.ConnectedAt)
+            .Select(kv => new BrowserInfo(kv.Key, kv.Value.IpAddress, kv.Value.ConnectedAt))
             .ToList();
 
     /// <summary>
@@ -199,8 +203,8 @@ public sealed partial class FileWebServer
         await Task.WhenAll(sends);
     }
 
-    /// <summary>在线浏览器条目（序列化后为 camelCase：<c>ipAddress</c> / <c>connectedAt</c>）。</summary>
-    private sealed record BrowserInfo(string IpAddress, DateTimeOffset ConnectedAt);
+    /// <summary>在线浏览器条目（序列化后为 camelCase：<c>id</c> / <c>ipAddress</c> / <c>connectedAt</c>）。</summary>
+    private sealed record BrowserInfo(Guid Id, string IpAddress, DateTimeOffset ConnectedAt);
 
     private static string BuildEnvelope(string type, object? payload, string? changeType = null)
     {

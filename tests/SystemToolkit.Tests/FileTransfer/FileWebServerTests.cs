@@ -305,10 +305,15 @@ public class FileWebServerTests
             string second = await ReceiveTextAsync(ws);
             Assert.Contains("\"type\":\"browserList\"", second);
             Assert.Contains("\"connectedAt\"", second);
+            // id：前端与 serverInfo.clientId 比对，认出「哪条浏览器是我」并打「本机」角标
+            // （用 `"id":"` 精确匹配，避免被 ipAddress 之类的子串误判）
+            Assert.Contains("\"id\":\"", second);
 
             // 第三帧：服务器信息（前端 serverInfo 用于渲染主机名）
             string third = await ReceiveTextAsync(ws);
             Assert.Contains("\"type\":\"serverInfo\"", third);
+            // clientId：手机端据此把「本机」标在自己那条浏览器上，而不是标在电脑上
+            Assert.Contains("\"clientId\":\"", third);
 
             // 心跳：ping → pong
             await ws.SendAsync(

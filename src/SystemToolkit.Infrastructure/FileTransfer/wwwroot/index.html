@@ -66,7 +66,8 @@
                         </svg>
                     </div>
                     <div>点击选择文件或拖入此区域</div>
-                    <div class="upload-zone__hint">支持多文件，中断后重新选择同一文件即可续传</div>
+                    <div class="upload-zone__hint">支持多文件；若浏览器的选择器只能选一个，可多次选择，任务会累加</div>
+                    <div class="upload-zone__hint">中断后重新选择同一文件即可续传</div>
                     <div class="upload-zone__hint">大文件传输时请保持手机屏幕常亮</div>
                     <div class="upload-zone__actions">
                         <button type="button" class="upload-zone__btn" id="pickBtn">
@@ -80,6 +81,12 @@
                            style="display:none" aria-hidden="true" />
                     <input type="file" id="dirInput" multiple webkitdirectory directory
                            style="display:none" aria-hidden="true" />
+                </div>
+
+                <!-- 上传记录汇总 + 清除（2026-09-11 主人反馈：记录只增不减，需要能清掉） -->
+                <div class="upload-summary" id="uploadSummary" hidden>
+                    <span class="upload-summary__text" id="uploadSummaryText"></span>
+                    <button type="button" class="toolbar-btn" id="clearUploadsBtn">清除记录</button>
                 </div>
 
                 <!-- 上传任务列表 -->

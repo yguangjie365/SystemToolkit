@@ -51,6 +51,9 @@
         pickDirBtn: $("pickDirBtn"),
         dirInput: $("dirInput"),
         uploadList: $("uploadList"),
+        uploadSummary: $("uploadSummary"),
+        uploadSummaryText: $("uploadSummaryText"),
+        clearUploadsBtn: $("clearUploadsBtn"),
         multiToggleBtn: $("multiToggleBtn"),
         multiBar: $("multiBar"),
         multiCount: $("multiCount"),
@@ -77,6 +80,9 @@
         devices: [],
         // 在线浏览器（WebSocket 推送累积）
         browsers: [],
+        // 本连接的 id（服务端 serverInfo 下发）：用于在 browsers 里认出「哪一条是我」，
+        // 从而把「本机」角标打在**手机自己**那条上，而不是服务端合成的电脑条目上
+        clientId: null,
         // WebSocket 实例
         ws: null,
         // WebSocket 是否为用户主动关闭
@@ -560,6 +566,7 @@
         const taskId = "up-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
         const taskEl = createUploadTaskElement(taskId, file);
         dom.uploadList.appendChild(taskEl);
+        refreshUploadSummary(); // 新任务入列 → 汇总条出现
 
         const statusEl = taskEl.querySelector(".upload-task__status");
         const barEl = taskEl.querySelector(".progress__bar");
@@ -579,6 +586,7 @@
             statusEl.textContent = "失败";
             statusEl.className = "upload-task__status is-fail";
             showToast(file.name + "：" + msg, "error");
+            refreshUploadSummary(); // 状态落定 → 汇总条「N 个已完成」+1
         };
 
         try {
@@ -617,6 +625,7 @@
             barEl.style.width = "100%";
             statusEl.textContent = "完成";
             statusEl.className = "upload-task__status is-done";
+            refreshUploadSummary(); // 状态落定 → 汇总条「N 个已完成」+1
             if (state.activeTab === "browse") {
                 fetchFiles(state.currentPath);
             }
@@ -735,6 +744,39 @@
     }
 
     /**
+     * 刷新上传记录汇总条。列表为空时整条隐藏。
+     * 2026-09-11 主人反馈：上传记录只增不减（不持久化、刷新页面才清），需要可见的清理入口。
+     */
+    function refreshUploadSummary() {
+        if (!dom.uploadSummary) return;
+        const tasks = Array.from(dom.uploadList.querySelectorAll(".upload-task"));
+        const settled = tasks.filter((el) =>
+            el.querySelector(".upload-task__status.is-done, .upload-task__status.is-fail")).length;
+
+        dom.uploadSummary.hidden = tasks.length === 0;
+        dom.uploadSummaryText.textContent = settled > 0
+            ? settled + " 个已完成"
+            : tasks.length + " 个进行中";
+    }
+
+    /**
+     * 清除已完成/失败的上传记录。**进行中的任务不动**——那条背后有正在跑的分块循环，
+     * 移掉元素只会让用户失去进度反馈（要中止应该走取消逻辑，不是删 DOM）。
+     */
+    function clearSettledUploads() {
+        let removed = 0;
+        dom.uploadList.querySelectorAll(".upload-task").forEach((el) => {
+            if (el.querySelector(".upload-task__status.is-done, .upload-task__status.is-fail")) {
+                el.remove();
+                removed++;
+            }
+        });
+
+        refreshUploadSummary();
+        showToast(removed > 0 ? "已清除 " + removed + " 条上传记录" : "没有可清除的记录", "info");
+    }
+
+    /**
      * 初始化上传区域事件
      */
     function initUploadZone() {
@@ -750,6 +792,9 @@
             handleFiles(e.target.files);
             e.target.value = ""; // 允许重复选择同一文件
         });
+
+        // 清除已完成/失败的上传记录（进行中的保留）
+        dom.clearUploadsBtn.addEventListener("click", clearSettledUploads);
 
         // 多选打包下载
         dom.multiToggleBtn.addEventListener("click", () => {
@@ -853,8 +898,10 @@
         // ===== 局域网设备分区 =====
         if (state.devices.length > 0) {
             var devHeader = document.createElement("div");
-            devHeader.style.cssText = "font-size:var(--fs-caption);color:var(--text-muted);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px;";
-            devHeader.textContent = "局域网设备（" + state.devices.length + "）";
+            // 分区标题改为「电脑」：这一区放的是跑服务的电脑 + 局域网内其它装了本应用的电脑，
+            // 原来叫「局域网设备」与标题行「在线设备」语义打架（2026-09-11 主人反馈）
+            devHeader.style.cssText = "font-size:var(--fs-caption);color:var(--text-muted);margin:12px 0 6px;letter-spacing:0.5px;";
+            devHeader.textContent = "电脑（" + state.devices.length + "）";
             frag.appendChild(devHeader);
         }
 
@@ -870,7 +917,9 @@
                 '<div class="device-card__avatar" aria-hidden="true">' + escapeHtml(initial) + '</div>'
                 + '<div class="device-card__body">'
                 + '  <div class="device-card__name">' + escapeHtml(dev.name || "未知设备")
-                + (dev.isLocal ? ' <span style="color:var(--accent);font-size:var(--fs-caption);">本机</span>' : '')
+                // 「主机」而非「本机」：这条是**服务端合成的电脑自身**，在手机上看「本机」
+                // 会被当成手机自己（2026-09-11 主人反馈）；「本机」留给浏览器那条。
+                + (dev.isLocal ? ' <span class="device-card__badge">主机</span>' : '')
                 + '</div>'
                 + '  <div class="device-card__addr">' + escapeHtml(dev.displayAddress || (dev.ipAddress + ":" + dev.transferPort)) + '</div>'
                 + '</div>'
@@ -905,7 +954,11 @@
                 + '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>'
                 + '</div>'
                 + '<div class="device-card__body">'
-                + '  <div class="device-card__name">浏览器 <span style="color:var(--text-muted);font-size:var(--fs-caption);font-weight:400;">' + escapeHtml(br.ipAddress || "") + '</span></div>'
+                + '  <div class="device-card__name">浏览器'
+                // 「本机」打在**手机自己**那条上：服务端 serverInfo 下发的 clientId
+                // 与 browserList 条目的 id 比对（2026-09-11 主人反馈）
+                + (br.id && br.id === state.clientId ? ' <span class="device-card__badge">本机</span>' : '')
+                + ' <span class="device-card__sub">' + escapeHtml(br.ipAddress || "") + '</span></div>'
                 + '  <div class="device-card__addr">连接于 ' + formatTime(br.connectedAt) + '</div>'
                 + '</div>'
                 + '<div class="device-card__status">'
@@ -1056,9 +1109,15 @@
                 break;
             }
             case "serverInfo": {
-                // 服务器信息推送
+                // 服务器信息推送（host + 本连接 id）
                 if (msg.payload && msg.payload.host) {
                     dom.hostInfo.textContent = msg.payload.host;
+                }
+                // clientId 到达得比 browserList 晚（首帧三连：deviceList → browserList →
+                // serverInfo），故拿到后补渲染一次，把「本机」角标标到手机自己那条浏览器上
+                if (msg.payload && msg.payload.clientId) {
+                    state.clientId = msg.payload.clientId;
+                    renderDevices();
                 }
                 break;
             }
