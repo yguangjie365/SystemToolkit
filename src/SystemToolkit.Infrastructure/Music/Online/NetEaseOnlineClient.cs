@@ -28,6 +28,16 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
     private readonly HttpClient _http;
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// 完整 EAPI 签名的「首请求打印」开关（🟡 审查 2026-09-10）。
+    /// <para>
+    /// 原注释声称"只在第一次请求时打印一次完整 payloadText（避免反复刷屏）"，但代码里
+    /// 没有任何门——每次 EAPI 请求（含二维码轮询每 2s 一次）都会全量打印。
+    /// <see cref="Interlocked"/> 保证并发下确实只打一次。
+    /// </para>
+    /// </summary>
+    private int _eapiSignatureLogged;
+
     /// <inheritdoc />
     public OnlineProvider Provider => OnlineProvider.NetEase;
 
@@ -1471,7 +1481,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         // 只在第一次请求时打印一次完整 payloadText（避免反复刷屏）；后续只打印 path+code。
         // payloadText 里包含 header JSON（含 buildver/requestId），两端同 requestId 就能精确比对。
         // 审查 Y16（2026-09-10）：不再打印 headerCookiePreview（cookie 头内容），只留 requestId 比对所需的签名摘要
-        _logger.Info($"[NetEase] EAPI 请求签名({apiPath}): payloadText={probe.payloadText} digestSource={probe.digestSource} digest={probe.digest} dataLen={probe.data.Length} encryptedLen={encrypted.Length} userCookieEmpty={string.IsNullOrEmpty(userCookie)}");
+        if (Interlocked.Exchange(ref _eapiSignatureLogged, 1) == 0)
+        {
+            _logger.Info($"[NetEase] EAPI 请求签名({apiPath}): payloadText={probe.payloadText} digestSource={probe.digestSource} digest={probe.digest} dataLen={probe.data.Length} encryptedLen={encrypted.Length} userCookieEmpty={string.IsNullOrEmpty(userCookie)}");
+        }
+        // 🟡-19：后续请求不再打印（这正是上方注释的原意；需再取一份完整签名时重启进程即可）
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         if (!string.IsNullOrEmpty(mergedCookie))
