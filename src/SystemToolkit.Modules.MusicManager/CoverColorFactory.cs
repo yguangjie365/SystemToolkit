@@ -51,10 +51,18 @@ public static class CoverColorFactory
     /// <summary>位图 → 主色刷（下采样像素后走 <see cref="PaletteMath"/>；冻结以便多线程安全）。</summary>
     public static SolidColorBrush FromBitmap(BitmapSource source)
     {
-        int stride = source.PixelWidth * 4;
-        byte[] pixels = new byte[stride * source.PixelHeight];
-        source.CopyPixels(pixels, stride, 0);
-        PaletteMath.Rgb rgb = PaletteMath.PickDominant(pixels, source.PixelWidth * source.PixelHeight);
+        // 🟡 审查 2026-09-10（🟡-24）：stride 按 Bgra32（4 字节/像素）计算，
+        // 源若不是 Bgra32（索引色 GIF、Gray8、Rgb24、带 Alpha 的 Pbgra32 等都是不同布局），
+        // CopyPixels 会因参数与实际像素格式不符抛 ArgumentException。
+        // 统一先转 Bgra32 再读——转换有开销，但对封面这种一次性操作可忽略。
+        BitmapSource bgra = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+
+        int stride = bgra.PixelWidth * 4;
+        byte[] pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        PaletteMath.Rgb rgb = PaletteMath.PickDominant(pixels, bgra.PixelWidth * bgra.PixelHeight);
         return Create(rgb.R, rgb.G, rgb.B);
     }
 

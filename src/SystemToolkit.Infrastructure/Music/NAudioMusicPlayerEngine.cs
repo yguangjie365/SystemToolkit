@@ -206,6 +206,15 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
             {
                 TrackEnded?.Invoke(finished);
             }
+
+            // 🟡 审查 2026-09-10（🟡-23）**部分修复**：播完立即释放 reader（文件流句柄）。
+            // 🔴 为什么不连 output 一起 Dispose：本回调由 NAudio 触发，在其中调用
+            // WaveOutEvent.Stop()/Dispose() 是否与播放线程互相等待（死锁）**未能确证**——
+            // 查证尝试（读 NAudio 仓库 raw 源码）三次均 404。按「不确证不动底层并发」纪律，
+            // output 保持既有的「下一次 PlayAsync 经 StopInternal 回收」路径，
+            // 此处只做无争议、零风险的 reader 释放。
+            _reader?.Dispose();
+            _reader = null;
         }
         else if (_state != PlayState.Stopped)
         {

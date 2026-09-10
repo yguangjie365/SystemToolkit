@@ -29,21 +29,45 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public string CatalogError { get; private set; } = string.Empty;
 
-    private void SetError(string message)
+    /// <summary>目录调用代际（🟡 审查 2026-09-10）。</summary>
+    private int _callSeq;
+
+    /// <summary>
+    /// 开启一次目录调用：取代际号并清空错误槽。
+    /// <para>
+    /// 🟡-25：<see cref="CatalogError"/> 是**共享单槽**，而搜索 / 榜单 / 歌单等方法可被并发调用——
+    /// 后发起者的清空会抹掉先发起者刚写入的真实失败（或反之后者的失败被归因给前者）。
+    /// 只有最新一代能写错误槽；过期调用仅记日志、不写槽（其结果本身也会被 VM 层代际丢弃，
+    /// 见 <c>MusicManagerViewModel._onlineSeq</c>）。
+    /// </para>
+    /// </summary>
+    private int BeginCall()
     {
+        int seq = Interlocked.Increment(ref _callSeq);
+        CatalogError = string.Empty;
+        return seq;
+    }
+
+    /// <summary>写入错误槽；仅当本调用仍是最新一代时生效（见 <see cref="BeginCall"/>）。</summary>
+    private void SetError(int seq, string message)
+    {
+        if (seq != Volatile.Read(ref _callSeq))
+        {
+            _log.Warn($"[Music][Catalog] （过期调用，不写错误槽）{message}");
+            return;
+        }
+
         CatalogError = message;
         _log.Warn($"[Music][Catalog] {message}");
     }
 
-    private void ClearError() => CatalogError = string.Empty;
-
     /// <inheritdoc />
     public async Task<List<OnlineTrack>> SearchAsync(OnlineProvider provider, string keywords, int limit = 30, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         if (string.IsNullOrWhiteSpace(keywords))
         {
-            SetError("搜索关键词为空");
+            SetError(seq, "搜索关键词为空");
             return [];
         }
 
@@ -66,7 +90,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"搜索失败：{ex.Message}");
+            SetError(seq, $"搜索失败：{ex.Message}");
             return [];
         }
     }
@@ -74,7 +98,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlinePlaylist>> LoadUserPlaylistsAsync(OnlineProvider provider, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         try
         {
             // 2026-09-09 修复「QQ 登录后歌单为空」：QQ 客户端 9-3 已实现三层回退的用户歌单
@@ -97,7 +121,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载歌单失败：{ex.Message}");
+            SetError(seq, $"加载歌单失败：{ex.Message}");
             return [];
         }
     }
@@ -105,7 +129,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlineTrack>> LoadPlaylistTracksAsync(OnlineProvider provider, string playlistId, int offset = 0, int limit = 100, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         try
         {
             string cookie = _credentials.GetCookie(provider) ?? string.Empty;
@@ -124,7 +148,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载歌单曲目失败：{ex.Message}");
+            SetError(seq, $"加载歌单曲目失败：{ex.Message}");
             return [];
         }
     }
@@ -132,10 +156,10 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlineTrack>> LoadDailyRecommendSongsAsync(OnlineProvider provider, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         if (provider != OnlineProvider.NetEase || _netEase is null)
         {
-            SetError("每日推荐仅网易云支持");
+            SetError(seq, "每日推荐仅网易云支持");
             return [];
         }
 
@@ -149,7 +173,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载每日推荐失败：{ex.Message}");
+            SetError(seq, $"加载每日推荐失败：{ex.Message}");
             return [];
         }
     }
@@ -157,10 +181,10 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlinePlaylist>> LoadRecommendationsAsync(OnlineProvider provider, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         if (provider != OnlineProvider.NetEase || _netEase is null)
         {
-            SetError("推荐歌单仅网易云支持");
+            SetError(seq, "推荐歌单仅网易云支持");
             return [];
         }
 
@@ -174,7 +198,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载推荐歌单失败：{ex.Message}");
+            SetError(seq, $"加载推荐歌单失败：{ex.Message}");
             return [];
         }
     }
@@ -182,7 +206,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlineRankBoard>> LoadRankListAsync(OnlineProvider provider, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
 
         // 网易云无榜单来源（NexBox netease.rs 亦无对应实现）→ 空结果，UI 整区隐藏（主人 2026-09-10 裁定）
         if (provider != OnlineProvider.QQMusic)
@@ -192,7 +216,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
 
         if (_qq is null)
         {
-            SetError("在线目录服务未就绪");
+            SetError(seq, "在线目录服务未就绪");
             return [];
         }
 
@@ -206,7 +230,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载榜单失败：{ex.Message}");
+            SetError(seq, $"加载榜单失败：{ex.Message}");
             return [];
         }
     }
@@ -214,17 +238,17 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<List<OnlineTrack>> LoadRankSongsAsync(OnlineProvider provider, string rankId, int limit = 30, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
 
         if (provider != OnlineProvider.QQMusic)
         {
-            SetError("该平台不支持榜单");
+            SetError(seq, "该平台不支持榜单");
             return [];
         }
 
         if (_qq is null)
         {
-            SetError("在线目录服务未就绪");
+            SetError(seq, "在线目录服务未就绪");
             return [];
         }
 
@@ -238,7 +262,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"加载榜单歌曲失败：{ex.Message}");
+            SetError(seq, $"加载榜单歌曲失败：{ex.Message}");
             return [];
         }
     }
@@ -246,7 +270,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<OnlineLoginInfo> GetLoginStatusAsync(OnlineProvider provider, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         try
         {
             string cookie = _credentials.GetCookie(provider) ?? string.Empty;
@@ -265,7 +289,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"登录态检测失败：{ex.Message}");
+            SetError(seq, $"登录态检测失败：{ex.Message}");
             return new OnlineLoginInfo { Provider = provider, LoggedIn = false };
         }
     }
@@ -273,7 +297,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     /// <inheritdoc />
     public async Task<OnlineLyrics> GetLyricsAsync(OnlineProvider provider, string songKey, CancellationToken ct = default)
     {
-        ClearError();
+        int seq = BeginCall();
         try
         {
             string cookie = _credentials.GetCookie(provider) ?? string.Empty;
@@ -292,7 +316,7 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
         }
         catch (Exception ex)
         {
-            SetError($"在线歌词加载失败：{ex.Message}");
+            SetError(seq, $"在线歌词加载失败：{ex.Message}");
             return new OnlineLyrics();
         }
     }

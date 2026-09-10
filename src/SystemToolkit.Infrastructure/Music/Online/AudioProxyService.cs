@@ -207,6 +207,10 @@ public sealed class AudioProxyService : IAudioProxyService
             return rawUrl;
         }
 
+        // 🟡 审查 2026-09-10（🟡-22）：此处与 StopAsync 之间存在窗口——刚取到的 port 可能
+        // 在返回的 URL 被消费前端口已停。评估后**不修**：窗口极窄，且失败后果是 NAudio
+        // 拿到连接拒绝 → 走 PlaybackFailed 显式可见（🔴-2 已修），不是静默错误。
+        // 加锁会把「启动/停止」与「URL 消费」耦合起来，反而放大争用面。
         int port = IsRunning ? _port : await StartAsync(ct);
         return $"http://127.0.0.1:{port}/audio?url={Uri.EscapeDataString(rawUrl)}";
     }
@@ -219,6 +223,10 @@ public sealed class AudioProxyService : IAudioProxyService
             return rawUrl;
         }
 
+        // 🟡 审查 2026-09-10（🟡-22）：此处与 StopAsync 之间存在窗口——刚取到的 port 可能
+        // 在返回的 URL 被消费前端口已停。评估后**不修**：窗口极窄，且失败后果是 NAudio
+        // 拿到连接拒绝 → 走 PlaybackFailed 显式可见（🔴-2 已修），不是静默错误。
+        // 加锁会把「启动/停止」与「URL 消费」耦合起来，反而放大争用面。
         int port = IsRunning ? _port : await StartAsync(ct);
         return $"http://127.0.0.1:{port}/cover?url={Uri.EscapeDataString(rawUrl)}";
     }
