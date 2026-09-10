@@ -244,6 +244,119 @@ public class FileWebServerTests
         }
     }
 
+    /// <summary>
+    /// 🟡 审查 2026-09-10（🟡-12）：非法文件名必须在写盘前被拒——覆盖 Windows 保留设备名
+    /// （含带扩展名形式）与非法字符（NUL 字节）。反向验证：去掉 WriteUploadedFileAsync 中
+    /// <c>IsWindowsReservedDeviceName</c> / <c>Path.GetInvalidFileNameChars</c> 两个判定 → 本用例变红。
+    /// </summary>
+    [Theory]
+    [InlineData("CON")]
+    [InlineData("con.txt")]
+    [InlineData("NUL.bin")]
+    [InlineData("COM1.log")]
+    [InlineData("a\u0000b.txt")]
+    public async Task WriteUploadedFile_ReservedDeviceNameOrIllegalChar_Rejected(string badName)
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                server.WriteUploadedFileAsync(badName, new MemoryStream(Encoding.UTF8.GetBytes("x"))));
+
+            // 被拒的名字不得在共享根留下任何文件
+            Assert.Empty(Directory.GetFiles(dir));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 🟡 审查 2026-09-10（🟡-5）：<c>/ws</c> 端点此前在服务端**完全缺失**（前端却在每 3 秒重连）。
+    /// 本用例验证补齐后的契约：带令牌升级成功 → 首帧 <c>deviceList</c> 快照 → 心跳得到 <c>pong</c>。
+    /// 反向验证：移除 <c>app.MapGet("/ws", …)</c> → 升级被 401/404 挡下 → 本用例变红。
+    /// </summary>
+    [Fact]
+    public async Task WebSocket_WithToken_SendsDeviceListSnapshotAndAnswersPing()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var ws = new System.Net.WebSockets.ClientWebSocket();
+            await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={server.Token}"), CancellationToken.None);
+
+            // 首帧：全量设备列表（未接入发现服务时为空数组，但消息本身必须到达）
+            string first = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"deviceList\"", first);
+
+            // 第二帧：服务器信息（前端 serverInfo 用于渲染主机名）
+            string second = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"serverInfo\"", second);
+
+            // 心跳：ping → pong
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes("{\"type\":\"ping\"}"),
+                System.Net.WebSockets.WebSocketMessageType.Text, true, CancellationToken.None);
+            string pong = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"pong\"", pong);
+
+            await ws.CloseAsync(
+                System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>无令牌的 <c>/ws</c> 升级必须被全局令牌中间件挡下（401），不得建立连接。</summary>
+    [Fact]
+    public async Task WebSocket_WithoutToken_Rejected()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var ws = new System.Net.WebSockets.ClientWebSocket();
+            await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(() =>
+                ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws"), CancellationToken.None));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>读一条完整文本消息（首帧快照 / 心跳响应用）。</summary>
+    private static async Task<string> ReceiveTextAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        byte[] buffer = new byte[8192];
+        using var ms = new MemoryStream();
+        while (true)
+        {
+            System.Net.WebSockets.WebSocketReceiveResult result = await ws
+                .ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+            ms.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage)
+            {
+                return Encoding.UTF8.GetString(ms.ToArray());
+            }
+        }
+    }
+
     [Fact]
     public async Task Start_TokenUrlsAndPairCode_GeneratedAsContract()
     {

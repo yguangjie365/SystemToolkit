@@ -33,7 +33,7 @@ namespace SystemToolkit.Infrastructure.FileTransfer;
 /// 令牌不再出现在 URL 与浏览器历史里。旧工程内联的配对码实现已抽取为
 /// <see cref="PairingService"/>（桌面 TCP 通道共用），本类只注入使用，不再自持配对码状态。</para>
 /// </summary>
-public sealed class FileWebServer : IFileWebServer, IDisposable
+public sealed partial class FileWebServer : IFileWebServer, IDisposable
 {
     /// <summary>分块上传的默认块大小：8MB（手机端切片与服务端校验长度用）。</summary>
     private const long ChunkSizeBytes = 8L * 1024 * 1024;
@@ -164,6 +164,10 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
 
         WebApplication app = builder.Build();
 
+        // ── WebSocket 升级支持（🟡 审查 2026-09-10：补上 /ws 实时推送端点）──
+        // 升级请求同样要走下方令牌中间件（/ws 不在免令牌白名单内）
+        app.UseWebSockets();
+
         // ── 安全响应头：全局注入 ──
         app.Use(async (ctx, next) =>
         {
@@ -240,6 +244,9 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
         app.MapGet("/index.html", () => ServeEmbedded("index.html", "text/html; charset=utf-8"));
         app.MapGet("/app.js", () => ServeEmbedded("app.js", "application/javascript; charset=utf-8"));
         app.MapGet("/style.css", () => ServeEmbedded("style.css", "text/css; charset=utf-8"));
+
+        // ── 实时推送（🟡-5）：设备上下线推给已连接浏览器（协议见 FileWebServer.WebSocket.cs）──
+        app.MapGet("/ws", HandleWebSocketAsync);
 
         // ── RESTful API ──
         app.MapGet("/api/files", (string? path) =>
@@ -525,6 +532,13 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
             throw;
         }
 
+        // ── 订阅设备变化 → 推给已连接浏览器（🟡-5；停止时在 StopAsync 退订）──
+        if (_discovery is not null)
+        {
+            _deviceChangedHandler = (_, e) => _ = BroadcastDeviceChangeAsync(e);
+            _discovery.DeviceChanged += _deviceChangedHandler;
+        }
+
         _logger.Info(
             $"Web 文件服务已启动（共享目录 {Path.GetFullPath(ShareRoot)}）。" +
             $"{(_httpsEnabled ? $"HTTPS={_httpsPort} + HTTP={_port} 双监听" : $"HTTP={_port}")}，" +
@@ -582,8 +596,14 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
         Directory.CreateDirectory(root);
 
         // 防目录穿越 + 防空名：只取纯文件名，丢弃任何路径前缀
+        // 🟡 审查 2026-09-10（🟡-12）：补与 SanitizeRelativePath 同口径的校验——原先只查
+        // 空名/./..，漏了非法字符与 Windows 保留设备名（CON/NUL/COM1 及其带扩展名形式，
+        // 如 CON.txt）。这类名字写进目录后会让后续访问抛异常甚至挂起（NUL 设备语义）。
         string safeName = Path.GetFileName(fileName);
-        if (string.IsNullOrWhiteSpace(safeName) || safeName is "." or "..")
+        if (string.IsNullOrWhiteSpace(safeName)
+            || safeName is "." or ".."
+            || safeName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || IsWindowsReservedDeviceName(safeName))
         {
             throw new InvalidOperationException("非法的上传文件名。");
         }
@@ -638,6 +658,10 @@ public sealed class FileWebServer : IFileWebServer, IDisposable
         WebApplication app = _app;
         _app = null;
         // LanUrl 是计算属性（依赖 IsRunning），_app 置空后自动返回空串
+
+        // 实时推送先收尾（🟡-5）：退订设备变化 + 关闭所有 /ws 连接，避免停机后仍在广播
+        await StopWebSocketClientsAsync();
+
         try
         {
             await app.StopAsync();
