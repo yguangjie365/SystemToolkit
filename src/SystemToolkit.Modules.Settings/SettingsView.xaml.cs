@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -34,17 +35,38 @@ public partial class SettingsView : UserControl
             var dialog = new OpenFolderDialog { Title = title };
             return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
         };
+
+        // 主题下拉（ADR-005）：Label 展示、Tag=id；同步当前主题（VM 端对相同值自动短路）
+        ThemeCombo.ItemsSource = SettingsViewModel.ThemeOptions
+            .Select(t => (object)new ComboBoxItem { Content = t.Label, Tag = t.Id })
+            .ToList();
+        foreach (object item in ThemeCombo.Items)
+        {
+            if (item is ComboBoxItem { Tag: string id } && id == SystemToolkit.UI.Common.ThemeManager.CurrentThemeId)
+            {
+                ThemeCombo.SelectedItem = item;
+                break;
+            }
+        }
     }
 
     private void OnSectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // 目前只有一个可用分区；后续新增分区在此切换可见性
-        if (BackupSection is null)
+        if (BackupSection is null || AppearanceSection is null)
         {
             return;
         }
 
         string tag = (SectionList.SelectedItem as ListBoxItem)?.Tag as string ?? "backup";
         BackupSection.Visibility = tag == "backup" ? Visibility.Visible : Visibility.Collapsed;
+        AppearanceSection.Visibility = tag == "appearance" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnThemeComboSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThemeCombo.SelectedItem is ComboBoxItem { Tag: string id })
+        {
+            Vm.SelectedThemeId = id;
+        }
     }
 }

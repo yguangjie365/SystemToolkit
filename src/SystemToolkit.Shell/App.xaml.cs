@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +7,8 @@ using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Backup.Contracts;
 using SystemToolkit.Core.Backup.Services;
 using SystemToolkit.Core.Logging;
+using SystemToolkit.Core.Utilities;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Shell;
 
@@ -53,6 +56,24 @@ public partial class App : Application
         _shellLogger = AppLog.CreateLogger("shell");
         _firstChanceThrottle = new ExceptionLogThrottle(_shellLogger);
         _shellLogger.Info($"=== 启动 === 级别={AppLog.MinimumLevel} 参数={string.Join(' ', e.Args)}");
+
+        // ── 主题应用（ADR-005 双主题）：必须在任何视图/资源解析前替换令牌字典 ──
+        try
+        {
+            ThemeManager.ApplyCurrentForStartup();
+        }
+        catch (Exception themeEx)
+        {
+            _shellLogger.Warn($"主题应用失败（{themeEx.Message}）");
+            try
+            {
+                ThemeManager.Apply(null);
+            }
+            catch
+            {
+                // 兜底失败只能带默认令牌跑
+            }
+        }
 
         // --export-diag：只导出诊断包，不启动主窗口（用户可直接在终端执行）
         if (e.Args.Contains("--export-diag", StringComparer.OrdinalIgnoreCase))

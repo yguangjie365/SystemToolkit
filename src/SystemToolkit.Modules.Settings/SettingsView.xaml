@@ -64,13 +64,14 @@
                              ItemContainerStyle="{StaticResource SettingsNavItem}"
                              SelectedIndex="0" SelectionChanged="OnSectionChanged">
                         <ListBoxItem Content="备份" Tag="backup"/>
-                        <ListBoxItem Content="通用" Tag="general" IsEnabled="False"/>
+                        <ListBoxItem Content="外观" Tag="appearance"/>
                     </ListBox>
                 </DockPanel>
             </Border>
 
-            <!-- 右：备份分区 -->
+            <!-- 右：分区内容（ScrollViewer 单子级 → 外层容器承载各分区） -->
             <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
                 <StackPanel x:Name="BackupSection">
                     <Border Style="{StaticResource ToolCard}" Margin="0,0,0,14">
                         <StackPanel>
@@ -169,6 +170,33 @@
                             </StackPanel>
                         </Grid>
                     </Border>
+                </StackPanel>
+
+                <!-- 外观分区（ADR-005：主题即时切换） -->
+                <StackPanel x:Name="AppearanceSection" Visibility="Collapsed">
+                    <Border Style="{StaticResource ToolCard}">
+                        <StackPanel>
+                            <TextBlock Text="外观" Style="{StaticResource CardTitle}"/>
+                            <TextBlock Text="切换界面主题；立即生效并记住选择。"
+                                       FontSize="{DynamicResource Font_SizeMicro}" Foreground="{StaticResource Brush_TextMuted}"
+                                       Margin="0,2,0,12"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="240"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="界面主题" Style="{StaticResource KvLabel}" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="ThemeCombo" Grid.Column="1" Style="{StaticResource ThemedComboBox}"
+                                          SelectionChanged="OnThemeComboSelection"/>
+                            </Grid>
+
+                            <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{StaticResource Brush_TextSecondary}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

@@ -3,13 +3,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Backup.Services;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.Settings;
 
 /// <summary>
 /// 设置页 VM（2026-09-07 建立，主人裁定：备份设置并入本模块统一管理）。
-/// 当前承载「备份」分区；后续模块（软件/驱动/网络）的设置可继续加分区，
-/// 各分区只依赖 Core 服务，模块之间零引用。
+/// 当前承载「备份」+「外观（主题）」分区；后续模块（软件/驱动/网络）的设置可继续加分区，
+/// 各分区只依赖 Core/UI.Common 服务，模块之间零引用。
 /// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
@@ -25,6 +26,36 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>目录选择回调（View 注入；取消返回 null）。</summary>
     public Func<string, string?>? PickFolder { get; set; }
+
+    // ── 外观（ADR-005：双主题即时切换）──
+
+    /// <summary>可选主题标签（下拉展示）。</summary>
+    public static (string Id, string Label)[] ThemeOptions =>
+        ThemeManager.Themes.Select(t => (t.Id, t.Label)).ToArray();
+
+    [ObservableProperty]
+    private string? _selectedThemeId;
+
+    /// <summary>下拉选中项变化 → 立即应用 + 持久化（无"保存"按钮，符合 NexBox 类工具直觉）。</summary>
+    partial void OnSelectedThemeIdChanged(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == ThemeManager.CurrentThemeId)
+        {
+            return;
+        }
+
+        try
+        {
+            ThemeManager.ApplyAndPersist(value);
+            StatusText = "✅ 主题已切换（立即生效，重启后保持）。";
+            _logger.Info($"[Settings] 主题切换：{value}");
+        }
+        catch (Exception ex)
+        {
+            StatusText = "❌ 主题切换失败：" + ex.Message;
+            _logger.Error("[Settings] 主题切换失败", ex);
+        }
+    }
 
     // ── 备份设置 ──
 

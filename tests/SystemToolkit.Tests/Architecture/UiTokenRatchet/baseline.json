@@ -72,9 +72,9 @@
     "stroke": 0
   },
   "src/SystemToolkit.Modules.Settings/SettingsView.xaml": {
-    "margin": 15,
+    "margin": 17,
     "padding": 0,
-    "width": 11,
+    "width": 13,
     "height": 6,
     "border": 1,
     "stroke": 0
