@@ -439,6 +439,16 @@
             <TextBlock Text="{Binding ScanStatusText}" FontSize="{DynamicResource Font_SizeCaption}"
                        Foreground="{DynamicResource Brush_TextMuted}"
                        Visibility="{Binding ScanStatusText, Converter={StaticResource StrToVis}}"/>
+            <!-- 🟠 审查 2026-09-11（F-1）：在线状态行提到此处**常驻**。
+                 原位置在「态② 在线搜索」的 DockPanel 内（随 IsOnlineSearchView 折叠），
+                 但 OnlineStatusText 有 26 处赋值，其中推荐/榜单/歌单/播放失败均不属于搜索视图
+                 → 用户在后两处失败时状态行正躺在折叠面板里，失败信息零出口
+                 （违反「🔴 不静默」的 UI 面）。与既有 LibraryWarning / ScanStatusText 同处
+                 一个"状态行"区，语义一致；单一绑定点，不会重复显示。 -->
+            <TextBlock Text="{Binding OnlineStatusText, Mode=OneWay}"
+                       FontSize="{DynamicResource Font_SizeCaption}"
+                       Foreground="{DynamicResource Brush_TextMuted}"
+                       Visibility="{Binding OnlineStatusText, Converter={StaticResource StrToVis}}"/>
         </StackPanel>
 
         <!-- 主区：左卡（我的歌单胶囊+内容三态） / 右卡（每日推荐+推荐歌单+Up Next）
@@ -684,10 +694,9 @@
 
                 <!-- 态② 在线搜索结果 -->
                 <DockPanel Visibility="{Binding IsOnlineSearchView, Converter={StaticResource BoolToVis}}">
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding OnlineStatusText, Mode=OneWay}"
-                               FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{DynamicResource Brush_TextMuted}" Margin="2,0,0,6"
-                               Visibility="{Binding OnlineStatusText, Converter={StaticResource StrToVis}}"/>
+                    <!-- 🟠 审查 2026-09-11（F-1）：在线状态行原本在此（态② 内），已提升到
+                         Row1 的常驻状态行区——留在这里时，推荐/榜单/歌单/播放的失败信息
+                         因视图折叠而没有出口。 -->
                     <!-- 审查 P0-3：区域级加载指示（原先只置灰按钮，用户看不出在进行） -->
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource InlineLoadingHint}"
                                Text="搜索中…" Margin="2,0,0,6"

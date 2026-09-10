@@ -1160,6 +1160,11 @@ public partial class MusicManagerViewModel
         OnlineStatusText = $"已退出登录（{provider}），请重新扫码登录";
         _log.Info($"[Music] 用户退出登录（{provider}），本地凭据已清除");
         await RefreshLoginStateAsync();
+        // 🟡 审查 2026-09-11（F-6）：登出必须一并刷新推荐区——否则右栏的每日推荐/推荐歌单/榜单
+        // 仍显示**上一个登录用户**的个性化内容（陈旧，且属隐私面的残留）。
+        // 与 SelectPlatformAsync 的三连刷对齐；LoadRecommendationsAsync 自带 _recommendSeq 代际，
+        // 重复调用安全。
+        await LoadRecommendationsAsync();
         await LoadPlaylistsAsync(); // 歌单面板随登出刷新（未登录态各平台自会给出明确提示）
     }
 
@@ -1181,6 +1186,8 @@ public partial class MusicManagerViewModel
         _credentials.SetCookie(provider, cookie);
         OnlineStatusText = $"登录成功（{provider}），Cookie 已加密保存";
         await RefreshLoginStateAsync();
+        // 🟡 审查 2026-09-11（F-6）：登录成功后拉取**本账号**的个性化推荐（与切平台三连刷对齐）
+        await LoadRecommendationsAsync();
     }
 
     /// <summary>刷新两平台登录态（InitializeAsync 与平台切换时调用；异常在服务层已收敛）。</summary>
