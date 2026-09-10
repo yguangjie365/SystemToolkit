@@ -578,8 +578,7 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             return Results.Ok(new { token = _token, expiresInMinutes });
         });
 
-        app.MapGet("/api/devices", () =>
-            Results.Ok(_discovery?.Devices ?? Array.Empty<DiscoveredDevice>()));
+        app.MapGet("/api/devices", () => Results.Ok(SnapshotDevices()));
 
         _app = app;
         try
@@ -790,6 +789,50 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// 落盘前还会再用 <see cref="PathUtil.IsUnder"/> 复核一次（纵深防御）。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// 设备列表快照 = **本机条目** + UDP 发现到的其它设备。
+    /// <para>
+    /// 【2026-09-11 主人反馈「局域网设备显示 0」】<b>根因</b>：发现服务只收录**其它**设备
+    /// （<c>DeviceDiscoveryService.ProcessDatagram</c> 显式过滤自身广播），故「电脑 + 手机浏览器」
+    /// 这种最常见的单机场景下列表**恒为空**——而前端 <c>renderDevices</c> 一直带有
+    /// <c>dev.isLocal</c> 的「本机」渲染分支（含 <c>is-local</c> 样式与「本机」角标），
+    /// 说明设计上本机本就该在列。此处由服务端合成，<b>不改发现服务的语义</b>：
+    /// <c>FileTransferService.IsKnownPeer</c> 仍只看真实发现结果（不把「自己」当已知对端）。
+    /// </para>
+    /// <para>
+    /// 本机条目的端口填 Web 端口：对手机而言，本机（电脑）唯一可达的入口就是 Web 服务端口，
+    /// 这样 <c>DisplayAddress</c> 与 <c>WebUrl</c> 都指向真实可访问的地址，不会出现 <c>:0</c>。
+    /// <c>LastSeen</c> 每次快照重新取值 → 本机恒在线（不依赖心跳）。
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<DiscoveredDevice> SnapshotDevices()
+    {
+        string localId = _discovery?.LocalDeviceId is { Length: > 0 } id
+            ? id
+            : System.Environment.MachineName;
+
+        var list = new List<DiscoveredDevice>
+        {
+            new()
+            {
+                DeviceId = localId,
+                Name = System.Environment.MachineName,
+                IPAddress = IPAddress.TryParse(_lanIp, out IPAddress? local) ? local : IPAddress.Loopback,
+                TransferPort = _port,
+                WebPort = _port,
+                LastSeen = DateTimeOffset.UtcNow,
+                IsLocal = true,
+            },
+        };
+
+        if (_discovery is not null)
+        {
+            list.AddRange(_discovery.Devices);
+        }
+
+        return list;
+    }
+
     private static string? SanitizeRelativePath(string raw)
     {
         // 🟡 审查 2026-09-11（🟡-2）：单段长度上限（NTFS 255 UTF-16 码元）

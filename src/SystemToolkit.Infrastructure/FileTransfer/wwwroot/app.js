@@ -292,9 +292,10 @@
             listEl.innerHTML = "";
             const empty = document.createElement("div");
             empty.className = "empty-state";
-            empty.innerHTML = '<div class="empty-state__icon" aria-hidden="true">'
-                + '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>'
-                + '</div><div class="empty-state__text">加载失败：' + escapeHtml(err.message) + "</div>";
+            empty.innerHTML = '<div class="empty-state__icon is-warn" aria-hidden="true">'
+                + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>'
+                + '</div><div class="empty-state__text">加载失败：' + escapeHtml(err.message) + "</div>"
+                + '<div class="empty-state__hint">下拉或切换标签页可重试</div>';
             listEl.appendChild(empty);
         }
     }
@@ -327,7 +328,9 @@
         if (files.length === 0) {
             const empty = document.createElement("div");
             empty.className = "empty-state";
-            empty.innerHTML = '<div class="empty-state__text">此目录为空</div>';
+            empty.innerHTML = '<div class="empty-state__icon" aria-hidden="true">'
+                + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 015.5 5h3.1a2.5 2.5 0 012 1l.9 1.3h7A2.5 2.5 0 0121 9.8v6.7a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 16.5V7.5z"/></svg>'
+                + '</div><div class="empty-state__text">此目录为空</div>';
             listEl.appendChild(empty);
             return;
         }
@@ -838,8 +841,9 @@
             const empty = document.createElement("div");
             empty.className = "empty-state";
             empty.innerHTML = '<div class="empty-state__icon" aria-hidden="true">'
-                + '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a15 15 0 0120 0M5.5 15.5a10 10 0 0113 0M9 19a5 5 0 016 0"/><line x1="12" y1="20" x2="12" y2="22"/></svg>'
-                + '</div><div class="empty-state__text">暂无设备或浏览器在线</div>';
+                + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a15 15 0 0120 0M5.5 15.5a10 10 0 0113 0M9 19a5 5 0 016 0"/><line x1="12" y1="20" x2="12" y2="22"/></svg>'
+                + '</div><div class="empty-state__text">暂无设备或浏览器在线</div>'
+                + '<div class="empty-state__hint">电脑端开启「文件互传」后，本机与浏览器会出现在这里</div>';
             listEl.appendChild(empty);
             return;
         }
@@ -874,7 +878,7 @@
                 + '  <span class="status-dot ' + (online ? "is-online" : "is-offline") + '"></span>'
                 + (online ? "在线" : "离线")
                 + '</div>'
-                + (online && safeWebUrl(dev.webUrl)
+                + (online && !dev.isLocal && safeWebUrl(dev.webUrl)
                     ? '<a class="device-card__open" href="' + escapeHtml(safeWebUrl(dev.webUrl)) + '" target="_blank" rel="noopener">打开</a>'
                     : '');
 
@@ -893,14 +897,15 @@
             const card = document.createElement("div");
             card.className = "device-card";
             card.setAttribute("role", "listitem");
-            card.style.borderLeft = "3px solid var(--accent)";
 
+            // 头像底色/前景统一由 .device-card__avatar 提供（2026-09-11 美化：
+            // 原先此处内联 accent 实底，与本机卡的柔和强调色不一致）
             card.innerHTML =
-                '<div class="device-card__avatar" aria-hidden="true" style="background:var(--accent);color:var(--text-on-accent);">'
+                '<div class="device-card__avatar" aria-hidden="true">'
                 + '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>'
                 + '</div>'
                 + '<div class="device-card__body">'
-                + '  <div class="device-card__name">浏览器 <span style="color:var(--text-muted);font-size:var(--fs-caption);">' + escapeHtml(br.ipAddress || "") + '</span></div>'
+                + '  <div class="device-card__name">浏览器 <span style="color:var(--text-muted);font-size:var(--fs-caption);font-weight:400;">' + escapeHtml(br.ipAddress || "") + '</span></div>'
                 + '  <div class="device-card__addr">连接于 ' + formatTime(br.connectedAt) + '</div>'
                 + '</div>'
                 + '<div class="device-card__status">'

@@ -294,13 +294,21 @@ public class FileWebServerTests
             using var ws = new System.Net.WebSockets.ClientWebSocket();
             await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={server.Token}"), CancellationToken.None);
 
-            // 首帧：全量设备列表（未接入发现服务时为空数组，但消息本身必须到达）
+            // 首帧：全量设备列表——**至少含本机条目**（2026-09-11「局域网设备显示 0」的修复点：
+            // 发现服务只收录其它设备，单机场景下列表恒空、连服务器自己都不显示）
             string first = await ReceiveTextAsync(ws);
             Assert.Contains("\"type\":\"deviceList\"", first);
+            Assert.Contains("\"isLocal\":true", first);
 
-            // 第二帧：服务器信息（前端 serverInfo 用于渲染主机名）
+            // 第二帧：在线浏览器列表（含当前这条连接自己）——修复前服务端从不推送该消息，
+            // 前端 state.browsers 恒空 → 手机端「局域网设备 0」
             string second = await ReceiveTextAsync(ws);
-            Assert.Contains("\"type\":\"serverInfo\"", second);
+            Assert.Contains("\"type\":\"browserList\"", second);
+            Assert.Contains("\"connectedAt\"", second);
+
+            // 第三帧：服务器信息（前端 serverInfo 用于渲染主机名）
+            string third = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"serverInfo\"", third);
 
             // 心跳：ping → pong
             await ws.SendAsync(
@@ -310,6 +318,46 @@ public class FileWebServerTests
             Assert.Contains("\"type\":\"pong\"", pong);
 
             await ws.CloseAsync(
+                System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 第二个浏览器连上时，第一个必须收到「在线浏览器」全量广播且数量为 2
+    /// ——2026-09-11 补的服务端欠账（此前 <c>browserList</c> 从不推送）。
+    /// </summary>
+    [Fact]
+    public async Task WebSocket_SecondClientJoin_BroadcastsBrowserListToFirst()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var first = new System.Net.WebSockets.ClientWebSocket();
+            await first.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={server.Token}"), CancellationToken.None);
+            // 消耗首帧三连：deviceList / browserList / serverInfo
+            await ReceiveTextAsync(first);
+            await ReceiveTextAsync(first);
+            await ReceiveTextAsync(first);
+
+            using var second = new System.Net.WebSockets.ClientWebSocket();
+            await second.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={server.Token}"), CancellationToken.None);
+
+            // 第一个连接收到「有新人加入」的广播：类型正确 + 含两条浏览器记录
+            string pushed = await ReceiveTextAsync(first);
+            Assert.Contains("\"type\":\"browserList\"", pushed);
+            Assert.Equal(2, pushed.Split("\"ipAddress\"").Length - 1);
+
+            await first.CloseAsync(
+                System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            await second.CloseAsync(
                 System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
         }
         finally
@@ -814,9 +862,11 @@ public class FileWebServerTests
     }
 
     [Fact]
-    public async Task Api_Devices_WithoutDiscovery_ReturnsEmptyArray()
+    public async Task Api_Devices_WithoutDiscovery_StillReturnsLocalDevice()
     {
-        // /api/devices 端点随移植保留；未注入设备发现服务时返回空列表而不是报错
+        // 2026-09-11 主人反馈「局域网设备显示 0」：设备发现服务只收录**其它**设备
+        // （ProcessDatagram 显式过滤自身广播），单机场景下列表恒空——连服务器自己都看不到。
+        // 故本机条目由服务端合成，**不依赖**发现服务是否注入。
         string dir = NewTempDir();
         int port = FreeTcpPort();
         try
@@ -827,7 +877,17 @@ public class FileWebServerTests
             using var http = new HttpClient();
             HttpResponseMessage resp = await http.GetAsync($"http://localhost:{port}/api/devices?t={server.Token}");
             resp.EnsureSuccessStatusCode();
-            Assert.Equal("[]", (await resp.Content.ReadAsStringAsync()).Trim());
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal(1, doc.RootElement.GetArrayLength());
+
+            JsonElement local = doc.RootElement[0];
+            // isLocal 前端据此渲染「本机」角标、隐藏「打开」按钮（点开等同刷新当前页）
+            Assert.True(local.GetProperty("isLocal").GetBoolean());
+            Assert.Equal(System.Environment.MachineName, local.GetProperty("name").GetString());
+            // 端口必须是 Web 端口：手机访问电脑只走这个入口，填 0 会显示成 "192.168.x.x:0"
+            Assert.Equal(port, local.GetProperty("transferPort").GetInt32());
+            Assert.True(local.GetProperty("isOnline").GetBoolean());
         }
         finally
         {

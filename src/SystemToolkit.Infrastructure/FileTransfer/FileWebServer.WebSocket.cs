@@ -23,6 +23,13 @@ namespace SystemToolkit.Infrastructure.FileTransfer;
 /// ——前端读的是 <c>deviceId</c> / <c>isOnline</c> 这类小驼峰字段。
 /// </para>
 /// <para>
+/// <b>三类推送</b>：<c>deviceList</c>（设备全量快照，含<b>本机</b>条目）、
+/// <c>browserList</c>（在线浏览器全量，含当前这台）、<c>serverInfo</c>（服务器地址）。
+/// <c>browserList</c> 是 2026-09-11 补的——此前服务端从不推送它，而前端
+/// <c>state.browsers</c> 只由该消息填充，导致「局域网设备 0」里连**当前浏览器自己**都不显示。
+/// 连接加入/离开都会重推全量（各浏览器据此互相看见）。
+/// </para>
+/// <para>
 /// <b>安全</b>：<c>/ws</c> 不在免令牌白名单内，沿用全局令牌中间件——升级请求必须带
 /// <c>?t=&lt;token&gt;</c>，未授权连接在中间件层即被 401 挡下，不到达本端点。
 /// </para>
@@ -65,7 +72,8 @@ public sealed partial class FileWebServer
         }
 
         using WebSocket socket = await ctx.WebSockets.AcceptWebSocketAsync();
-        var client = new WsClient(socket);
+        string clientIp = ctx.Connection.RemoteIpAddress?.ToString() ?? "未知地址";
+        var client = new WsClient(socket, clientIp, DateTimeOffset.UtcNow);
         var id = Guid.NewGuid();
         _wsClients[id] = client;
 
@@ -73,11 +81,18 @@ public sealed partial class FileWebServer
         {
             // 首帧：前端据此渲染初始列表（此后只收增量）
             await client.SendJsonAsync(
-                BuildEnvelope("deviceList", _discovery?.Devices ?? Array.Empty<DiscoveredDevice>()),
+                BuildEnvelope("deviceList", SnapshotDevices()),
+                ctx.RequestAborted);
+            await client.SendJsonAsync(
+                BuildEnvelope("browserList", BuildBrowserList()),
                 ctx.RequestAborted);
             await client.SendJsonAsync(
                 BuildEnvelope("serverInfo", new { host = _lanIp }),
                 ctx.RequestAborted);
+
+            // 已在线的其它浏览器需要看到本连接加入（在线数变化）——不推的话，
+            // 先连的浏览器永远停在它连接那一刻的列表长度。排除自己：首帧已含自己。
+            await BroadcastBrowserListAsync(excludeId: id);
 
             byte[] buffer = new byte[4096];
             while (socket.State == WebSocketState.Open)
@@ -105,6 +120,9 @@ public sealed partial class FileWebServer
         {
             _wsClients.TryRemove(id, out _);
             await client.CloseAsync();
+
+            // 本连接已移出集合 → 重推全量，其余浏览器看到在线数下降
+            await BroadcastBrowserListAsync();
         }
     }
 
@@ -114,25 +132,75 @@ public sealed partial class FileWebServer
         // 本方法由事件回调 fire-and-forget 调用：整体兜底，广播失败不得逃逸到设备发现线程
         try
         {
-            string json = BuildEnvelope("deviceChange", e.Device, e.ChangeType.ToString());
-
-            // 🟡 审查 2026-09-11（R-1）：**并行**派发而非顺序 await。单条发送虽已带 IoTimeout
-            // （不会永久挂死，区别于 v3 🔴-1 的无界饿死），但顺序循环下 N 个半开连接会把尾延迟
-            // 累加成 N × 3s，期间**所有**浏览器端都收不到推送。并行后最坏只等一个 IoTimeout。
-            // TrySendJsonAsync 自身已吞掉单连接异常，故 WhenAll 不会因个别连接失败而抛出。
-            var sends = new List<Task>();
-            foreach (WsClient client in _wsClients.Values)
-            {
-                sends.Add(client.TrySendJsonAsync(json));
-            }
-
-            await Task.WhenAll(sends);
+            await BroadcastJsonAsync(BuildEnvelope("deviceChange", e.Device, e.ChangeType.ToString()));
         }
         catch (Exception ex)
         {
             _logger.Warn($"[FileWebServer] 设备变化广播失败：{ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 在线浏览器快照。前端 <c>renderDevices</c> 读 <c>ipAddress</c> 与 <c>connectedAt</c>
+    /// （后者经 <c>formatTime</c> 显示为「连接于 …」）。
+    /// </summary>
+    private IReadOnlyList<BrowserInfo> BuildBrowserList() =>
+        _wsClients.Values
+            .OrderBy(c => c.ConnectedAt)
+            .Select(c => new BrowserInfo(c.IpAddress, c.ConnectedAt))
+            .ToList();
+
+    /// <summary>
+    /// 在线浏览器列表变化（有连接加入或离开）→ 重推**全量**给所有连接。
+    /// <para>
+    /// 2026-09-11 新增：此前服务端从不推送 <c>browserList</c>，前端 <c>state.browsers</c> 恒空，
+    /// 于是手机端「局域网设备 0」——连**当前这个浏览器自己**都不在列表里。
+    /// 推全量而非增量：连接数是个位数，全量让各端天然最终一致，不需要维护差量状态。
+    /// </para>
+    /// </summary>
+    /// <param name="excludeId">
+    /// 可选的排除连接（新连接加入时传自己）：该连接的首帧已经带过含自己的最新列表，
+    /// 再推一次纯属冗余，且会打乱「首帧三连」的帧序（前端与测试都按序依赖）。
+    /// </param>
+    private async Task BroadcastBrowserListAsync(Guid? excludeId = null)
+    {
+        try
+        {
+            await BroadcastJsonAsync(BuildEnvelope("browserList", BuildBrowserList()), excludeId);
+        }
+        catch (Exception ex)
+        {
+            // 广播失败不影响连接自身生命周期（下次有人进出时会再推一次）
+            _logger.Warn($"[FileWebServer] 在线浏览器广播失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 并行派发同一消息给所有连接（TrySendJsonAsync 自身已吞掉单连接异常）。
+    /// <para>
+    /// 🟡 审查 2026-09-11（R-1）：**并行**而非顺序 await。单条发送虽已带 IoTimeout
+    /// （不会永久挂死，区别于 v3 🔴-1 的无界饿死），但顺序循环下 N 个半开连接会把尾延迟
+    /// 累加成 N × 3s，期间**所有**浏览器端都收不到推送。并行后最坏只等一个 IoTimeout。
+    /// </para>
+    /// </summary>
+    private async Task BroadcastJsonAsync(string json, Guid? excludeId = null)
+    {
+        var sends = new List<Task>();
+        foreach ((Guid id, WsClient client) in _wsClients)
+        {
+            if (excludeId == id)
+            {
+                continue;
+            }
+
+            sends.Add(client.TrySendJsonAsync(json));
+        }
+
+        await Task.WhenAll(sends);
+    }
+
+    /// <summary>在线浏览器条目（序列化后为 camelCase：<c>ipAddress</c> / <c>connectedAt</c>）。</summary>
+    private sealed record BrowserInfo(string IpAddress, DateTimeOffset ConnectedAt);
 
     private static string BuildEnvelope(string type, object? payload, string? changeType = null)
     {
@@ -175,8 +243,14 @@ public sealed partial class FileWebServer
     /// 单个推送连接。<b>发送必须串行</b>——WebSocket 不允许并发的 <c>SendAsync</c>
     /// （设备广播与心跳应答可能同时写同一连接），故内置信号量串行化。
     /// </summary>
-    private sealed class WsClient(WebSocket socket)
+    private sealed class WsClient(WebSocket socket, string ipAddress, DateTimeOffset connectedAt)
     {
+        /// <summary>对端 IP（「在线浏览器」列表展示用）。</summary>
+        public string IpAddress { get; } = ipAddress;
+
+        /// <summary>连接建立时刻（列表展示为「连接于 …」，同时作为稳定排序键）。</summary>
+        public DateTimeOffset ConnectedAt { get; } = connectedAt;
+
         /// <summary>
         /// 单次对外 IO（发送 / 关闭握手）的超时上界。🔴 审查 2026-09-11（🔴-1）。
         /// <para>

@@ -38,6 +38,18 @@ public sealed class DiscoveredDevice
     /// <summary>设备是否在线（心跳超时判定）。</summary>
     public bool IsOnline => DateTimeOffset.UtcNow - LastSeen < OfflineTimeout;
 
+    /// <summary>
+    /// 是否为本机自身。由 <c>FileWebServer</c> 在设备快照中合成。
+    /// <para>
+    /// 【2026-09-11 主人反馈「局域网设备显示 0」】本机不走 UDP 发现——
+    /// <c>DeviceDiscoveryService.ProcessDatagram</c> 显式过滤自身广播；而前端
+    /// <c>renderDevices</c> 一直带有 <c>dev.isLocal</c> 的「本机」渲染分支，
+    /// 说明设计上本机本就该出现在设备列表里。故由服务端补一条，**不改发现服务语义**
+    /// （<c>FileTransferService</c> 的 IsKnownPeer 仍只看真实发现结果）。
+    /// </para>
+    /// </summary>
+    public bool IsLocal { get; init; }
+
     /// <summary>友好显示地址。</summary>
     public string DisplayAddress => $"{IPAddress}:{TransferPort}";
 

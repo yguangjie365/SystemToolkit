@@ -5,7 +5,9 @@
     <!-- 移动端 viewport：适配手机屏幕，禁用缩放避免双指误操作 -->
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#2C4258" /> <!-- PrimaryDeepBrush，与顶栏一致 -->
+    <!-- 顶栏色跟随系统明暗（浅色 PrimaryDeepBrush / 深色深蓝黑） -->
+    <meta name="theme-color" content="#2C4258" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101A24" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="SystemToolkit 文件互传 - 通过浏览器访问电脑共享文件" />
     <meta name="referrer" content="no-referrer" />
     <title>SystemToolkit · 文件互传</title>
@@ -87,8 +89,10 @@
             <!-- ===== 设备列表 ===== -->
             <section class="tab-panel" data-tab="devices" id="panelDevices"
                      aria-label="已发现设备">
+                <!-- 标题口径（2026-09-11 主人选定）：列表含「本机 + 在线浏览器」两类，
+                     故标题用「在线设备」，计数与下方卡片数量严格对应 -->
                 <h2 class="section-title">
-                    局域网设备
+                    在线设备
                     <span class="section-title__count" id="deviceCount">0</span>
                 </h2>
                 <div class="device-list" id="deviceList" role="list"></div>
@@ -105,7 +109,7 @@
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="1.8"
                          stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                        <path d="M3 7.5A2.5 2.5 0 015.5 5h3.1a2.5 2.5 0 012 1l.9 1.3h7A2.5 2.5 0 0121 9.8v6.7a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 16.5V7.5z" />
                     </svg>
                 </span>
                 <span class="tab-bar__label">文件</span>
@@ -117,8 +121,9 @@
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="1.8"
                          stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 20V8M12 8l-5 5M12 8l5 5" />
-                        <path d="M4 4h16" />
+                        <path d="M12 15.5V4" />
+                        <path d="M7.8 8.2L12 4l4.2 4.2" />
+                        <path d="M4 15v3.5A2.5 2.5 0 006.5 21h11a2.5 2.5 0 002.5-2.5V15" />
                     </svg>
                 </span>
                 <span class="tab-bar__label">上传</span>
@@ -130,9 +135,10 @@
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="1.8"
                          stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="2" y="6" width="14" height="10" rx="1.5" />
-                        <rect x="16" y="9" width="6" height="11" rx="1.5" />
-                        <path d="M5 20h8" />
+                        <rect x="2" y="4.5" width="13" height="9" rx="1.8" />
+                        <path d="M9.5 13.5V17" />
+                        <path d="M6.5 17h6" />
+                        <rect x="16.5" y="8" width="5.5" height="9.5" rx="1.8" />
                     </svg>
                 </span>
                 <span class="tab-bar__label">设备</span>

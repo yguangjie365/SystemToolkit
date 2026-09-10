@@ -70,10 +70,53 @@
     --shadow-tab: 0 -2px 10px rgba(63, 92, 120, 0.08);
     --shadow-toast: 0 4px 14px rgba(63, 92, 120, 0.18);
 
+    /* 顶栏渐变末端（浅色：PrimaryDeep → 稍亮同色系） */
+    --brand-grad-end: #36506B;
+
     /* 动画 */
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --dur-fast: 120ms;
     --dur-norm: 220ms;
+}
+
+/* ============ 深色模式（跟随系统，2026-09-11 主人选定） ============
+   与桌面端 ADR-005「放开深色主题」方向一致：不是简单反色，而是
+   保持「档案蓝 + 暖中性」的品牌感——底为中性深灰蓝，强调色提亮以维持对比度。
+   对比度自检：正文 #E9E7E2 on #14161A ≈ 15:1；弱化字 #8C8983 ≈ 5.2:1；
+   强调 #7FA8CC on 卡片 #1B1E23 ≈ 6.9:1（均 ≥ 正文 4.5:1 要求）。 */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-base: #14161A;
+        --bg-surface: #1B1E23;
+        --bg-surface-2: #22262C;
+        --bg-elevated: #252A31;
+        --bg-inset: #292E35;
+
+        --text-primary: #E9E7E2;
+        --text-secondary: #B3AFA8;
+        --text-muted: #8C8983;
+        --text-on-accent: #0F1115;
+
+        --accent: #7FA8CC;
+        --accent-hover: #93B8D8;
+        --accent-pressed: #6E96BB;
+        --accent-deep: #101A24;
+        --accent-soft: rgba(127, 168, 204, 0.18);
+        --brand-grad-end: #1B2A3A;
+
+        --success: #6FBF8F;
+        --warning: #D9A441;
+        --danger: #E5796F;
+        --info: #7FA8CC;
+
+        --border: #2E333A;
+        --border-strong: #3A4048;
+        --divider: #24282E;
+
+        --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.45);
+        --shadow-tab: 0 -2px 10px rgba(0, 0, 0, 0.40);
+        --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.55);
+    }
 }
 
 /* ============ 基础重置 ============ */
@@ -137,10 +180,11 @@ a {
     display: flex;
     align-items: center;
     gap: var(--sp-md);
-    padding: var(--sp-md) var(--sp-xl);
-    /* 对齐桌面端 BrandBar：PrimaryDeepBrush 底 + 白字（顶部品牌识别） */
-    background: var(--accent-deep);
-    border-bottom: 1px solid var(--accent-pressed);
+    padding: var(--sp-lg) var(--sp-xl);
+    /* 对齐桌面端 BrandBar：PrimaryDeepBrush 系（顶部品牌识别）。
+       2026-09-11 美化：同色系微渐变 + 底部一字高光，让吸顶栏与滚动内容之间有明确层级 */
+    background: linear-gradient(135deg, var(--accent-deep) 0%, var(--brand-grad-end) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
     color: rgba(255, 255, 255, 0.85);
     font-size: var(--fs-caption);
     position: sticky;
@@ -152,17 +196,21 @@ a {
     color: #ffffff;
     font-size: var(--fs-brand);
     font-weight: 600;
+    letter-spacing: -0.2px;
     margin-right: auto;
 }
 
+/* 连接状态胶囊：半透明底 + 内描边，在渐变栏上仍有清晰边界 */
 .status-bar__conn {
     display: inline-flex;
     align-items: center;
     gap: var(--sp-sm);
-    padding: var(--sp-xs) var(--sp-md);
-    background: rgba(255, 255, 255, 0.14);
+    padding: 5px var(--sp-lg);
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: var(--r-full);
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
 }
 
 .status-bar__dot {
@@ -330,21 +378,47 @@ a {
     color: var(--text-muted);
 }
 
-/* 空状态 / 加载占位 */
+/* 空状态 / 加载占位（2026-09-11 美化：圆底图标 + 主副文案） */
 .empty-state {
     text-align: center;
-    padding: var(--sp-3xl);
+    padding: var(--sp-3xl) var(--sp-xl);
     color: var(--text-muted);
 }
 
 .empty-state__icon {
-    font-size: 48px;
-    margin-bottom: var(--sp-lg);
-    opacity: 0.6;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto var(--sp-lg);
+    border-radius: var(--r-full);
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-state__icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+/* 错误态图标：中性底 + 危险色（不抢视觉但可辨） */
+.empty-state__icon.is-warn {
+    background: var(--bg-inset);
+    color: var(--danger);
 }
 
 .empty-state__text {
     font-size: var(--fs-body);
+    color: var(--text-secondary);
+}
+
+/* 引导副文案：回答"怎样才能有内容"，而不只是告知"现在没有" */
+.empty-state__hint {
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+    margin-top: var(--sp-sm);
+    line-height: 1.6;
 }
 
 .skeleton-list {
@@ -571,7 +645,7 @@ a {
     to   { transform: translateX(100%); }
 }
 
-/* ============ 设备列表 ============ */
+/* ============ 设备列表（2026-09-11 美化：圆角提升 + 轻浮起 + 本机强调条） ============ */
 .device-list {
     display: flex;
     flex-direction: column;
@@ -581,36 +655,45 @@ a {
 .device-card {
     display: flex;
     align-items: center;
-    gap: var(--sp-md);
+    gap: var(--sp-lg);
     padding: var(--sp-lg) var(--sp-xl);
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-lg);
+    border-radius: var(--r-xl);
     min-height: var(--touch-min);
-    transition: background var(--dur-fast) var(--ease-out);
+    box-shadow: var(--shadow-card);
+    transition: background var(--dur-fast) var(--ease-out),
+                border-color var(--dur-fast) var(--ease-out);
 }
 
 .device-card:hover {
     background: var(--bg-surface-2);
 }
 
+/* 本机：左侧强调条（比整卡染色更克制，且不与 hover 底混淆） */
 .device-card.is-local {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    border-color: var(--border-strong);
+    border-left: 3px solid var(--accent);
+    background: var(--bg-elevated);
 }
 
 .device-card__avatar {
     flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
     border-radius: var(--r-full);
-    background: var(--bg-elevated);
+    background: var(--accent-soft);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary);
+    color: var(--accent);
     font-weight: 600;
     font-size: var(--fs-body);
+}
+
+.device-card__avatar svg {
+    width: 20px;
+    height: 20px;
 }
 
 .device-card__body {
@@ -621,6 +704,7 @@ a {
 .device-card__name {
     color: var(--text-primary);
     font-size: var(--fs-body);
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -633,7 +717,10 @@ a {
     color: var(--text-muted);
     font-size: var(--fs-caption);
     font-variant-numeric: tabular-nums;
-    margin-top: 2px;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .device-card__status {
@@ -644,7 +731,7 @@ a {
     font-size: var(--fs-caption);
     padding: var(--sp-xs) var(--sp-md);
     border-radius: var(--r-full);
-    background: var(--bg-inset);
+    background: var(--accent-soft);
     color: var(--text-secondary);
 }
 
@@ -704,18 +791,21 @@ a {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 3px;
     padding: var(--sp-sm) 0;
     color: var(--text-muted);
     min-height: var(--touch-min);
     transition: color var(--dur-fast) var(--ease-out);
     position: relative;
+    /* 建立层叠上下文：让激活态的胶囊底（::after, z-index:-1）落在文字之下而非被栏底盖住 */
+    z-index: 0;
 }
 
 .tab-bar__item.is-active {
     color: var(--accent);
 }
 
+/* 顶部指示条 */
 .tab-bar__item.is-active::before {
     content: "";
     position: absolute;
@@ -728,6 +818,20 @@ a {
     border-radius: var(--r-full);
 }
 
+/* 激活态胶囊底（2026-09-11 美化：与顶部指示条共同强化当前项） */
+.tab-bar__item.is-active::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px;
+    background: var(--accent-soft);
+    border-radius: var(--r-lg);
+    z-index: -1;
+}
+
 .tab-bar__icon {
     width: 24px;
     height: 24px;
@@ -736,9 +840,15 @@ a {
     justify-content: center;
 }
 
+.tab-bar__icon svg {
+    width: 22px;
+    height: 22px;
+}
+
 .tab-bar__label {
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1;
+    font-weight: 500;
 }
 
 /* ============ Toast 提示 ============ */
@@ -772,24 +882,28 @@ a {
 .toast.is-error { border-left: 3px solid var(--danger); }
 .toast.is-info { border-left: 3px solid var(--info); }
 
-/* ============ 区块标题 ============ */
+/* ============ 区块标题（2026-09-11 美化：左侧强调竖条） ============ */
 .section-title {
     font-size: var(--fs-section);
     font-weight: 600;
     color: var(--text-primary);
-    margin: var(--sp-lg) 0 var(--sp-md);
+    margin: var(--sp-lg) 0 var(--sp-lg);
     display: flex;
     align-items: center;
     gap: var(--sp-sm);
+    padding-left: var(--sp-md);
+    border-left: 3px solid var(--accent);
+    line-height: 1.2;
 }
 
 .section-title__count {
     font-size: var(--fs-caption);
-    color: var(--text-muted);
+    color: var(--accent);
     font-weight: 400;
-    background: var(--bg-inset);
+    background: var(--accent-soft);
     padding: 2px var(--sp-sm);
     border-radius: var(--r-full);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ============ 响应式：>=768px 双栏 ============ */
