@@ -9,7 +9,7 @@ namespace SystemToolkit.UI.Common;
 /// 主题管理（ADR-005：双主题 Claude.Light / Nvidia.Dark 可切换，不重启）。
 /// 切换 = 替换 Application.Resources.MergedDictionaries[0]（令牌字典），
 /// 全站 {DynamicResource} 引用自动刷新；Icons.xaml（[1]）不动。
-/// 持久化：%AppData%/SystemToolkit/appearance.json（AtomicFile 原子写）。
+/// 持久化：%LOCALAPPDATA%\SystemToolkit\appearance.json（02 §六统一配置根；AtomicFile 原子写）。
 /// </summary>
 public static class ThemeManager
 {
@@ -104,7 +104,11 @@ public static class ThemeManager
     }
 
     /// <summary>运行时切换入口（Settings）：立即应用 + 原子持久化。</summary>
-    public static void ApplyAndPersist(string themeId)
+    /// <returns>
+    /// 偏好是否**成功落盘**。🟠 审查 2026-09-11（🟠-6）：原为 <c>void</c>，调用方只能无条件
+    /// 报"重启后保持"——写失败时这句承诺不成立（「假成功」族）。
+    /// </returns>
+    public static bool ApplyAndPersist(string themeId)
     {
         Apply(themeId);
         try
@@ -117,10 +121,16 @@ public static class ThemeManager
 
             AtomicFile.WriteAllText(AppearancePath,
                 System.Text.Json.JsonSerializer.Serialize(new Appearance(CurrentThemeId), AppearanceOpts));
+            return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 持久化失败不回滚切换（本次会话仍生效），下次启动回退旧偏好
+            // 持久化失败不回滚切换（本次会话仍生效），下次启动回退旧偏好。
+            // 🟠-6：原为空 catch——连日志都没有，用户与排查者都无从知道「这次切换其实没存下来」。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn, "theme",
+                $"主题偏好持久化失败（本次会话仍生效，下次启动会回退旧偏好）：{AppearancePath}", ex));
+            return false;
         }
     }
 

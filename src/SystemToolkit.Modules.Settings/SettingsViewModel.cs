@@ -46,9 +46,12 @@ public partial class SettingsViewModel : ObservableObject
 
         try
         {
-            ThemeManager.ApplyAndPersist(value);
-            StatusText = "✅ 主题已切换（立即生效，重启后保持）。";
-            _logger.Info($"[Settings] 主题切换：{value}");
+            // 🟠 审查 2026-09-11（🟠-6）：按**持久化实际结果**给文案——写失败时不能承诺"重启后保持"
+            bool persisted = ThemeManager.ApplyAndPersist(value);
+            StatusText = persisted
+                ? "✅ 主题已切换（立即生效，重启后保持）。"
+                : "⚠️ 主题已切换（立即生效），但偏好保存失败——重启后会回退原主题。";
+            _logger.Info($"[Settings] 主题切换：{value}（持久化{(persisted ? "成功" : "失败")}）");
         }
         catch (Exception ex)
         {

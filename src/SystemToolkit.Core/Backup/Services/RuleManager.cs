@@ -62,11 +62,17 @@ public sealed class RuleManager
     }
 
     /// <summary>
-    /// 一次性迁移：新位置缺失时，按「最老 → 较新」顺序复制第一个命中的历史位置，保留老用户已有规则；
+    /// 一次性迁移：新位置缺失时，按「较新 → 最老」顺序复制第一个命中的历史位置，保留老用户已有规则；
     /// 新位置已有数据则不动。
     /// <para>
-    /// 两个历史来源：① 旧应用 <c>%APPDATA%\FileBackupTool\rules.json</c>（原始旧工程）；
-    /// ② <c>%APPDATA%\SystemToolkit\rules\rules.json</c>（本工程早前版本，02 §六口径统一前的位置）。
+    /// 两个历史来源：① <c>%APPDATA%\SystemToolkit\rules\rules.json</c>（本工程早前版本，
+    /// 02 §六口径统一前的位置——**较新**）；② 旧应用 <c>%APPDATA%\FileBackupTool\rules.json</c>
+    /// （原始旧工程——**最老**）。
+    /// </para>
+    /// <para>
+    /// 🔴 审查 2026-09-11（🟠-2）：顺序必须是「较新 → 最老」。原实现把旧工程排在前面，
+    /// 在**双历史源**机器上会取被弃用的旧工程数据、丢弃用户最近编辑过的本工程数据
+    /// （首个命中即复制并 return）。
     /// </para>
     /// </summary>
     private void MigrateLegacyRulesFile(string newConfigDir)
@@ -81,8 +87,9 @@ public sealed class RuleManager
             string roaming = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
             string[] legacyCandidates =
             [
-                Path.Combine(roaming, "FileBackupTool", "rules.json"),
+                // 数组序 = 优先级：较新（本工程中间态）在前，最老（旧工程）在后
                 Path.Combine(roaming, "SystemToolkit", "rules", "rules.json"),
+                Path.Combine(roaming, "FileBackupTool", "rules.json"),
             ];
 
             foreach (string legacy in legacyCandidates)
