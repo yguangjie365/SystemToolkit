@@ -232,7 +232,10 @@ public sealed class AudioProxyService : IAudioProxyService
     {
         var handler = new HttpClientHandler
         {
-            AllowAutoRedirect = true,
+            // 🔴 审查 2026-09-10（🔴-3）：**不得**开启自动重定向——AllowAutoRedirect=true 只保证
+            // 首跳过了白名单，后续每一跳的 Location 都由 HttpClient 内部直接跟随、不再经
+            // _hostValidator。改由 SendGuardedAsync 手工跟随并逐跳复核。
+            AllowAutoRedirect = false,
             UseCookies = false, // 透传代理请求，不带本地 Cookie 容器（平台直链按需在握手 API 完成）
         };
         var client = new HttpClient(handler);
@@ -249,6 +252,60 @@ public sealed class AudioProxyService : IAudioProxyService
         return client;
     }
 
+    /// <summary>重定向跟随上限（超过即熔断，防重定向环）。</summary>
+    private const int MaxRedirectHops = 5;
+
+    /// <summary>
+    /// 手工跟随重定向，**每一跳都过 host 白名单**（🔴 审查 2026-09-10）。
+    /// <para>
+    /// 背景：原先 <c>AllowAutoRedirect = true</c> 让 HttpClient 自动跟随，而白名单只在入站
+    /// 首 URL 上校验过一次。若白名单域上存在开放 302（平台历史上确有跳转型取址接口），
+    /// 本机任意网页即可把本代理当作读内网 / localhost 的中转——Y5 要堵的洞只堵了第一跳。
+    /// </para>
+    /// </summary>
+    /// <returns>最终（非 3xx）响应；任一跳不在白名单、或超过 <see cref="MaxRedirectHops"/> 时返回 null。</returns>
+    private async Task<HttpResponseMessage?> SendGuardedAsync(
+        HttpClient client,
+        string url,
+        string? rangeHeader,
+        HttpCompletionOption completion,
+        CancellationToken ct)
+    {
+        string current = url;
+        // Referer 按**原始**直链域计算并全程保持（平台 CDN 校验防盗链；跳域不改变来源语义）
+        var referer = new Uri(RefererFor(url));
+
+        for (int hop = 0; ; hop++)
+        {
+            using var upstream = new HttpRequestMessage(HttpMethod.Get, current);
+            upstream.Headers.UserAgent.ParseAdd(UserAgent);
+            upstream.Headers.Referrer = referer;
+            if (!string.IsNullOrEmpty(rangeHeader))
+            {
+                upstream.Headers.TryAddWithoutValidation("Range", rangeHeader);
+            }
+
+            HttpResponseMessage resp = await client.SendAsync(upstream, completion, ct).ConfigureAwait(false);
+
+            if ((int)resp.StatusCode is not (>= 300 and < 400) || resp.Headers.Location is null)
+            {
+                return resp;
+            }
+
+            string next = resp.Headers.Location.IsAbsoluteUri
+                ? resp.Headers.Location.ToString()
+                : new Uri(new Uri(current), resp.Headers.Location).ToString();
+            resp.Dispose();
+
+            if (hop >= MaxRedirectHops || !NeedsProxy(next) || !_hostValidator(next))
+            {
+                return null; // 跳数熔断 / 目标域不在白名单：拒绝跟随
+            }
+
+            current = next;
+        }
+    }
+
     private async Task ProxyAudioAsync(HttpRequest request, HttpResponse response)
     {
         string? audioUrl = request.Query["url"];
@@ -259,21 +316,22 @@ public sealed class AudioProxyService : IAudioProxyService
             return;
         }
 
-        using var upstream = new HttpRequestMessage(HttpMethod.Get, audioUrl);
-        upstream.Headers.UserAgent.ParseAdd(UserAgent);
-        upstream.Headers.Referrer = new Uri(RefererFor(audioUrl));
-
         // Range 透传（axum→reqwest 的 C# 对应：HttpRequest→HttpRequestMessage）
-        if (request.Headers.ContainsKey("Range"))
-        {
-            upstream.Headers.TryAddWithoutValidation("Range", request.Headers["Range"].ToString());
-        }
+        string? rangeHeader = request.Headers.ContainsKey("Range") ? request.Headers["Range"].ToString() : null;
 
         try
         {
             CancellationToken aborted = request.HttpContext.RequestAborted; // 审查 Y14：可取消
-            using HttpResponseMessage upstreamResp = await StreamClient.SendAsync(
-                upstream, HttpCompletionOption.ResponseHeadersRead, aborted);
+            using HttpResponseMessage? upstreamResp = await SendGuardedAsync(
+                StreamClient, audioUrl, rangeHeader, HttpCompletionOption.ResponseHeadersRead, aborted).ConfigureAwait(false);
+            if (upstreamResp is null)
+            {
+                // 🔴-3：重定向链上有不可信目标 → 显式失败（NAudio 侧拿到 502 → PlaybackFailed 可见）
+                response.StatusCode = StatusCodes.Status502BadGateway;
+                response.ContentType = "text/plain; charset=utf-8";
+                await response.WriteAsync("Proxy error: 重定向目标不在白名单或跳数超限，已拒绝跟随");
+                return;
+            }
 
             response.StatusCode = (int)upstreamResp.StatusCode;
             response.ContentType = ContentTypeFor(audioUrl);
@@ -311,14 +369,18 @@ public sealed class AudioProxyService : IAudioProxyService
             return;
         }
 
-        using var upstream = new HttpRequestMessage(HttpMethod.Get, coverUrl);
-        upstream.Headers.UserAgent.ParseAdd(UserAgent);
-        upstream.Headers.Referrer = new Uri(RefererFor(coverUrl));
-
         try
         {
             CancellationToken aborted = request.HttpContext.RequestAborted; // 审查 Y14
-            using HttpResponseMessage upstreamResp = await WebClient.SendAsync(upstream, aborted);
+            using HttpResponseMessage? upstreamResp = await SendGuardedAsync(
+                WebClient, coverUrl, null, HttpCompletionOption.ResponseContentRead, aborted).ConfigureAwait(false);
+            if (upstreamResp is null)
+            {
+                // 🔴-3：同 /audio，重定向链不可信即显式失败
+                response.StatusCode = StatusCodes.Status502BadGateway;
+                await response.WriteAsync("Proxy error: 重定向目标不在白名单或跳数超限，已拒绝跟随");
+                return;
+            }
 
             response.StatusCode = (int)upstreamResp.StatusCode;
             response.ContentType = upstreamResp.Content.Headers.ContentType?.ToString() ?? "image/jpeg";

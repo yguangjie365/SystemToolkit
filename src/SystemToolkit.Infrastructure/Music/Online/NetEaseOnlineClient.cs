@@ -72,6 +72,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 搜索失败", e);
             return [];
         }
@@ -138,6 +143,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
             }
             catch (Exception e)
             {
+                if (e is OperationCanceledException)
+                {
+                    throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+                }
+
                 // 审查 F-3 采纳（2026-09-09）：原为裸 catch——降级链每档失败都不可见，
                 // 用户只看到"无法获取播放地址"，排查时无从区分网络/解析/接口变更。
                 // 单档失败是预期内的降级，按 Warn 记（不中断后续档位尝试）。
@@ -187,6 +197,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取歌词失败", e);
             return new OnlineLyrics();
         }
@@ -280,6 +295,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 搜索歌手失败", e);
             return [];
         }
@@ -313,6 +333,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载歌手曲目失败", e);
             return [];
         }
@@ -348,6 +373,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 搜索歌单失败", e);
             return [];
         }
@@ -404,6 +434,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载用户歌单失败", e);
             return ([], 0);
         }
@@ -474,6 +509,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载歌单曲目失败", e);
             return [];
         }
@@ -507,6 +547,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载排行榜失败", e);
             return [];
         }
@@ -540,6 +585,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载推荐歌单失败", e);
             return [];
         }
@@ -580,6 +630,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载每日推荐失败", e);
             return [];
         }
@@ -620,6 +675,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 喜欢操作异常", e);
             return false;
         }
@@ -691,6 +751,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载喜欢列表失败", e);
             return [];
         }
@@ -746,6 +811,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 心动模式失败", e);
             return [];
         }
@@ -788,6 +858,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 加载专辑曲目失败", e);
             return [];
         }
@@ -861,6 +936,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取登录状态失败", e);
             return notLogged;
         }
@@ -970,6 +1050,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取歌手详情失败", e);
             return null;
         }
@@ -1009,6 +1094,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取歌手专辑失败", e);
             return [];
         }
@@ -1050,6 +1140,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取歌手 MV 失败", e);
             return [];
         }
@@ -1078,6 +1173,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 订阅歌单失败", e);
             return false;
         }
@@ -1111,6 +1211,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 新建歌单失败", e);
             return null;
         }
@@ -1141,6 +1246,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 删除歌单失败", e);
             return false;
         }
@@ -1176,6 +1286,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取 MV URL 失败", e);
             return null;
         }
@@ -1262,6 +1377,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 批量获取歌曲详情失败", e);
             return [];
         }
@@ -1430,6 +1550,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取二维码 key 失败", e);
             return null;
         }
@@ -1452,6 +1577,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 生成二维码失败", e);
             return null;
         }
@@ -1523,6 +1653,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 检查二维码状态失败", e);
             return new OnlineQrCheckResult { Code = -1, Message = e.Message };
         }
@@ -1547,6 +1682,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 退出登录失败", e);
             return false;
         }
@@ -1662,6 +1802,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 分页加载歌单曲目失败", e);
             return [];
         }
@@ -1698,6 +1843,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 获取歌单详情+trackIds 失败", e);
             return null;
         }
@@ -1740,6 +1890,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[NetEase] 批量获取歌曲详情失败", e);
             return [];
         }

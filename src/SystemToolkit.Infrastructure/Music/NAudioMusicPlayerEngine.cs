@@ -193,7 +193,19 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
             // 自然播完：置 Stopped 并触发 TrackEnded（自动切曲的唯一触发源）
             SetState(PlayState.Stopped, null);
             _currentSong = null;
-            TrackEnded?.Invoke(finished);
+            // 🔴 审查 2026-09-10（🔴-2）：PlaybackStopped 在设备拔出/解码流中断时同样触发，
+            // 原因放在 e.Exception。此前只认 _stopRequested，非请求停止一律走"自然播完"
+            // → 触发 TrackEnded → VM 自动切下一首：播放中断被静默包装成正常结束，
+            // PlaybackFailed（契约要求"失败必须显式可见"）在整个播放期内形同虚设。
+            if (e.Exception is not null)
+            {
+                _logger.Warn($"[MusicPlayer] 播放中断（非请求停止）：{finished.Name}（{e.Exception.Message}）");
+                PlaybackFailed?.Invoke($"{finished.Name}: {e.Exception.Message}");
+            }
+            else
+            {
+                TrackEnded?.Invoke(finished);
+            }
         }
         else if (_state != PlayState.Stopped)
         {
@@ -225,11 +237,13 @@ public sealed class NAudioMusicPlayerEngine : IMusicPlaybackEngine, IDisposable,
                     PositionChanged?.Invoke(Position, Duration);
                 }
             }
-            catch (ObjectDisposedException)
+            catch (Exception)
             {
-            }
-            catch (InvalidOperationException)
-            {
+                // 🟠 审查 2026-09-10（🟠-8）：原先只吞 ObjectDisposedException / InvalidOperationException，
+                // 与本段自宣的"线程池异常不经过 DispatcherUnhandledException 会直接崩进程"不符——
+                // Position/Duration 读的是 MediaFoundationReader.CurrentTime，设备异常可能抛
+                // COMException 等其它类型。线程池回调的兜底必须覆盖全部异常；此处只读快照，
+                // 100ms 高频下刻意不打日志（避免刷屏），故空块即最终形态。
             }
         }, null, 0, 100);
     }

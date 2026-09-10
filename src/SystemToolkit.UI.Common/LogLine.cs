@@ -10,11 +10,6 @@ namespace SystemToolkit.UI.Common;
 /// </summary>
 public sealed class LogLine
 {
-    // M-UI-1 落地（2026-09-05）：fallback 硬编码与新主色板同步
-    private static readonly Brush ErrorBrush = ThemeBrush.Find("Brush_Danger", "#EF4444");
-    private static readonly Brush SuccessBrush = ThemeBrush.Find("Brush_Success", "#10B981");
-    private static readonly Brush InfoBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
-
     private static readonly Regex ZeroFailureCount = new("(?:校验)?失败\\s*0\\s*个?(?:文件?|条|项)?", RegexOptions.Compiled);
 
     public string Text { get; init; } = "";
@@ -37,11 +32,17 @@ public sealed class LogLine
         return isError ? "Error" : isSuccess ? "Success" : "Info";
     }
 
+    // 🟠 审查 2026-09-10（🟠-13）：**不得**用 static readonly 缓存 ThemeBrush.Find 的结果——
+    // Find 返回的是当前主题字典里的 Brush 实例；ThemeManager 替换 MergedDictionaries[0] 之后
+    // 旧实例已不在字典中，而 static 字段仍持有它（主题切换后日志行继续用旧主题配色，
+    // 且 MainWindow 重建视图也不会让 static 构造函数重跑）。改为每次调用时查找
+    // （TryFindResource 是字典查找，开销可忽略），与 ADR-005「全站跟随主题」一致。
+    // fallback 硬编码值与主色板保持同步（M-UI-1）。
     private static Brush ColorFor(string category) => category switch
     {
-        "Error" => ErrorBrush,
-        "Success" => SuccessBrush,
-        _ => InfoBrush,
+        "Error" => ThemeBrush.Find("Brush_Danger", "#EF4444"),
+        "Success" => ThemeBrush.Find("Brush_Success", "#10B981"),
+        _ => ThemeBrush.Find("Brush_TextMuted", "#6B7280"),
     };
 
 }

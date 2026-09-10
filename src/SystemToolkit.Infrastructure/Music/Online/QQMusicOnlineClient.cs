@@ -180,6 +180,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 搜索失败", e);
             return [];
         }
@@ -227,6 +232,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Warn($"[QQMusic] 榜单 CGI 路径失败：{e.Message}");
         }
 
@@ -265,6 +275,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             }
             catch (Exception e)
             {
+                if (e is OperationCanceledException)
+                {
+                    throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+                }
+
                 _logger.Warn($"[QQMusic] 榜单 musicu 路径失败（认证={withAuth}）：{e.Message}");
             }
         }
@@ -355,6 +370,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error($"[QQMusic] 榜单歌曲加载失败（topid={rankId}）", e);
             return [];
         }
@@ -538,6 +558,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取播放地址失败", e);
             return Fail(e.Message);
         }
@@ -627,6 +652,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception musicuEx)
         {
+            if (musicuEx is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             // 降级到旧版接口（🔴 降级路径可见）
             _logger.Warn($"[QQMusic] musicu 歌词获取失败，降级旧版接口：{musicuEx.Message}");
         }
@@ -652,6 +682,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取歌词失败", e);
             return new OnlineLyrics();
         }
@@ -945,6 +980,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 搜索歌手失败", e);
             return [];
         }
@@ -985,6 +1025,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取歌手歌曲失败", e);
             return [];
         }
@@ -1034,6 +1079,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 搜索歌单失败", e);
             return [];
         }
@@ -1068,7 +1118,16 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 JsonElement body;
                 try
                 { body = await QqGetJsonAsync(url, cookie, profileReferer, ct); }
-                catch (Exception e) { _logger.Warn($"[QQMusic] created playlists page {page} failed: {e.Message}"); break; }
+                catch (Exception e)
+                {
+                    if (e is OperationCanceledException)
+                    {
+                        throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+                    }
+
+                    _logger.Warn($"[QQMusic] created playlists page {page} failed: {e.Message}");
+                    break;
+                }
 
                 if (!body.TryGetProperty("data", out JsonElement data) || !data.TryGetProperty("disslist", out JsonElement rows) || rows.ValueKind != JsonValueKind.Array)
                     break;
@@ -1093,7 +1152,16 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 JsonElement body;
                 try
                 { body = await QqGetJsonAsync(url, cookie, profileReferer, ct); }
-                catch (Exception e) { _logger.Warn($"[QQMusic] collected playlists page {page} failed: {e.Message}"); break; }
+                catch (Exception e)
+                {
+                    if (e is OperationCanceledException)
+                    {
+                        throw; // 🟠-11：取消上抛（不得吞成"分页失败"）
+                    }
+
+                    _logger.Warn($"[QQMusic] collected playlists page {page} failed: {e.Message}");
+                    break;
+                }
 
                 if (!body.TryGetProperty("data", out JsonElement data))
                     break;
@@ -1132,7 +1200,16 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                     JsonElement json;
                     try
                     { json = await PostMusicuAsync(JsonSerializer.Serialize(payload), cookie, ct); }
-                    catch (Exception e) { _logger.Warn($"[QQMusic] collected musicu page {page} failed: {e.Message}"); break; }
+                    catch (Exception e)
+                    {
+                        if (e is OperationCanceledException)
+                        {
+                            throw; // 🟠-11：取消上抛（不得吞成"分页失败"）
+                        }
+
+                        _logger.Warn($"[QQMusic] collected musicu page {page} failed: {e.Message}");
+                        break;
+                    }
 
                     if (!json.TryGetProperty("req_0", out JsonElement req0) || !req0.TryGetProperty("data", out JsonElement data))
                         break;
@@ -1186,6 +1263,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
                 }
                 catch (Exception e)
                 {
+                    if (e is OperationCanceledException)
+                    {
+                        throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+                    }
+
                     _logger.Warn($"[QQMusic] liked playlist card failed: {e.Message}"); // 拿不到计数也显示卡片（count=0）
                 }
 
@@ -1205,6 +1287,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取用户歌单失败", e);
             return ([], 0);
         }
@@ -1284,6 +1371,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取歌单歌曲失败", e);
             return [];
         }
@@ -1348,6 +1440,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取排行榜失败", e);
             return [];
         }
@@ -1403,6 +1500,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Warn($"[QQMusic] 推荐歌单 diss_by_tag 路径失败，降级 musicu：{e.Message}");
         }
 
@@ -1453,6 +1555,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取推荐歌单失败", e);
             return [];
         }
@@ -1496,6 +1603,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取每日推荐失败", e);
             return [];
         }
@@ -1529,6 +1641,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 切换喜欢失败", e);
             return false;
         }
@@ -1592,6 +1709,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取喜欢列表失败", e);
             return [];
         }
@@ -1636,6 +1758,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取专辑歌曲失败", e);
             return [];
         }
@@ -1678,6 +1805,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取登录状态失败", e);
             return new OnlineLoginInfo { Provider = OnlineProvider.QQMusic, LoggedIn = false };
         }
@@ -1715,6 +1847,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] Cookie 登录校验失败", e);
             return false;
         }
@@ -1746,6 +1883,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 退出登录失败", e);
             return false;
         }
@@ -1807,6 +1949,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取歌单详情+trackIds 失败", e);
             return null;
         }
@@ -1843,6 +1990,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 批量获取歌曲详情失败", e);
             return [];
         }
@@ -1884,6 +2036,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 获取二维码失败", e);
             return null;
         }
@@ -1974,6 +2131,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 检查二维码状态失败", e);
             return new OnlineQrCheckResult { Code = -1, Message = e.Message };
         }
@@ -2033,6 +2195,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 收藏歌单失败", e);
             return false;
         }
@@ -2096,6 +2263,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 新建歌单失败", e);
             return null;
         }
@@ -2129,6 +2301,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
         }
         catch (Exception e)
         {
+            if (e is OperationCanceledException)
+            {
+                throw; // 🟠-11：取消必须上抛（上层编排的 OCE 重抛依赖它，取消不得伪装成业务失败）
+            }
+
             _logger.Error("[QQMusic] 删除歌单失败", e);
             return false;
         }
