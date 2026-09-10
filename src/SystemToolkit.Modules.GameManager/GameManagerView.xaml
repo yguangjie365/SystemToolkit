@@ -204,13 +204,21 @@
                  REVIEW-3 S-3：WrapPanel 无虚拟化（数百卡全量实例化）→ 引入 VirtualizingWrapPanel
                  包（VirtualizingItemsControl 自带 ScrollViewer 视口；外层再套 ScrollViewer 会禁用虚拟化，
                  故删除外层 ScrollViewer）。viewport 窄时自动降列（参考稿响应式语义）保留。
-                 右侧 -14px：抵消末列卡片右间距（末列恒多 14px 空白视觉失衡），被裁掉的是无内容透明补偿区 -->
-            <vwp:VirtualizingItemsControl Margin="0,6,0,0" ItemsSource="{Binding GamesView}"
+                 右侧 -14px：抵消末列卡片右间距（末列恒多 14px 空白视觉失衡），被裁掉的是无内容透明补偿区。
+
+                 🔴 顶部 5px 内边距（2026-09-11 主人反馈「第一排卡片 hover 时绿边框上边被吞」）：
+                 hover 上浮是 TranslateTransform.Y = -5，发生在**滚动视口内部**——第一排卡片紧贴
+                 视口顶边（y=0），上浮后顶部那 5px 直接越过视口边界，被 ScrollViewer 裁掉，
+                 于是在 BorderThickness 1→1.5 的绿边框上表现为「上边被吞」。下面几排下方仍有空间，
+                 上浮不越界，所以只有第一排中招。
+                 修法：把间隙加到**视口内部**（ItemsPanel 的 Margin），外层 Margin 由 6 降为 1
+                 抵消偏移，卡片静止位置与原先完全一致（1 + 5 = 6）。 -->
+            <vwp:VirtualizingItemsControl Margin="0,1,0,0" ItemsSource="{Binding GamesView}"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
                                           Visibility="{Binding SteamInstalled, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <vwp:VirtualizingWrapPanel Margin="0,0,-14,0"/>
+                            <vwp:VirtualizingWrapPanel Margin="0,5,-14,0"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
