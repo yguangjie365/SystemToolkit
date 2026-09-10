@@ -47,19 +47,62 @@ public sealed class BackupConfigService
     /// <summary>当前生效的配置值（Load 后可用；Save 时序列化为 settings.json）。</summary>
     public BackupAppSettings Settings { get; private set; } = new();
 
-    /// <summary>创建配置服务；<paramref name="configDir"/> 缺省 %APPDATA%\SystemToolkit\backup（测试注入临时目录）。</summary>
+    /// <summary>创建配置服务；<paramref name="configDir"/> 缺省 %LOCALAPPDATA%\SystemToolkit\backup（测试注入临时目录）。</summary>
     /// <param name="configDir">配置目录（测试注入用）。</param>
     /// <param name="log">UI 日志回调（可选）。</param>
     /// <param name="logger">结构化日志（可选；缺省自持一个 BusLogger）。</param>
     public BackupConfigService(string? configDir = null, Action<string>? log = null, ILogger? logger = null)
     {
-        _configDir = configDir ?? Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "SystemToolkit", "backup");
-        _settingsFile = Path.Combine(_configDir, "settings.json");
         _log = log ?? (msg => { });
         // 🔴 2026-09-08（审查 G-3）：损坏恢复路径不能只靠 UI 回调——
         // UI 未建/进程将死时回调无人接收，失败信息会彻底丢失。自持 logger 保证落盘。
         _logger = logger ?? new BusLogger("backup");
+
+        if (configDir is null)
+        {
+            // 02 §六统一配置根（原为 Roaming %AppData%，迁移见 MigrateLegacySettings）
+            _configDir = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "SystemToolkit", "backup");
+            _settingsFile = Path.Combine(_configDir, "settings.json");
+            MigrateLegacySettings();
+        }
+        else
+        {
+            _configDir = configDir;
+            _settingsFile = Path.Combine(_configDir, "settings.json");
+        }
+    }
+
+    /// <summary>
+    /// 一次性迁移（2026-09-11，02 §六口径统一）：旧位置在 Roaming <c>%AppData%\SystemToolkit\backup\</c>。
+    /// 新位置缺失且旧位置存在才复制，保留老用户的备份配置（含已选的备份根目录）。
+    /// </summary>
+    private void MigrateLegacySettings()
+    {
+        try
+        {
+            if (File.Exists(_settingsFile))
+            {
+                return;
+            }
+
+            string legacy = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "SystemToolkit", "backup", "settings.json");
+            if (!File.Exists(legacy))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(_configDir);
+            File.Copy(legacy, _settingsFile);
+            _logger.Info($"已从旧位置迁移备份配置：{legacy} → {_settingsFile}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("备份配置迁移失败（不影响新建与使用）", ex);
+        }
     }
 
     /// <summary>配置目录绝对路径（settings.json 所在位置；恢复引擎也将其列为受保护目录）。</summary>

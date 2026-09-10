@@ -33,6 +33,10 @@ public sealed class MusicManagerModule : ModuleBase
     {
         services.AddKeyedSingleton<ILogger>("musicmanager", new FileLogger("musicmanager"));
 
+        // 02 §六：旧 Roaming 位置一次性迁移（曲库 + 搜索历史），保留老用户数据
+        MigrateLegacyDataFile("music-library.json");
+        MigrateLegacyDataFile("music-search-history.json");
+
         // 标签读取器（MUSIC-2，构造要非 keyed ILogger——工厂注入本模块 keyed 实例）
         services.AddSingleton<IMusicTagReader>(sp => new TagLibMusicTagReader(
             sp.GetRequiredKeyedService<ILogger>("musicmanager")));
@@ -40,21 +44,15 @@ public sealed class MusicManagerModule : ModuleBase
             sp.GetRequiredKeyedService<ILogger>("musicmanager"),
             sp.GetRequiredService<IMusicTagReader>()));
 
-        // 曲库存储（MUSIC-5，Q-008：模块私有 JSON 落 %AppData%/SystemToolkit）
+        // 曲库存储（MUSIC-5，Q-008：模块私有 JSON；02 §六统一配置根 %LOCALAPPDATA%\SystemToolkit\）
         services.AddSingleton(sp => new JsonMusicLibraryStore(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SystemToolkit",
-                "music-library.json"),
+            LocalDataPath("music-library.json"),
             sp.GetRequiredKeyedService<ILogger>("musicmanager")));
         services.AddSingleton<IMusicLibraryStore>(sp => sp.GetRequiredService<JsonMusicLibraryStore>());
 
         // 搜索历史（P3a：模块私有 JSON，同目录）
         services.AddSingleton(sp => new JsonSearchHistoryStore(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SystemToolkit",
-                "music-search-history.json"),
+            LocalDataPath("music-search-history.json"),
             sp.GetRequiredKeyedService<ILogger>("musicmanager")));
         services.AddSingleton<ISearchHistoryStore>(sp => sp.GetRequiredService<JsonSearchHistoryStore>());
 
@@ -79,5 +77,42 @@ public sealed class MusicManagerModule : ModuleBase
             credentials: sp.GetService<IOnlineCredentialStore>(),
             searchHistory: sp.GetService<ISearchHistoryStore>()));
         services.AddSingleton<MusicManagerView>();
+    }
+
+    /// <summary>模块私有 JSON 的落盘路径（02 §六统一配置根 <c>%LOCALAPPDATA%\SystemToolkit\</c>）。</summary>
+    private static string LocalDataPath(string fileName) => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SystemToolkit", fileName);
+
+    /// <summary>
+    /// 一次性迁移（2026-09-11 口径统一）：旧位置在 Roaming <c>%AppData%\SystemToolkit\</c>，
+    /// 新位置在 LOCALAPPDATA 的同结构下。新位置缺失且旧位置存在才复制
+    /// （范式对齐 <c>RuleManager.MigrateLegacyRulesFile</c>）；旧文件保留不删。
+    /// </summary>
+    private static void MigrateLegacyDataFile(string fileName)
+    {
+        try
+        {
+            string target = LocalDataPath(fileName);
+            string legacy = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "SystemToolkit", fileName);
+            if (File.Exists(target) || !File.Exists(legacy))
+            {
+                return;
+            }
+
+            string? dir = Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.Copy(legacy, target);
+        }
+        catch (Exception)
+        {
+            // 迁移失败不阻断模块注册：退化为「新库 / 无搜索历史」，旧数据仍在原处
+        }
     }
 }

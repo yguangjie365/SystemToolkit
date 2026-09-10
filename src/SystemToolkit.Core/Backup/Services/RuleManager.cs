@@ -41,13 +41,16 @@ public sealed class RuleManager
         }
     }
 
-    /// <summary>创建规则库并立即加载；configDir 缺省为 %APPDATA% 下 SystemToolkit/rules（老用户首次自动迁移 FileBackupTool 旧规则库）。</summary>
+    /// <summary>创建规则库并立即加载；configDir 缺省为 %LOCALAPPDATA% 下 SystemToolkit/rules
+    /// （老用户首次自动迁移：FileBackupTool 旧规则库 / 本工程早前的 Roaming 位置）。</summary>
     public RuleManager(string? configDir = null, ILogger? logger = null)
     {
         _logger = logger ?? NullLogger.Instance;
         if (configDir == null)
         {
-            configDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "SystemToolkit", "rules");
+            configDir = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "SystemToolkit", "rules");
             _rulesFile = Path.Combine(configDir, "rules.json");
             MigrateLegacyRulesFile(configDir); // 仅默认目录迁移：测试注入的隔离目录绝不掺入真机数据
         }
@@ -59,8 +62,12 @@ public sealed class RuleManager
     }
 
     /// <summary>
-    /// 一次性迁移：旧应用（FileBackupTool）目录存在 rules.json 且新位置缺失时原样复制，
-    /// 保留老用户已有规则；新位置已有数据则不动。
+    /// 一次性迁移：新位置缺失时，按「最老 → 较新」顺序复制第一个命中的历史位置，保留老用户已有规则；
+    /// 新位置已有数据则不动。
+    /// <para>
+    /// 两个历史来源：① 旧应用 <c>%APPDATA%\FileBackupTool\rules.json</c>（原始旧工程）；
+    /// ② <c>%APPDATA%\SystemToolkit\rules\rules.json</c>（本工程早前版本，02 §六口径统一前的位置）。
+    /// </para>
     /// </summary>
     private void MigrateLegacyRulesFile(string newConfigDir)
     {
@@ -71,14 +78,24 @@ public sealed class RuleManager
                 return;
             }
 
-            string legacy = Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-                "FileBackupTool", "rules.json");
-            if (File.Exists(legacy))
+            string roaming = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
+            string[] legacyCandidates =
+            [
+                Path.Combine(roaming, "FileBackupTool", "rules.json"),
+                Path.Combine(roaming, "SystemToolkit", "rules", "rules.json"),
+            ];
+
+            foreach (string legacy in legacyCandidates)
             {
+                if (!File.Exists(legacy))
+                {
+                    continue;
+                }
+
                 Directory.CreateDirectory(newConfigDir);
                 File.Copy(legacy, _rulesFile);
-                _logger.Info($"已从旧应用目录迁移规则库：{legacy} → {_rulesFile}");
+                _logger.Info($"已从旧位置迁移规则库：{legacy} → {_rulesFile}");
+                return;
             }
         }
         catch (Exception ex)

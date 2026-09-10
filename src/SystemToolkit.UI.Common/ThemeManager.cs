@@ -83,6 +83,8 @@ public static class ThemeManager
     /// <summary>启动入口：读持久化主题应用（损坏/缺失回退默认）。任何视图解析资源前调用。</summary>
     public static void ApplyCurrentForStartup()
     {
+        MigrateLegacyAppearance(); // 02 §六：旧 Roaming 位置一次性迁移
+
         string? persisted = null;
         try
         {
@@ -122,9 +124,45 @@ public static class ThemeManager
         }
     }
 
+    /// <summary>主题偏好落盘位置（02 §六统一配置根：<c>%LOCALAPPDATA%\SystemToolkit\</c>）。</summary>
     private static string AppearancePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SystemToolkit", "appearance.json");
+
+    /// <summary>
+    /// 旧版位置（Roaming <c>%AppData%</c>）——2026-09-11 按 02 §六统一到 LOCALAPPDATA，
+    /// 本路径仅作一次性迁移来源，不再写入。
+    /// </summary>
+    private static string LegacyAppearancePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "SystemToolkit", "appearance.json");
+
+    /// <summary>
+    /// 一次性迁移：新位置缺失且旧位置存在时复制，保留老用户的主题偏好选择。
+    /// （范式对齐 <c>RuleManager.MigrateLegacyRulesFile</c>；失败退化为「无偏好 → 默认主题」。）
+    /// </summary>
+    private static void MigrateLegacyAppearance()
+    {
+        try
+        {
+            if (File.Exists(AppearancePath) || !File.Exists(LegacyAppearancePath))
+            {
+                return;
+            }
+
+            string? dir = Path.GetDirectoryName(AppearancePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.Copy(LegacyAppearancePath, AppearancePath);
+        }
+        catch (Exception)
+        {
+            // 迁移失败不阻断启动（读不到偏好即回退默认主题）
+        }
+    }
 
     private static readonly System.Text.Json.JsonSerializerOptions AppearanceOpts = new() { WriteIndented = true };
 
