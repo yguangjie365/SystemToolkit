@@ -14,7 +14,15 @@ public interface IModule
     /// <summary>导航显示名（中文），如 "本机概览"。</summary>
     string DisplayName { get; }
 
-    /// <summary>导航顺序。</summary>
+    /// <summary>
+    /// 模块注册序号（仅元数据，各模块唯一）。
+    /// <para>
+    /// 🔴 <b>本属性不驱动导航顺序</b>——侧栏顺序由 Shell 的
+    /// <c>MainWindow.NavGroups</c>（分组表）决定，宿主从未读取此值；
+    /// 改这里不会改变界面顺序（2026-09-10 事故：音乐 9→8 / 游戏 8→9 改了但界面纹丝不动）。
+    /// 目前唯一消费者是 <c>ModuleContractTests.ModuleNavigationOrders_AreUnique</c>。
+    /// </para>
+    /// </summary>
     int Order { get; }
 
     /// <summary>扩展模块（游戏/音乐）为 true，允许在设置中禁用。</summary>

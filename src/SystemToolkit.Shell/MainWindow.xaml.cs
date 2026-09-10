@@ -69,14 +69,22 @@ public partial class MainWindow : Window
         ["settings"] = "\uE713",
     };
 
-    /// <summary>导航分组（模块 id → 组名，按展示顺序）。UI 审计采纳：体现产品架构层级。</summary>
+    /// <summary>
+    /// 导航分组（模块 id → 组名，按展示顺序）。UI 审计采纳：体现产品架构层级。
+    /// <para>
+    /// 🔴 <b>本表是导航顺序的唯一真源</b>（组顺序 = 数组顺序，组内顺序 = <c>ModuleIds</c> 顺序）。
+    /// <see cref="IModule.Order"/> <b>不</b>驱动导航——它只被 <c>ModuleContractTests</c> 用来断言唯一性。
+    /// 2026-09-10 事故：按直觉改了 <c>IModule.Order</c>（音乐 9→8 / 游戏 8→9）但界面顺序不变，
+    /// 因为宿主从未读取过该属性。要调顺序，改这里。
+    /// </para>
+    /// </summary>
     private static readonly (string Title, string[] ModuleIds)[] NavGroups =
     [
         ("概览", ["overview"]),
         ("系统", ["appmanager", "drivermanager", "netmanager"]),
         ("数据", ["filetransfer", "filebackup"]),
         ("恢复", ["recoverymanager"]),
-        ("娱乐", ["gamemanager", "musicmanager"]),
+        ("娱乐", ["musicmanager", "gamemanager"]),
         ("设置", ["settings"]),
     ];
 
