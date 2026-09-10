@@ -160,7 +160,12 @@ UI.Common（共享控件与设计令牌）
 
 🔴 **禁用 `Wpf.Ui`**。其隐式样式会渗透自定义 ControlTemplate 导致控件塌缩（旧工程实测）。**控件全部自建**。
 
-🔴 **不开发深色模式**（用户明确）。只有浅色主题。深海军蓝 `#181715` 仅用作**内容展示容器**（日志面板、命令输出、硬件 ID），不是主题模式。
+🟢 **双主题可切换**（2026-09-10 放开，见 [ADR-005](Docs/decisions/ADR-005-双主题可切换ClaudeLight与NvidiaDark.md)）：
+`Claude.Light`（浅色，默认）与 `Nvidia.Dark`（深色）运行时切换、不重启——经 `ThemeManager` 替换
+`MergedDictionaries[0]`（令牌字典），全站 `{DynamicResource}` 自动刷新；偏好持久化于
+`%AppData%/SystemToolkit/appearance.json`（AtomicFile 原子写，损坏回退默认）。
+🔴 **新增主题包的硬门禁**：每个主题包都必须覆盖 `TokenKeys` **全量** key（含深色包），
+且需单独满足对比度与层次纪律（深底浅字、层次不依赖阴影）。深海军蓝 `#181715` 仍只作内容展示容器。
 
 🔴 **设计令牌必须全覆盖五个维度**，不能只覆盖颜色字号：
 
@@ -203,7 +208,7 @@ UI.Common（共享控件与设计令牌）
 
 - 🔴 每个主题包必须覆盖 `TokenKeys` 全量 key，缺一即构建失败（✅ 已实现：`TokenKeysCoverageTests` 双向校验）
 - 🔴 控件样式内**禁止**硬编码色值/字号，只能引用令牌
-- 🔴 主题包只需提供 Light（**不做深色模式**）
+- 🔴 每个主题包（Light 与 Dark 各自）都必须独立覆盖全量 `TokenKeys`（ADR-005）
 - 🔴 **不使用旧工程的任何风格文件**（`Tokens.xaml` / `Theme.xaml` / `tokens.css`），全部重写
 - 🔴 **资源全部本地化**：字体打包进 `Resources/Fonts/`，图标为本地 SVG/XAML 路径资源。**禁止任何 CDN 或远程引用**，应用完全断网时视觉必须与联网一致
 - 🟠 主题切换不重启应用；`ThemeManager` 负责切换、缩放计算与资源合并
@@ -359,7 +364,7 @@ UI.Common（共享控件与设计令牌）
 - [ ] Release 构建零警告零错误
 - [ ] 全量测试通过（含架构守卫）
 - [ ] 三态 UI 齐备（正常 / 空 / 失败）
-- [ ] 单 Light 主题视觉一致（不开发深色模式，见 ADR-003）
+- [ ] 双主题视觉均达标（Claude.Light / Nvidia.Dark 各自通过 TokenKeys 全覆盖与对比度检查，见 ADR-005）
 - [ ] 危险操作四步齐全 + 二次确认
 - [ ] 特权操作全部经 Elevated Helper
 - [ ] 日志含 CorrelationId，可追溯
