@@ -180,6 +180,70 @@ public sealed class OnlineMusicCatalogService : IOnlineMusicCatalogService
     }
 
     /// <inheritdoc />
+    public async Task<List<OnlineRankBoard>> LoadRankListAsync(OnlineProvider provider, CancellationToken ct = default)
+    {
+        ClearError();
+
+        // 网易云无榜单来源（NexBox netease.rs 亦无对应实现）→ 空结果，UI 整区隐藏（主人 2026-09-10 裁定）
+        if (provider != OnlineProvider.QQMusic)
+        {
+            return [];
+        }
+
+        if (_qq is null)
+        {
+            SetError("在线目录服务未就绪");
+            return [];
+        }
+
+        try
+        {
+            return await _qq.LoadRankListAsync(_credentials.GetCookie(provider) ?? string.Empty, ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetError($"加载榜单失败：{ex.Message}");
+            return [];
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<OnlineTrack>> LoadRankSongsAsync(OnlineProvider provider, string rankId, int limit = 30, CancellationToken ct = default)
+    {
+        ClearError();
+
+        if (provider != OnlineProvider.QQMusic)
+        {
+            SetError("该平台不支持榜单");
+            return [];
+        }
+
+        if (_qq is null)
+        {
+            SetError("在线目录服务未就绪");
+            return [];
+        }
+
+        try
+        {
+            return await _qq.LoadRankSongsAsync(rankId, limit, _credentials.GetCookie(provider) ?? string.Empty, ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetError($"加载榜单歌曲失败：{ex.Message}");
+            return [];
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<OnlineLoginInfo> GetLoginStatusAsync(OnlineProvider provider, CancellationToken ct = default)
     {
         ClearError();

@@ -29,6 +29,25 @@ public enum OnlineProvider
     Local,
 }
 
+/// <summary>
+/// 官方榜单条目（P3 右栏「发现」区）。仅 QQ 音乐有来源；网易云无对应接口
+/// （NexBox netease.rs 亦无榜单实现）→ 目录层返回空，UI 整区隐藏（主人 2026-09-10 裁定）。
+/// </summary>
+public sealed record OnlineRankBoard
+{
+    /// <summary>榜单 ID（QQ 为 topid）。</summary>
+    public string Id { get; init; } = string.Empty;
+
+    /// <summary>榜单名（如「巅峰榜·热歌」）。</summary>
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>封面图 URL。</summary>
+    public string CoverUrl { get; init; } = string.Empty;
+
+    /// <summary>曲目数（预设榜未知时为 0）。</summary>
+    public int TrackCount { get; init; }
+}
+
 /// <summary>统一歌曲结构（跨 QQ 音乐 / 网易云）。</summary>
 public sealed record OnlineTrack
 {

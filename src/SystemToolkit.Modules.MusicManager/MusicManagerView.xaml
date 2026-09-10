@@ -842,6 +842,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -850,7 +851,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="每日推荐" FontSize="{DynamicResource Font_SizeBodySm}"
+                    <TextBlock Grid.Column="0" Text="发现" FontSize="{DynamicResource Font_SizeBodySm}"
                                Foreground="{StaticResource Brush_TextSecondary}" VerticalAlignment="Center"/>
                     <!-- 审查 P0-3：区域级加载指示 -->
                     <TextBlock Grid.Column="0" Style="{StaticResource InlineLoadingHint}" Text="加载推荐中…"
@@ -872,10 +873,95 @@
                               Width="12" Height="12" Stretch="Uniform"/>
                     </Button>
                 </Grid>
-                <TextBlock Grid.Row="2" Style="{StaticResource ListEmptyHint}"
+                <!-- P3 ①官方榜单：横向滚动卡片（仅 QQ 有来源；网易为空 → 整区隐藏） -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,8"
+                            Visibility="{Binding HasRankBoards, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="官方榜单" FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}" Margin="0,0,0,6"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  PanningMode="HorizontalOnly">
+                        <ItemsControl ItemsSource="{Binding RankBoards, Mode=OneWay}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Width="92" Margin="0,0,8,0" Padding="0" Background="Transparent" BorderThickness="0"
+                                            Command="{Binding DataContext.OpenRankBoardCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding Mode=OneWay}"
+                                            AutomationProperties.Name="打开榜单">
+                                        <StackPanel>
+                                            <Border Width="92" Height="92" CornerRadius="{DynamicResource Radius_MD}"
+                                                    Background="{StaticResource Brush_SurfaceAlt}">
+                                                <Image Source="{Binding CoverUrl, Mode=OneWay}" Stretch="UniformToFill"
+                                                       ImageFailed="OnCoverImageFailed"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding Name, Mode=OneWay}" Margin="0,4,0,0"
+                                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{StaticResource Brush_TextSecondary}"
+                                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <!-- P3 ②推荐歌单：3 列网格（2026-09-09 曾移除，P3 按示意图重新填充） -->
+                <StackPanel Grid.Row="2" Margin="0,0,0,8">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <!-- 空集合不占位（无 NotEmptyToVis 转换器，用触发器表达） -->
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding RecommendedPlaylists.Count, Mode=OneWay}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="推荐歌单" FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}" Margin="0,0,0,6"/>
+                    <ItemsControl ItemsSource="{Binding RecommendedPlaylists, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Width="104" Margin="0,0,8,8" Padding="0" Background="Transparent" BorderThickness="0"
+                                        Command="{Binding DataContext.OpenPlaylistCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding Playlist, Mode=OneWay}"
+                                        AutomationProperties.Name="打开推荐歌单">
+                                    <StackPanel>
+                                        <Border Width="104" Height="104" CornerRadius="{DynamicResource Radius_MD}"
+                                                Background="{StaticResource Brush_SurfaceAlt}">
+                                            <Image Source="{Binding Cover, Mode=OneWay}" Stretch="UniformToFill"
+                                                   ImageFailed="OnCoverImageFailed"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name, Mode=OneWay}" Margin="0,4,0,0"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextSecondary}"
+                                                   TextTrimming="CharacterEllipsis" MaxHeight="32" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding TrackCountText, Mode=OneWay}"
+                                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                                   Foreground="{StaticResource Brush_TextMuted}"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <TextBlock Grid.Row="3" Text="每日推荐" FontSize="{DynamicResource Font_SizeCaption}"
+                           Foreground="{StaticResource Brush_TextMuted}" Margin="0,0,0,4"/>
+                <TextBlock Grid.Row="3" Style="{StaticResource ListEmptyHint}"
                            Text="暂无每日推荐 — 登录后才会生成（仅网易云支持）"
                            Visibility="{Binding DailyRecommend.Count, Converter={StaticResource EmptyToVis}}"/>
-                <ListBox Grid.Row="2" x:Name="DailyRecommendList" ItemsSource="{Binding DailyRecommend}"
+                <ListBox Grid.Row="3" x:Name="DailyRecommendList" ItemsSource="{Binding DailyRecommend}"
                          MouseDoubleClick="OnDailyRecommendDoubleClick"
                          Background="Transparent" BorderThickness="0"
                          HorizontalContentAlignment="Stretch"

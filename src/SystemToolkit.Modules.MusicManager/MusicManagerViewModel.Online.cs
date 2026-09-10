@@ -87,6 +87,7 @@ public partial class MusicManagerViewModel
     {
         SelectedPlatform = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
         RefreshAccountArea(); // P3：账号区随平台联动（下拉里的"当前"标记与胶囊内容）
+        await LoadRankBoardsAsync(); // P3：榜单随平台（网易无来源 → 整区隐藏）
         // 审查 F-02：网络命令异常必须落用户可见状态（🔴 不静默——否则表现为"点击没反应"）
         try
         {
@@ -708,6 +709,13 @@ public partial class MusicManagerViewModel
 
     public ObservableCollection<OnlineResultRowVm> DailyRecommend { get; } = [];
 
+    /// <summary>官方榜单（仅 QQ 有来源；网易为空 → UI 整区隐藏）。</summary>
+    public ObservableCollection<OnlineRankBoard> RankBoards { get; } = [];
+
+    /// <summary>是否有榜单可显示（决定右栏榜单区是否出现）。</summary>
+    public bool HasRankBoards => RankBoards.Count > 0;
+
+
     public ObservableCollection<PlaylistRowVm> RecommendedPlaylists { get; } = [];
 
     [ObservableProperty]
@@ -743,6 +751,8 @@ public partial class MusicManagerViewModel
                 RecommendedPlaylists.Add(new PlaylistRowVm(playlist));
             }
 
+            await LoadRankBoardsAsync(); // P3：官方榜单（网易为空 → 整区隐藏）
+
             // 空态原因可见：未登录 / QQ 不支持 / 网络失败（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
         }
@@ -757,6 +767,77 @@ public partial class MusicManagerViewModel
             IsLoadingRecommendations = false;
         }
     }
+
+    /// <summary>P3：加载官方榜单（网易无来源 → 空集合，UI 整区隐藏）。</summary>
+    private async Task LoadRankBoardsAsync()
+    {
+        if (_catalog is null)
+        {
+            return;
+        }
+
+        try
+        {
+            List<OnlineRankBoard> boards = await _catalog.LoadRankListAsync(SelectedPlatform);
+            RankBoards.Clear();
+            foreach (OnlineRankBoard board in boards)
+            {
+                RankBoards.Add(board);
+            }
+
+            OnPropertyChanged(nameof(HasRankBoards));
+        }
+        catch (Exception ex)
+        {
+            // 🔴 不静默：榜单加载失败要可见（但右栏其它区不受影响）
+            _log.Warn($"[Music] 榜单加载失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// P3：点榜单卡片 → 载入该榜歌曲，作为可播放队列展示（复用搜索结果视图与双击播放管线）。
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenRankBoardAsync(OnlineRankBoard? board)
+    {
+        if (board is null)
+        {
+            return;
+        }
+
+        if (_catalog is null)
+        {
+            OnlineStatusText = "在线目录服务未就绪，无法载入榜单";
+            return;
+        }
+
+        IsSearchingOnline = true;
+        try
+        {
+            List<OnlineTrack> songs = await _catalog.LoadRankSongsAsync(SelectedPlatform, board.Id, 30);
+            SearchResults.Clear();
+            foreach (OnlineTrack track in songs)
+            {
+                SearchResults.Add(new OnlineResultRowVm(track));
+            }
+
+            BeginCoverLoads(SearchResults);
+            OnlineStatusText = songs.Count == 0
+                ? $"榜单「{board.Name}」暂无曲目（{_catalog.CatalogError}）"
+                : $"已载入榜单「{board.Name}」{songs.Count} 首 — 双击曲目即以其为起点播放";
+            CurrentView = ContentViewMode.OnlineSearch;
+        }
+        catch (Exception ex)
+        {
+            OnlineStatusText = $"载入榜单失败：{ex.Message}";
+            _log.Error($"[Music] 载入榜单失败（{board.Name}）", ex);
+        }
+        finally
+        {
+            IsSearchingOnline = false;
+        }
+    }
+
 
     /// <summary>双击每日推荐曲 = 以整版推荐为队列起播该曲。</summary>
     [RelayCommand]

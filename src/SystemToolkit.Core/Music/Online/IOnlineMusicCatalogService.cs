@@ -56,6 +56,12 @@ public interface IQqMusicOnlineApi
 
     /// <summary>歌单曲目（经歌单 ID 取曲目，QQ 走 GetPlaylistInfoWithTrackIds + 批量取歌）。</summary>
     Task<List<OnlineTrack>> LoadPlaylistTracksAsync(string playlistId, int offset = 0, int limit = 100, string cookie = "", CancellationToken ct = default);
+
+    /// <summary>官方榜单列表（对照 NexBox get_rank_list：四策略降级，末级走预设 topid）。</summary>
+    Task<List<OnlineRankBoard>> LoadRankListAsync(string cookie = "", CancellationToken ct = default);
+
+    /// <summary>榜单歌曲（对照 NexBox get_rank_songs：CGI page=detail&amp;topid=X）。</summary>
+    Task<List<OnlineTrack>> LoadRankSongsAsync(string rankId, int limit = 30, string cookie = "", CancellationToken ct = default);
 }
 
 /// <summary>
@@ -87,6 +93,12 @@ public interface IOnlineMusicCatalogService
 
     /// <summary>推荐歌单（QQ 不支持 → 空结果 + CatalogError）。</summary>
     Task<List<OnlinePlaylist>> LoadRecommendationsAsync(OnlineProvider provider, CancellationToken ct = default);
+
+    /// <summary>官方榜单列表（仅 QQ 有来源；网易 → 空结果，UI 整区隐藏）。</summary>
+    Task<List<OnlineRankBoard>> LoadRankListAsync(OnlineProvider provider, CancellationToken ct = default);
+
+    /// <summary>榜单歌曲（仅 QQ；网易 → 空结果 + CatalogError）。</summary>
+    Task<List<OnlineTrack>> LoadRankSongsAsync(OnlineProvider provider, string rankId, int limit = 30, CancellationToken ct = default);
 
     /// <summary>登录态（实现永不抛——异常收敛为未登录 + CatalogError）。</summary>
     Task<OnlineLoginInfo> GetLoginStatusAsync(OnlineProvider provider, CancellationToken ct = default);

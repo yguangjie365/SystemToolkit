@@ -193,6 +193,215 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     private static string Shorten(string text)
         => text.Length <= 200 ? text : text[..200] + "…";
 
+    /// <summary>QQ 排行榜预设（对照 NexBox QQ_RANK_PRESETS：榜单列表接口已失效，末级兜底用实测可用 topid）。</summary>
+    private static readonly (string Id, string Name, string Cover)[] QqRankPresets =
+    [
+        ("26", "巅峰榜·热歌", "https://y.gtimg.cn/music/photo_new/T003R300x300M000003kErY34CR2zg.jpg"),
+        ("27", "巅峰榜·新歌", "https://y.gtimg.cn/music/photo_new/T003R300x300M000003lDPtw0sKXJK.jpg"),
+        ("62", "飙升榜", "https://y.gtimg.cn/music/photo_new/T003R300x300M000002DWfWl0cjhjP.jpg"),
+        ("4", "巅峰榜·流行指数", "https://y.gtimg.cn/music/photo_new/T003R300x300M000002aA7GQ0YoZYe.jpg"),
+        ("5", "巅峰榜·内地", "https://y.gtimg.cn/music/photo_new/T003R300x300M000003V5yNn4TIRVP.jpg"),
+        ("6", "巅峰榜·港台", "https://y.gtimg.cn/music/photo_new/T003R300x300M000000CLXb916ik5d.jpg"),
+    ];
+
+    /// <summary>
+    /// 官方榜单列表。对照 NexBox get_rank_list（qqmusic.rs:2714）四策略降级：
+    /// ① CGI fcg_v8_toplist_cp.fcg(page=index) ② musicu GetAllTop 带认证 ③ 同模块不带认证
+    /// ④ 预设 topid 列表（源码注：榜单列表接口已失效，预设是实测可用路径）。
+    /// </summary>
+    public async Task<List<OnlineRankBoard>> LoadRankListAsync(string cookie = "", CancellationToken ct = default)
+    {
+        // 策略 ①：CGI page=index
+        try
+        {
+            string url = "https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?g_tk=5381&loginUin=0&hostUin=0"
+                + "&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0"
+                + "&type=top&page=index&format=json&tpl=3";
+            JsonElement json = await QqGetJsonAsync(url, cookie, Referer, ct).ConfigureAwait(false);
+            List<OnlineRankBoard> parsed = CollectRankBoards(json);
+            if (parsed.Count > 0)
+            {
+                _logger.Info($"[QQMusic] 榜单列表 {parsed.Count} 个（CGI page=index）");
+                return parsed;
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.Warn($"[QQMusic] 榜单 CGI 路径失败：{e.Message}");
+        }
+
+        // 策略 ②③：musicu musicToplist.ToplistInfoServer/GetAllTop（带/不带认证）
+        foreach (bool withAuth in new[] { true, false })
+        {
+            try
+            {
+                string uin = withAuth ? ExtractUin(cookie) : "0";
+                if (withAuth && string.IsNullOrEmpty(uin))
+                {
+                    continue;
+                }
+
+                string authSt = withAuth
+                    ? ExtractCookieValueChain(cookie, "qm_keyst", "qqmusic_key", "music_key")
+                    : string.Empty;
+                if (withAuth && string.IsNullOrEmpty(authSt))
+                {
+                    continue;
+                }
+
+                string payload = withAuth
+                    ? "{\"comm\":{\"uin\":\"" + uin + "\",\"format\":\"json\",\"ct\":19,\"cv\":0,\"authst\":\"" + authSt + "\"},"
+                      + "\"req_0\":{\"module\":\"musicToplist.ToplistInfoServer\",\"method\":\"GetAllTop\",\"param\":{}}}"
+                    : "{\"comm\":{\"uin\":\"0\",\"format\":\"json\",\"ct\":24,\"cv\":0},"
+                      + "\"req_0\":{\"module\":\"musicToplist.ToplistInfoServer\",\"method\":\"GetAllTop\",\"param\":{}}}";
+
+                JsonElement json = await PostMusicuAsync(payload, cookie, ct).ConfigureAwait(false);
+                List<OnlineRankBoard> parsed = CollectRankBoards(json);
+                if (parsed.Count > 0)
+                {
+                    _logger.Info($"[QQMusic] 榜单列表 {parsed.Count} 个（musicu GetAllTop，认证={withAuth}）");
+                    return parsed;
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.Warn($"[QQMusic] 榜单 musicu 路径失败（认证={withAuth}）：{e.Message}");
+            }
+        }
+
+        // 策略 ④：预设列表
+        _logger.Info("[QQMusic] 榜单接口全部失败，回退预设 topid 列表");
+        return QqRankPresets
+            .Select(x => new OnlineRankBoard { Id = x.Id, Name = x.Name, CoverUrl = x.Cover })
+            .ToList();
+    }
+
+    /// <summary>榜单歌曲（对照 NexBox get_rank_songs：CGI page=detail&amp;topid=X）。</summary>
+    public async Task<List<OnlineTrack>> LoadRankSongsAsync(string rankId, int limit = 30, string cookie = "", CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(rankId))
+        {
+            return [];
+        }
+
+        try
+        {
+            string url = "https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?g_tk=5381&loginUin=0&hostUin=0"
+                + "&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0"
+                + "&type=top&topid=" + Uri.EscapeDataString(rankId) + "&format=json&tpl=3&page=detail";
+            JsonElement json = await QqGetJsonAsync(url, cookie, Referer, ct).ConfigureAwait(false);
+
+            JsonElement list = default;
+            if (json.TryGetProperty("songlist", out JsonElement direct) && direct.ValueKind == JsonValueKind.Array)
+            {
+                list = direct;
+            }
+            else if (json.TryGetProperty("data", out JsonElement data)
+                     && data.TryGetProperty("songlist", out JsonElement nested) && nested.ValueKind == JsonValueKind.Array)
+            {
+                list = nested;
+            }
+
+            var result = new List<OnlineTrack>();
+            if (list.ValueKind != JsonValueKind.Array)
+            {
+                _logger.Warn("[QQMusic] 榜单歌曲响应无 songlist：" + Shorten(json.ToString()));
+                return result;
+            }
+
+            foreach (JsonElement item in list.EnumerateArray())
+            {
+                // 榜单详情字段与搜索不同：songname / songmid / singer[] / albumname（NexBox 同形态）
+                JsonElement song = item.TryGetProperty("data", out JsonElement inner) ? inner : item;
+                string name = song.GetStr("songname", song.GetStr("name", ""));
+                string mid = song.GetStr("songmid", song.GetStr("mid", ""));
+                if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(mid))
+                {
+                    continue;
+                }
+
+                var artists = new List<string>();
+                if (song.TryGetProperty("singer", out JsonElement singers) && singers.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement s in singers.EnumerateArray())
+                    {
+                        string n = s.GetStr("name", s.GetStr("title", ""));
+                        if (!string.IsNullOrEmpty(n))
+                        {
+                            artists.Add(n);
+                        }
+                    }
+                }
+
+                result.Add(new OnlineTrack
+                {
+                    Provider = OnlineProvider.QQMusic,
+                    Id = mid,
+                    Mid = mid,
+                    Name = StripHighlightTags(name),
+                    Artist = string.Join("、", artists),
+                    Album = song.GetStr("albumname", song.GetStr("album", "")),
+                    DurationMs = (ulong)Math.Max(0, song.GetInt("interval", 0)) * 1000UL,
+                });
+
+                if (result.Count >= limit)
+                {
+                    break;
+                }
+            }
+
+            _logger.Info($"[QQMusic] 榜单 {rankId} 曲目 {result.Count} 首");
+            return result;
+        }
+        catch (Exception e)
+        {
+            _logger.Error($"[QQMusic] 榜单歌曲加载失败（topid={rankId}）", e);
+            return [];
+        }
+    }
+
+    /// <summary>宽松收集榜单条目：递归找含 topid 的对象（对照 NexBox parse_toplist_list_from_json 的多形态兼容）。</summary>
+    private static List<OnlineRankBoard> CollectRankBoards(JsonElement el)
+    {
+        var result = new List<OnlineRankBoard>();
+        Walk(el, result);
+        return result;
+    }
+
+    private static void Walk(JsonElement el, List<OnlineRankBoard> result)
+    {
+        if (el.ValueKind == JsonValueKind.Object)
+        {
+            string id = string.Empty;
+            if (el.TryGetProperty("topid", out JsonElement t))
+            {
+                id = t.ValueKind == JsonValueKind.Number ? t.GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture) : t.GetString() ?? string.Empty;
+            }
+
+            if (!string.IsNullOrEmpty(id))
+            {
+                string name = el.GetStr("ListName", el.GetStr("title", el.GetStr("name", "")));
+                if (!string.IsNullOrEmpty(name))
+                {
+                    string cover = el.GetStr("pic", el.GetStr("picUrl", el.GetStr("frontPicUrl", "")));
+                    result.Add(new OnlineRankBoard { Id = id, Name = name, CoverUrl = cover });
+                }
+            }
+
+            foreach (System.Text.Json.JsonProperty prop in el.EnumerateObject())
+            {
+                Walk(prop.Value, result);
+            }
+        }
+        else if (el.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement item in el.EnumerateArray())
+            {
+                Walk(item, result);
+            }
+        }
+    }
+
     /// <summary>获取播放地址（通过 vkey 请求）。</summary>
     /// <remarks>
     /// 2026-09-09 对照 NexBox song_url 重写（此前"无 data"恒失败，歌单能看不能播）：

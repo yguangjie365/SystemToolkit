@@ -82,6 +82,12 @@ public class MusicOnlineCatalogTests
 
         public Task<List<OnlineTrack>> LoadPlaylistTracksAsync(string playlistId, int offset = 0, int limit = 100, string cookie = "", CancellationToken ct = default) =>
             Task.FromResult(new List<OnlineTrack> { new() { Provider = OnlineProvider.QQMusic, Id = "qp1", Name = "QQ 歌单曲" } });
+
+        public Task<List<OnlineRankBoard>> LoadRankListAsync(string cookie = "", CancellationToken ct = default) =>
+            Task.FromResult(new List<OnlineRankBoard> { new() { Id = "26", Name = "巅峰榜·热歌" } });
+
+        public Task<List<OnlineTrack>> LoadRankSongsAsync(string rankId, int limit = 30, string cookie = "", CancellationToken ct = default) =>
+            Task.FromResult(new List<OnlineTrack> { new() { Provider = OnlineProvider.QQMusic, Id = "qr1", Name = "QQ 榜单曲" } });
     }
 
     private static OnlineTrack Track(string id) => new()
