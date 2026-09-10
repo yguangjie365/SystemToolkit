@@ -24,8 +24,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     private const string SearchUa = "QQMusic 14090508(android 12)";
     private const string Referer = "https://y.qq.com/";
 
-    /// <summary>搜索专用 UA（对照 NexBox QQ_SEARCH_UA：musics.fcg 按移动端校验）。</summary>
-    private const string QqSearchUa = "QQMusic 14090508(android 12)";
+    /// <summary>
+    /// 搜索专用 UA（对照 NexBox QQ_SEARCH_UA：musics.fcg 按移动端校验）。
+    /// 🔴 含括号，不是合法的 User-Agent 语法单元——必须 TryAddWithoutValidation 添加（见 SearchAsync）。
+    /// </summary>
+    internal const string QqSearchUa = "QQMusic 14090508(android 12)";
 
     /// <summary>搜索专用端点（对照 NexBox：musics.fcg?sign=，不是 musicu.fcg）。</summary>
     private const string QqSearchUrl = "https://u.y.qq.com/cgi-bin/musics.fcg";
@@ -116,7 +119,10 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
             string url = QqSearchUrl + "?sign=" + Uri.EscapeDataString(sign);
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
-            req.Headers.Add("User-Agent", QqSearchUa);
+            // 🔴 必须免校验添加（2026-09-10 实测事故）：Headers.Add("User-Agent", …) 会走
+            // .NET 内建的 User-Agent 语法解析，"QQMusic 14090508(android 12)" 的括号被判非法
+            // → 抛 FormatException，请求根本没发出（现象：搜索永远无结果且只留一条"搜索失败"）。
+            req.Headers.TryAddWithoutValidation("User-Agent", QqSearchUa);
             req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
             using HttpResponseMessage resp = await _http.SendAsync(req, ct);

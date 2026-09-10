@@ -4,6 +4,11 @@
     <TargetFramework>net10.0-windows</TargetFramework>
 </PropertyGroup>
 
+  <!-- 测试可见内部常量（如 QQ 搜索专用 UA），用于回归守卫 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
     <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
