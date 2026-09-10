@@ -86,6 +86,7 @@ public partial class MusicManagerViewModel
     private async Task SelectPlatformAsync(string? platform)
     {
         SelectedPlatform = platform == "QQMusic" ? OnlineProvider.QQMusic : OnlineProvider.NetEase;
+        RefreshAccountArea(); // P3：账号区随平台联动（下拉里的"当前"标记与胶囊内容）
         // 审查 F-02：网络命令异常必须落用户可见状态（🔴 不静默——否则表现为"点击没反应"）
         try
         {
@@ -799,6 +800,117 @@ public partial class MusicManagerViewModel
         private set => SetProperty(ref _qqLoginText, value);
     }
 
+    // ════════ P3 头部账号区（对齐 NexBox 账号 widget）════════
+
+    private OnlineLoginInfo? _netEaseLogin;
+    private OnlineLoginInfo? _qqLogin;
+
+    /// <summary>平台切换菜单行（头像/昵称/已登录徽标/添加平台）。</summary>
+    public ObservableCollection<PlatformAccountRowVm> PlatformAccounts { get; } = [];
+
+    /// <summary>当前平台键（"NetEase"/"QQMusic"），退出按钮参数用。</summary>
+    public string CurrentPlatformKey => SelectedPlatform == OnlineProvider.NetEase ? "NetEase" : "QQMusic";
+
+    private bool _isCurrentAccountLoggedIn;
+
+    /// <summary>当前平台是否已登录（决定胶囊 vs 登录按钮）。</summary>
+    public bool IsCurrentAccountLoggedIn
+    {
+        get => _isCurrentAccountLoggedIn;
+        private set => SetProperty(ref _isCurrentAccountLoggedIn, value);
+    }
+
+    private string _currentAccountName = "未登录";
+
+    /// <summary>当前平台账号昵称（未登录为 "未登录"）。</summary>
+    public string CurrentAccountName
+    {
+        get => _currentAccountName;
+        private set => SetProperty(ref _currentAccountName, value);
+    }
+
+    private string _currentAccountAvatarUrl = string.Empty;
+
+    /// <summary>当前平台账号头像 URL（空则由 View 用首字色块兜底）。</summary>
+    public string CurrentAccountAvatarUrl
+    {
+        get => _currentAccountAvatarUrl;
+        private set => SetProperty(ref _currentAccountAvatarUrl, value);
+    }
+
+    /// <summary>当前账号是否有可用头像 URL（View 用它决定是否挂 ImageBrush，避免空源解码告警）。</summary>
+    public bool HasCurrentAccountAvatar => !string.IsNullOrWhiteSpace(CurrentAccountAvatarUrl);
+
+    private string _currentAccountInitial = "?";
+
+    /// <summary>头像兜底首字（无头像 URL 时显示）。</summary>
+    public string CurrentAccountInitial
+    {
+        get => _currentAccountInitial;
+        private set => SetProperty(ref _currentAccountInitial, value);
+    }
+
+    private string _currentVipBadge = string.Empty;
+
+    /// <summary>VIP 徽标文本：SVIP / VIP / 空（口径见 <see cref="VipBadgeOf"/>）。</summary>
+    public string CurrentVipBadge
+    {
+        get => _currentVipBadge;
+        private set => SetProperty(ref _currentVipBadge, value);
+    }
+
+    /// <summary>
+    /// 重算头部账号区（切换平台与登录态刷新后调用）。
+    /// 徽章口径对照 NexBox：<c>is_vip = vip_type &gt;= 1</c>、<c>is_svip = vip_type &gt;= 10</c>。
+    /// </summary>
+    private void RefreshAccountArea()
+    {
+        OnlineLoginInfo? current = SelectedPlatform == OnlineProvider.NetEase ? _netEaseLogin : _qqLogin;
+
+        IsCurrentAccountLoggedIn = current?.LoggedIn == true;
+        CurrentAccountName = IsCurrentAccountLoggedIn && !string.IsNullOrWhiteSpace(current!.Nickname)
+            ? current.Nickname!
+            : "未登录";
+        CurrentAccountAvatarUrl = IsCurrentAccountLoggedIn ? current!.AvatarUrl ?? string.Empty : string.Empty;
+        OnPropertyChanged(nameof(HasCurrentAccountAvatar));
+        CurrentAccountInitial = CurrentAccountName.Length > 0 ? CurrentAccountName[..1] : "?";
+        CurrentVipBadge = IsCurrentAccountLoggedIn ? VipBadgeOf(current!.VipType) : string.Empty;
+
+        PlatformAccounts.Clear();
+        PlatformAccounts.Add(BuildAccountRow(OnlineProvider.NetEase, "网易云", _netEaseLogin));
+        PlatformAccounts.Add(BuildAccountRow(OnlineProvider.QQMusic, "QQ 音乐", _qqLogin));
+    }
+
+    private PlatformAccountRowVm BuildAccountRow(OnlineProvider provider, string platformName, OnlineLoginInfo? info)
+    {
+        bool loggedIn = info?.LoggedIn == true;
+        return new PlatformAccountRowVm
+        {
+            PlatformKey = provider == OnlineProvider.NetEase ? "NetEase" : "QQMusic",
+            PlatformName = platformName,
+            LoggedIn = loggedIn,
+            DisplayName = loggedIn && !string.IsNullOrWhiteSpace(info!.Nickname) ? info.Nickname! : "未登录",
+            Initial = loggedIn && !string.IsNullOrWhiteSpace(info!.Nickname) ? info.Nickname![..1] : "＋",
+            VipBadge = loggedIn ? VipBadgeOf(info!.VipType) : string.Empty,
+            IsCurrent = provider == SelectedPlatform,
+        };
+    }
+
+    /// <summary>VIP 徽标口径（NexBox netease.rs:589-590 同义）：&gt;=10 SVIP，&gt;=1 VIP，其余无。</summary>
+    private static string VipBadgeOf(int vipType) => vipType >= 10 ? "SVIP" : vipType >= 1 ? "VIP" : string.Empty;
+
+    /// <summary>平台切换菜单的一行（平台名 + 昵称/未登录 + 徽标 + 是否当前）。</summary>
+    public sealed class PlatformAccountRowVm
+    {
+        public string PlatformKey { get; init; } = string.Empty;
+        public string PlatformName { get; init; } = string.Empty;
+        public bool LoggedIn { get; init; }
+        public string DisplayName { get; init; } = string.Empty;
+        public string Initial { get; init; } = "＋";
+        public string VipBadge { get; init; } = string.Empty;
+        public bool IsCurrent { get; init; }
+    }
+
     /// <summary>
     /// 登录窗回调（View 注入）：参数为平台；View 打开 <c>OnlineLoginWindow</c> 并把
     /// 捕获的 Cookie 经 <see cref="OnLoginCookieObtainedAsync"/> 回传。VM 不持窗口引用。
@@ -866,6 +978,7 @@ public partial class MusicManagerViewModel
         try
         {
             OnlineLoginInfo netEase = await _catalog.GetLoginStatusAsync(OnlineProvider.NetEase);
+            _netEaseLogin = netEase;
             NetEaseLoginText = netEase.LoggedIn ? $"已登录 · {netEase.Nickname}" : "未登录";
             if (!netEase.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
             {
@@ -873,11 +986,14 @@ public partial class MusicManagerViewModel
             }
 
             OnlineLoginInfo qq = await _catalog.GetLoginStatusAsync(OnlineProvider.QQMusic);
+            _qqLogin = qq;
             QqLoginText = qq.LoggedIn ? $"已登录 · {qq.Nickname}" : "未登录";
             if (!qq.LoggedIn && !string.IsNullOrEmpty(_catalog.CatalogError))
             {
                 QqLoginText = "检测失败";
             }
+
+            RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
         }
         catch (Exception ex)
         {

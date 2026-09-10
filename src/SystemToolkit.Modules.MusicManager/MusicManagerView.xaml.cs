@@ -110,6 +110,7 @@ public partial class MusicManagerView : UserControl
         }
 
         SearchHistoryPopup.IsOpen = false; // 切页不残留浮层
+        AccountMenuPopup.IsOpen = false;
         SetKaraokeRenderHook(false); // P0：静态 CompositionTarget.Rendering 必须随卸载解绑，防视图泄漏
         _discSpin?.Pause(DiscHost); // 切走页面：黑胶暂停，避免不可见空转（审查 🟠-1 采纳——修正其论据后落地）
     }
@@ -177,6 +178,45 @@ public partial class MusicManagerView : UserControl
         {
             SearchHistoryPopup.IsOpen = false;
         }
+
+        // P3：账号菜单同理——点在账号区/菜单之外则收起
+        if (AccountMenuPopup.IsOpen && !AccountArea.IsMouseOver
+            && !(AccountMenuPopup.Child is System.Windows.FrameworkElement accountRoot && accountRoot.IsMouseOver))
+        {
+            AccountMenuPopup.IsOpen = false;
+        }
+    }
+
+    /// <summary>P3：点账号胶囊或登录按钮 → 开关平台选择器。</summary>
+    private void OnAccountButtonClick(object sender, RoutedEventArgs e)
+    {
+        AccountMenuPopup.IsOpen = !AccountMenuPopup.IsOpen;
+    }
+
+    /// <summary>
+    /// P3：点平台行 —— 当前平台仅收起；已登录平台 = 切换曲库来源（switchPlaybackSource）；
+    /// 未登录平台 = 直接打开该平台扫码登录窗。
+    /// </summary>
+    private void OnAccountRowClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.FrameworkElement { DataContext: MusicManagerViewModel.PlatformAccountRowVm row })
+        {
+            return;
+        }
+
+        if (!row.IsCurrent)
+        {
+            if (row.LoggedIn && _vm.SelectPlatformCommand.CanExecute(row.PlatformKey))
+            {
+                _vm.SelectPlatformCommand.Execute(row.PlatformKey);
+            }
+            else if (!row.LoggedIn && _vm.RequestLoginCommand.CanExecute(row.PlatformKey))
+            {
+                _vm.RequestLoginCommand.Execute(row.PlatformKey);
+            }
+        }
+
+        AccountMenuPopup.IsOpen = false;
     }
 
     /// <summary>P3a：点历史项复搜后收起（命令已由 VM 执行）。</summary>

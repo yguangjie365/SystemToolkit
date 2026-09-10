@@ -152,6 +152,183 @@
                         </Style>
                     </Button.Style>
                 </Button>
+                <!-- P3 头部账号区（对齐 NexBox）：当前平台 chip + 账号胶囊/登录 + 退出 + 平台切换菜单 -->
+                <Border CornerRadius="{DynamicResource Radius_Pill}" Padding="10,4" Margin="8,0,0,0" VerticalAlignment="Center"
+                        Background="{StaticResource Brush_Surface}"
+                        BorderBrush="{StaticResource Brush_SurfaceAlt}" BorderThickness="1">
+                    <TextBlock Text="{Binding SelectedPlatformText, StringFormat='当前平台 · {0}', Mode=OneWay}"
+                               VerticalAlignment="Center"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{StaticResource Brush_TextMuted}"/>
+                </Border>
+
+                <Grid x:Name="AccountArea" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- 已登录：头像（无图用首字）+ 昵称 + VIP 徽章 + ▾ -->
+                        <Button x:Name="AccountButton" Height="30" Padding="4,0,8,0" Click="OnAccountButtonClick"
+                                AutomationProperties.Name="账号与平台切换" ToolTip="切换平台 / 管理登录">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCurrentAccountLoggedIn, Mode=OneWay}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="22" Height="22" Margin="0,0,6,0">
+                                    <Ellipse Fill="{StaticResource Brush_AccentSoft}"/>
+                                    <TextBlock Text="{Binding CurrentAccountInitial, Mode=OneWay}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_Accent}"/>
+                                    <Ellipse>
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasCurrentAccountAvatar, Mode=OneWay}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Setter Property="Fill">
+                                                            <Setter.Value>
+                                                                <ImageBrush ImageSource="{Binding CurrentAccountAvatarUrl, Mode=OneWay}" Stretch="UniformToFill"/>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                </Grid>
+                                <TextBlock Text="{Binding CurrentAccountName, Mode=OneWay}" VerticalAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{StaticResource Brush_TextPrimary}"/>
+                                <Border CornerRadius="{DynamicResource Radius_XS}" Padding="5,1" Margin="6,0,6,0" VerticalAlignment="Center"
+                                        Background="{StaticResource Brush_WarningSoft}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CurrentVipBadge, Mode=OneWay}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding CurrentVipBadge, Mode=OneWay}"
+                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                               Foreground="{StaticResource Brush_TextSecondary}"/>
+                                </Border>
+                                <TextBlock Text="▾" VerticalAlignment="Center" Margin="0,0,2,0"
+                                           Foreground="{StaticResource Brush_TextMuted}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 未登录：widget 退化为登录按钮（点开同一个平台选择器） -->
+                        <Button Height="30" Padding="12,0" Content="登录" Click="OnAccountButtonClick"
+                                AutomationProperties.Name="登录音乐平台">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCurrentAccountLoggedIn, Mode=OneWay}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <!-- 退出：只退当前展示的平台 -->
+                        <Button Width="28" Height="28" Padding="0" Margin="6,0,0,0"
+                                Command="{Binding RequestLogoutCommand}"
+                                CommandParameter="{Binding CurrentPlatformKey, Mode=OneWay}"
+                                AutomationProperties.Name="退出当前平台登录" ToolTip="退出当前平台（清除本地凭据）">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCurrentAccountLoggedIn, Mode=OneWay}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <Path Data="M 5,3 A 6,6 0 1 0 11,3 M 8,0 L 8,5" StrokeLineJoin="Round"
+                                  Stroke="{StaticResource Brush_TextSecondary}" StrokeThickness="1.6"
+                                  Width="14" Height="14" Stretch="Uniform"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- 平台切换菜单（switchPlaybackSource）：StaysOpen=True，关闭交窗口级点击判定 -->
+                    <Popup x:Name="AccountMenuPopup"
+                           PlacementTarget="{Binding ElementName=AccountArea}"
+                           Placement="Bottom"
+                           StaysOpen="True"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade"
+                           Width="240">
+                        <Border Background="{StaticResource Brush_Surface}"
+                                BorderBrush="{StaticResource Brush_SurfaceAlt}" BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius_MD}"
+                                Margin="0,4,0,0" Padding="6">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#1F2937" Opacity="0.16" BlurRadius="16" ShadowDepth="2"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <TextBlock Text="切换平台 / 管理登录" Margin="8,6,8,4"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{StaticResource Brush_TextMuted}"/>
+                                <ItemsControl ItemsSource="{Binding PlatformAccounts, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Padding="8,6" Background="Transparent" BorderThickness="0"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    Click="OnAccountRowClick"
+                                                    AutomationProperties.Name="平台账号行">
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Grid Width="20" Height="20" Margin="0,0,8,0">
+                                                            <Ellipse Fill="{StaticResource Brush_SurfaceAlt}"/>
+                                                            <TextBlock Text="{Binding Initial, Mode=OneWay}"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                                                       Foreground="{StaticResource Brush_TextSecondary}"/>
+                                                        </Grid>
+                                                        <TextBlock VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeBodySm}">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding StringFormat="{}{0} · {1}">
+                                                                    <Binding Path="PlatformName" Mode="OneWay"/>
+                                                                    <Binding Path="DisplayName" Mode="OneWay"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                               FontSize="{DynamicResource Font_SizeCaption}"
+                                                               Foreground="{StaticResource Brush_Accent}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="＋ 添加"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCurrent, Mode=OneWay}" Value="True">
+                                                                        <Setter Property="Text" Value="✓ 当前"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding LoggedIn, Mode=OneWay}" Value="True">
+                                                                        <Setter Property="Text" Value=""/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
+
                 <!-- P3a 搜索历史（方案 B 聚焦下拉）：TextBox 外包 Grid 供 Popup 定位。
                      🔴 StaysOpen 必须为 True：False 会在「点击获焦→弹出」的同一次鼠标事件里自动关闭，
                      表现为浮层闪一下就消失（2026-09-10 实测）；关闭改由窗口级 PreviewMouseDown 判定 -->
@@ -366,47 +543,10 @@
                                 <TextBlock Text="{Binding IsLoadingPlaylists, Mode=OneWay}" Visibility="Collapsed"/>
                                 <TextBlock Style="{StaticResource InlineLoadingHint}" Text="加载中…" Margin="0,0,6,0"
                                            Visibility="{Binding IsLoadingPlaylists, Converter={StaticResource BoolToVis}}"/>
-                                <TextBlock Text="网易云" VerticalAlignment="Center"
-                                           FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,0,4,0"/>
-                                <TextBlock Text="{Binding NetEaseLoginText, Mode=OneWay}" VerticalAlignment="Center"
+                                <!-- P3：登录/退出已上移到头部账号 widget（对齐 NexBox），此处只留引导 -->
+                                <TextBlock Text="登录与切换平台见右上角" VerticalAlignment="Center"
                                            FontSize="{DynamicResource Font_SizeCaption}"
                                            Foreground="{StaticResource Brush_TextMuted}"/>
-                                <Button Height="22" Padding="6,0" Margin="4,0,2,0" Content="登录"
-                                        Command="{Binding RequestLoginCommand}" CommandParameter="NetEase"
-                                        AutomationProperties.Name="网易云登录">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
-                                    </Button.Style>
-                                </Button>
-                                <!-- 完全退出（2026-09-09 用户要求）：清加密 Cookie 后重新扫码可修复残缺登录态 -->
-                                <Button Height="22" Padding="6,0" Margin="2,0,10,0" Content="退出"
-                                        Command="{Binding RequestLogoutCommand}" CommandParameter="NetEase"
-                                        AutomationProperties.Name="网易云退出登录" ToolTip="清除本地登录凭据（完全退出）">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
-                                    </Button.Style>
-                                </Button>
-                                <TextBlock Text="QQ音乐" VerticalAlignment="Center"
-                                           FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_TextSecondary}" Margin="0,0,4,0"/>
-                                <TextBlock Text="{Binding QqLoginText, Mode=OneWay}" VerticalAlignment="Center"
-                                           FontSize="{DynamicResource Font_SizeCaption}"
-                                           Foreground="{StaticResource Brush_TextMuted}"/>
-                                <Button Height="22" Padding="6,0" Margin="4,0,2,0" Content="登录"
-                                        Command="{Binding RequestLoginCommand}" CommandParameter="QQMusic"
-                                        AutomationProperties.Name="QQ音乐登录">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
-                                    </Button.Style>
-                                </Button>
-                                <Button Height="22" Padding="6,0" Margin="2,0,0,0" Content="退出"
-                                        Command="{Binding RequestLogoutCommand}" CommandParameter="QQMusic"
-                                        AutomationProperties.Name="QQ音乐退出登录" ToolTip="清除本地登录凭据（完全退出）">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}"/>
-                                    </Button.Style>
-                                </Button>
                             </StackPanel>
                         </Grid>
 
