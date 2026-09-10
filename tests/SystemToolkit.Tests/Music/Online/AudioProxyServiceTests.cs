@@ -25,10 +25,18 @@ public class AudioProxyServiceTests : IDisposable
     /// <summary>起一个假上游：回显收到的 Range 头，并按 Range 语义返回 206/200。</summary>
     private string StartFakeUpstream(byte[] body)
     {
+        // 测试隔离（2026-09-10）：先占住端口再让 HttpListener 注册——
+        // 原写法 bind(0)→取端口→释放 后，Kestrel 代理（同样端口 0 自动分配）会抢到
+        // 这个刚释放的端口，导致代理请求上游时打到自己（实测返回 418 串扰）
+        var guard = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        guard.Start();
+        int upstreamPort = ((IPEndPoint)guard.LocalEndpoint).Port;
+
         _fakeUpstream = new HttpListener();
-        _fakeUpstreamPrefix = $"http://127.0.0.1:{FreePort()}/";
+        _fakeUpstreamPrefix = $"http://127.0.0.1:{upstreamPort}/";
         _fakeUpstream.Prefixes.Add(_fakeUpstreamPrefix);
         _fakeUpstream.Start();
+        guard.Stop(); // http.sys 已注册该前缀，此后 OS 不会再把它分给 Kestrel
 
         _ = Task.Run(async () =>
         {
@@ -79,14 +87,33 @@ public class AudioProxyServiceTests : IDisposable
         return _fakeUpstreamPrefix;
     }
 
+    private static readonly object PortGate = new();
+    private static readonly System.Collections.Generic.HashSet<int> AllocatedPorts = new();
+
+    /// <summary>
+    /// 取空闲端口。bind(0)→取端口→释放 属 TOCTOU：释放后端口可被再次分配，
+    /// 本进程内用 HashSet 记账避免重复（测试隔离用，2026-09-10）。
+    /// </summary>
     private static int FreePort()
     {
-        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        int port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
+        lock (PortGate)
+        {
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+                l.Start();
+                int port = ((IPEndPoint)l.LocalEndpoint).Port;
+                l.Stop();
+                if (AllocatedPorts.Add(port))
+                {
+                    return port;
+                }
+            }
+
+            throw new InvalidOperationException("测试端口分配失败（连续 32 次重复）");
+        }
     }
+
 
     // ── 域名映射 ──
 
@@ -184,17 +211,26 @@ public class AudioProxyServiceTests : IDisposable
         // 默认白名单校验器（不注入放行）
         var sut = new AudioProxyService();
         int port = await sut.StartAsync();
-        using var client = new HttpClient();
-        HttpResponseMessage resp = await client.GetAsync(
-            $"http://127.0.0.1:{port}/audio?url={Uri.EscapeDataString(targetUrl)}");
+        try
+        {
+            using var client = new HttpClient();
+            HttpResponseMessage resp = await client.GetAsync(
+                $"http://127.0.0.1:{port}/audio?url={Uri.EscapeDataString(targetUrl)}");
 
-        if (shouldReject)
-        {
-            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode); // 白名单外一律 400
+            if (shouldReject)
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode); // 白名单外一律 400
+            }
+            else
+            {
+                Assert.NotEqual(HttpStatusCode.BadRequest, resp.StatusCode); // 放行后上游不可达 → 502 等，非 400
+            }
         }
-        else
+        finally
         {
-            Assert.NotEqual(HttpStatusCode.BadRequest, resp.StatusCode); // 放行后上游不可达 → 502 等，非 400
+            // 测试隔离（2026-09-10）：不停止会让每个用例泄漏一个 Kestrel 监听与端口，
+            // 后续用例经 FreePort 拿到同端口时会打到本用例的残留服务（实测 418 串扰）
+            await sut.StopAsync();
         }
     }
 }
