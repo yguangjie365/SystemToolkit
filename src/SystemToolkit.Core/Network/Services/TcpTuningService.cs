@@ -197,6 +197,11 @@ public sealed class TcpTuningService : ITcpTuningService
 
         onLine($"[调优] 还原 {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss} 的改前快照");
 
+        // 🟠 审查 2026-09-10（🟠-3）：逐项聚合失败——此前本方法把 SetGlobalAsync 的 bool
+        // 返回值丢弃、结尾无条件打「✅ 已还原」，用户拒 UAC（netsh 每项弹一次）时实际
+        // 未还原却报成功（O4 同款假成功；NetworkSnapshotService 已修，此处漏掉）。
+        var failed = new List<string>();
+
         // 依快照逐项还原：快照里没有的项（当时解析失败）跳过，绝不拿「未知」去写系统
         if (snapshot.NetshValues.TryGetValue("autotuninglevel", out string? level))
         {
@@ -206,18 +211,27 @@ public sealed class TcpTuningService : ITcpTuningService
             }
             else
             {
-                await SetGlobalAsync($"autotuninglevel={level}", onLine, ct).ConfigureAwait(false);
+                if (!await SetGlobalAsync($"autotuninglevel={level}", onLine, ct).ConfigureAwait(false))
+                {
+                    failed.Add("自动调谐级别");
+                }
             }
         }
 
         if (TryGetSwitch(snapshot.NetshValues, "rss", out bool rss))
         {
-            await SetGlobalAsync($"rss={(rss ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false);
+            if (!await SetGlobalAsync($"rss={(rss ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false))
+            {
+                failed.Add("RSS");
+            }
         }
 
         if (TryGetSwitch(snapshot.NetshValues, "ecncapability", out bool ecn))
         {
-            await SetGlobalAsync($"ecncapability={(ecn ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false);
+            if (!await SetGlobalAsync($"ecncapability={(ecn ? "enabled" : "disabled")}", onLine, ct).ConfigureAwait(false))
+            {
+                failed.Add("ECN");
+            }
         }
 
         if (snapshot.NetworkThrottlingIndex is uint throttling)
@@ -227,9 +241,9 @@ public sealed class TcpTuningService : ITcpTuningService
             {
                 onLine($"[调优] NetworkThrottlingIndex 已是快照值（0x{throttling:X}），无需写入");
             }
-            else
+            else if (!await WriteThrottlingIndexAsync(throttling, onLine, restore: true).ConfigureAwait(false))
             {
-                await WriteThrottlingIndexAsync(throttling, onLine, restore: true).ConfigureAwait(false);
+                failed.Add("NetworkThrottlingIndex");
             }
         }
 
@@ -251,12 +265,20 @@ public sealed class TcpTuningService : ITcpTuningService
                     continue;
                 }
 
-                await WriteInterfaceMetric(target.Key, target.Value, onLine, ct).ConfigureAwait(false);
+                if (!await WriteInterfaceMetric(target.Key, target.Value, onLine, ct).ConfigureAwait(false))
+                {
+                    failed.Add($"接口「{target.Key}」跃点数");
+                }
+
                 onLine("[调优] ⚠️ 若该接口原本为「自动跃点」，如需恢复请在系统设置中改回自动");
             }
         }
 
-        onLine("[调优] ✅ 已还原改前快照（此项操作不覆盖快照，可重复执行）");
+        // 🟠-3：按实际写入结果汇报，不再无条件打 ✅（假成功是本次审查点名的反模式族）
+        onLine(failed.Count == 0
+            ? "[调优] ✅ 已还原改前快照（此项操作不覆盖快照，可重复执行）"
+            : $"[调优] ⚠️ 还原未完全成功：{failed.Count} 项未写入（{string.Join("、", failed)}）——"
+              + "常见原因是 UAC 提权被拒，其余项不受影响；本操作不覆盖快照，可重复执行");
     }
 
     /// <inheritdoc cref="ITcpTuningService.ListInterfaceMetricsAsync"/>
@@ -294,19 +316,25 @@ public sealed class TcpTuningService : ITcpTuningService
     /// 写接口跃点数（权限失败降级为日志提示，与 WriteThrottlingIndex 同模式）。
     /// 【审查修复 R1】消除 sync-over-async：改为 async Task，取消全程 await + CancellationToken 透传。
     /// </summary>
-    private async Task WriteInterfaceMetric(string adapter, int metric, Action<string> onLine, CancellationToken ct = default)
+    /// <returns>写入是否成功（供还原路径聚合失败，🟠 审查 2026-09-10）。</returns>
+    private async Task<bool> WriteInterfaceMetric(string adapter, int metric, Action<string> onLine, CancellationToken ct = default)
     {
         onLine($"$ netsh interface ipv4 set interface \"{adapter}\" metric={metric}");
         try
         {
             int exit = await _runner.RunAsync("netsh", NetshArgs.SetInterfaceMetric(adapter, metric), onLine, ct, timeout: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
-            onLine(exit == 0
-                ? $"[调优] ✅ 「{adapter}」跃点数已设为 {metric}"
-                : $"[调优] ❌ 「{adapter}」跃点数设置失败（退出码 {exit}）");
+            onLine(exit switch
+            {
+                0 => $"[调优] ✅ 「{adapter}」跃点数已设为 {metric}",
+                1223 => $"[调优] ⚠️ 「{adapter}」跃点数未设置：用户拒绝 UAC 提权，已安全终止（无副作用）",
+                _ => $"[调优] ❌ 「{adapter}」跃点数设置失败（退出码 {exit}）",
+            });
+            return exit == 0;
         }
         catch (Exception ex)
         {
             onLine($"[调优] ❌ 「{adapter}」跃点数设置异常：{ex.Message}");
+            return false;
         }
     }
 
@@ -371,9 +399,15 @@ public sealed class TcpTuningService : ITcpTuningService
     {
         onLine($"$ netsh interface tcp set global {setting}");
         int exit = await _runner.RunAsync("netsh", $"interface tcp set global {setting}", onLine, ct, timeout: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
-        onLine(exit == 0
-            ? $"[调优] ✅ {setting} 已应用"
-            : $"[调优] ❌ {setting} 应用失败（退出码 {exit}）——若提示拒绝访问，请以管理员身份运行");
+        // 🟠 审查 2026-09-10（🟠-4）：补 1223 分支——红线要求「1223 显式识别为安全终止，
+        // 所有写入口一致」（口径与 WriteThrottlingIndexAsync 相同）。此前 1223 被并进
+        // 通用失败文案，用户会误以为是程序 bug，而非自己拒了 UAC。
+        onLine(exit switch
+        {
+            0 => $"[调优] ✅ {setting} 已应用",
+            1223 => $"[调优] ⚠️ {setting} 未应用：用户拒绝 UAC 提权，已安全终止（无副作用）",
+            _ => $"[调优] ❌ {setting} 应用失败（退出码 {exit}）——若提示拒绝访问，请以管理员身份运行",
+        });
         return exit == 0; // 审查 O4/O10：回传成功与否供聚合
     }
 
