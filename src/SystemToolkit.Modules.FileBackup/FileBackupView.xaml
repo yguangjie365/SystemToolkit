@@ -26,7 +26,8 @@
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
             <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
-            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <!-- 2026-09-11 用户反馈：内容行左右居中（原 Left） -->
+            <Setter Property="HorizontalAlignment" Value="Center"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusText}" Value="失败">
                     <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
@@ -47,7 +48,8 @@
             <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
             <Setter Property="Padding" Value="8,2"/>
             <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
-            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <!-- 2026-09-11 用户反馈：内容行左右居中（原 Left） -->
+            <Setter Property="HorizontalAlignment" Value="Center"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding ChecksumText}" Value="通过">
                     <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
@@ -126,8 +128,11 @@
                     </Grid>
                     <!-- 拖拽排序（2026-09-07 用户裁定替代上移/下移按钮）：事件逻辑见 code-behind -->
                     <Grid Grid.Row="1">
+                    <!-- 2026-09-11 用户反馈：规则卡片宽度随内容长短不一 → HorizontalContentAlignment
+                         让 ListBoxItem 拉伸，卡片统一铺满列表宽度（原为默认 Left，宽度随内容伸缩） -->
                     <ListBox x:Name="RuleList" Style="{DynamicResource ListLog}"
                              AllowDrop="True"
+                             HorizontalContentAlignment="Stretch"
                              ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -229,7 +234,7 @@
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayTime}" FontSize="{DynamicResource Font_SizeBodySm}"
-                                                       VerticalAlignment="Center"/>
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
@@ -272,6 +277,7 @@
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayPath}" FontSize="{DynamicResource Font_SizeMicro}"
                                                        Foreground="{DynamicResource Brush_Accent}" TextTrimming="CharacterEllipsis"
+                                                       HorizontalAlignment="Center"
                                                        ToolTip="{Binding BackupPath}"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>

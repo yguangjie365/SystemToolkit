@@ -45,25 +45,33 @@ public sealed class SnapshotInfo
     /// <summary>源中的空目录相对路径列表（恢复后按此重建空目录结构）。</summary>
     public List<string> EmptyDirs { get; set; } = new List<string>();
 
-    /// <summary>格式化的创建时间（yyyy-MM-dd HH:mm:ss；目录名带同秒序号时剥离后解析，失败回退原始 CreatedAt）。</summary>
+    /// <summary>
+    /// 格式化的创建时间（<c>yyyy-MM-dd HH:mm:ss</c>）。
+    /// <para>
+    /// 目录名前 15 位恒为 <c>yyyyMMdd_HHmmss</c>；2026-09-08 起为消除创建竞态追加了
+    /// <c>_随机6位</c>（再撞名时再加 <c>_序号</c>）后缀——**后缀不是时间的一部分**，
+    /// 显示层一律剥离；磁盘目录名保持不变（后缀是防同名竞态的安全机制，不可删）。
+    /// </para>
+    /// <para>
+    /// 🔴 2026-09-11 用户反馈修复：原实现只剥离「下划线后为**纯数字**」的序号，而随机 6 位
+    /// 取自 <c>Path.GetRandomFileName()</c>（基 32 字符集，可能含**字母**），走不进该分支
+    /// → 解析失败 → 回退原样，列表里显示成 <c>20260911_143022_a3f9c1</c> 这种带后缀的目录名。
+    /// 改为**按前 15 位解析**后，与后缀形态无关。
+    /// </para>
+    /// <para>无法解析（旧格式 / 异常值）时回退原始 <see cref="CreatedAt"/>。</para>
+    /// </summary>
     [JsonIgnore]
     public string DisplayTime
     {
         get
         {
-            string text = CreatedAt;
-            if (text.Contains('_'))
+            if (CreatedAt.Length >= 15 && CreatedAt[8] == '_'
+                && CreatedAt[..15].Count(char.IsAsciiDigit) == 14)
             {
-                int num = text.LastIndexOf('_');
-                if (num > 8 && int.TryParse(text.Substring(num + 1), out int _) && text.Substring(0, num).Length == 15)
-                {
-                    text = text.Substring(0, num);
-                }
+                return $"{CreatedAt[..4]}-{CreatedAt[4..6]}-{CreatedAt[6..8]} "
+                     + $"{CreatedAt[9..11]}:{CreatedAt[11..13]}:{CreatedAt[13..15]}";
             }
-            if (text.Length == 15 && text[8] == '_')
-            {
-                return $"{text.Substring(0, 4)}-{text.Substring(4, 2)}-{text.Substring(6, 2)} {text.Substring(9, 2)}:{text.Substring(11, 2)}:{text.Substring(13, 2)}";
-            }
+
             return CreatedAt;
         }
     }
@@ -73,13 +81,17 @@ public sealed class SnapshotInfo
     public string SizeText => FormatUtil.FormatSize(TotalSize);
 
     /// <summary>
-    /// 路径列的友好显示文本：规则名 · 快照时间。原始 BackupPath 含 Rule_xxxxxxxx 哈希目录，
-    /// 对用户无意义且与「快照时间」列 80% 前缀重复；规则名缺失（旧 manifest 未写入）时回退完整路径。
-    /// 完整路径在 UI 侧经 ToolTip 保留（FileBackupView 路径列）。
+    /// 路径列的友好显示文本。原始 <see cref="BackupPath"/> 含 <c>Rule_xxxxxxxx</c> 哈希目录，
+    /// 对用户无意义。
+    /// <para>
+    /// 2026-09-11 用户反馈：本列只显示**规则名**——时间已在「快照时间」列完整呈现，
+    /// 再拼一遍属重复且会挤压列宽。规则名缺失（旧 manifest 未写入）时回退完整路径；
+    /// 完整磁盘路径在 UI 侧经 ToolTip 保留（FileBackupView 路径列）。
+    /// </para>
     /// </summary>
     [JsonIgnore]
     public string DisplayPath =>
-        string.IsNullOrWhiteSpace(RuleName) ? BackupPath : $"{RuleName} · {DisplayTime}";
+        string.IsNullOrWhiteSpace(RuleName) ? BackupPath : RuleName;
 
     /// <summary>快照状态的中文显示文本（成功/失败）。</summary>
     [JsonIgnore]
