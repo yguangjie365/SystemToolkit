@@ -49,6 +49,15 @@ public sealed class MusicManagerModule : ModuleBase
             sp.GetRequiredKeyedService<ILogger>("musicmanager")));
         services.AddSingleton<IMusicLibraryStore>(sp => sp.GetRequiredService<JsonMusicLibraryStore>());
 
+        // 搜索历史（P3a：模块私有 JSON，同目录）
+        services.AddSingleton(sp => new JsonSearchHistoryStore(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "SystemToolkit",
+                "music-search-history.json"),
+            sp.GetRequiredKeyedService<ILogger>("musicmanager")));
+        services.AddSingleton<ISearchHistoryStore>(sp => sp.GetRequiredService<JsonSearchHistoryStore>());
+
         // 播放队列（MUSIC-5）
         services.AddSingleton<IPlaybackQueueService, PlaybackQueueService>();
 
@@ -67,7 +76,8 @@ public sealed class MusicManagerModule : ModuleBase
             urlResolver: sp.GetService<IOnlineUrlResolver>(),
             audioProxy: sp.GetService<IAudioProxyService>(),
             catalog: sp.GetService<IOnlineMusicCatalogService>(),
-            credentials: sp.GetService<IOnlineCredentialStore>()));
+            credentials: sp.GetService<IOnlineCredentialStore>(),
+            searchHistory: sp.GetService<ISearchHistoryStore>()));
         services.AddSingleton<MusicManagerView>();
     }
 }

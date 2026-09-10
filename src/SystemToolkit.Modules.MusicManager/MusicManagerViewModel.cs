@@ -127,7 +127,8 @@ public partial class MusicManagerViewModel : ObservableObject
         IOnlineUrlResolver? urlResolver = null,
         IAudioProxyService? audioProxy = null,
         IOnlineMusicCatalogService? catalog = null,
-        IOnlineCredentialStore? credentials = null)
+        IOnlineCredentialStore? credentials = null,
+        ISearchHistoryStore? searchHistory = null)
     {
         // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
         // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
@@ -143,6 +144,7 @@ public partial class MusicManagerViewModel : ObservableObject
         _audioProxy = audioProxy;
         _catalog = catalog;
         _credentials = credentials;
+        _searchHistoryStore = searchHistory;
 
         Songs.CollectionChanged += (_, _) =>
         {
@@ -639,6 +641,9 @@ public partial class MusicManagerViewModel : ObservableObject
         }
 
         WireEngineOnce();
+
+        // P3a：搜索历史随启动加载（存储缺席时跳过）
+        _ = LoadSearchHistoryAsync();
 
         // OM-5：在线目录随启动预热（目录服务缺席时跳过，不给本地用户制造噪音）
         if (_catalog is not null)

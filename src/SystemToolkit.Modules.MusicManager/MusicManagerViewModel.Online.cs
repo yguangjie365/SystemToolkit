@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using SystemToolkit.Core.Music.Models;
 using SystemToolkit.Core.Music.Online;
+using SystemToolkit.Core.Music.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Windows.Media.Imaging;
@@ -187,6 +188,14 @@ public partial class MusicManagerViewModel
 
     public ObservableCollection<OnlineResultRowVm> SearchResults { get; } = [];
 
+    // ── P3a：搜索历史（最近 10 条，新→旧；AtomicFile JSON 持久化）──
+    private ISearchHistoryStore? _searchHistoryStore;
+    private const int SearchHistoryCapacity = 10;
+
+    public ObservableCollection<string> SearchHistory { get; } = [];
+
+    public bool HasSearchHistory => SearchHistory.Count > 0;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SearchOnlineCommand))]
     private bool _isSearchingOnline;
@@ -221,10 +230,128 @@ public partial class MusicManagerViewModel
             BeginCoverLoads(SearchResults);
             OnlineStatusText = _catalog.CatalogError; // 空结果/失败原因可见（🔴 不静默）
             CurrentView = ContentViewMode.OnlineSearch;
+            RecordSearchHistory(OnlineSearchText.Trim()); // P3a：成功才记历史
         }
         finally
         {
             IsSearchingOnline = false;
+        }
+    }
+
+    // ── P3a：搜索历史 ──
+
+    /// <summary>搜索成功后记录关键词（去重、置顶、容量 10），并异步持久化。</summary>
+    private void RecordSearchHistory(string query)
+    {
+        if (_searchHistoryStore is null || string.IsNullOrWhiteSpace(query))
+        {
+            return;
+        }
+
+        string q = query.Trim();
+        string? existing = SearchHistory.FirstOrDefault(h => string.Equals(h, q, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            SearchHistory.Remove(existing);
+        }
+
+        SearchHistory.Insert(0, q);
+        while (SearchHistory.Count > SearchHistoryCapacity)
+        {
+            SearchHistory.RemoveAt(SearchHistory.Count - 1);
+        }
+
+        OnPropertyChanged(nameof(HasSearchHistory));
+        PersistSearchHistory();
+    }
+
+    /// <summary>UI 线程拍快照后后台原子写；失败仅记日志（🔴 不静默，但不打断搜索流）。</summary>
+    private void PersistSearchHistory()
+    {
+        if (_searchHistoryStore is null)
+        {
+            return;
+        }
+
+        string[] snapshot = SearchHistory.ToArray();
+        _ = PersistSearchHistorySafeAsync(snapshot);
+    }
+
+    private async Task PersistSearchHistorySafeAsync(string[] snapshot)
+    {
+        try
+        {
+            await _searchHistoryStore.SaveAsync(snapshot);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"[Music] 搜索历史保存失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>启动时加载搜索历史（新→旧填充下拉）。</summary>
+    public async Task LoadSearchHistoryAsync()
+    {
+        if (_searchHistoryStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<string> items = await _searchHistoryStore.LoadAsync();
+            SearchHistory.Clear();
+            foreach (string q in items)
+            {
+                SearchHistory.Add(q);
+            }
+
+            OnPropertyChanged(nameof(HasSearchHistory));
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"[Music] 搜索历史加载失败：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveSearchHistory(string? query)
+    {
+        if (query is null)
+        {
+            return;
+        }
+
+        string? match = SearchHistory.FirstOrDefault(h => string.Equals(h, query, StringComparison.Ordinal));
+        if (match is not null)
+        {
+            SearchHistory.Remove(match);
+            OnPropertyChanged(nameof(HasSearchHistory));
+            PersistSearchHistory();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSearchHistory()
+    {
+        SearchHistory.Clear();
+        OnPropertyChanged(nameof(HasSearchHistory));
+        PersistSearchHistory();
+    }
+
+    /// <summary>点历史项 → 填入搜索框并立即搜索。</summary>
+    [RelayCommand]
+    private void ApplySearchHistory(string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return;
+        }
+
+        OnlineSearchText = query;
+        if (SearchOnlineCommand.CanExecute(null))
+        {
+            SearchOnlineCommand.Execute(null);
         }
     }
 
