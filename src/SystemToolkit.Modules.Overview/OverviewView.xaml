@@ -102,8 +102,20 @@
                 <Button Grid.Column="3" Style="{DynamicResource PrimaryButton}" Height="30" Content="导出报告"
                         Margin="0,0,8,0" Command="{Binding ExportReportCommand}"/>
                 <!-- UI 审计采纳：刷新为辅助操作，降为图标按钮（高度与按钮组对齐）；M2 补接线 -->
-                <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" Width="32"
-                        Padding="0" ToolTip="立即刷新" Command="{Binding RefreshFullCommand}">
+                <!-- 🟡 审查 2026-09-10（🟡-18）：ToolTip 随采集态变化——采集中禁用时给出原因，
+                     而不是始终显示「立即刷新」让用户以为按钮失灵。（BasedOn 必须 StaticResource） -->
+                <Button Grid.Column="4" Height="30" Width="32"
+                        Padding="0" Command="{Binding RefreshFullCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                            <Setter Property="ToolTip" Value="立即刷新"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Busy}" Value="True">
+                                    <Setter Property="ToolTip" Value="采集中，请稍候…"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeCaption}"/>
                 </Button>
             </Grid>
@@ -350,7 +362,25 @@
             <Border Style="{DynamicResource CardBorder}" Padding="0">
                 <!-- 审查 S-4：ListView 置于页面级 ScrollViewer 内会得到无限测量高度，导致虚拟化失效（数百条即卡顿）。
      给 ListView 一个有界视口让其内部 VirtualizingStackPanel 生效；顶部卡片仍在页面 ScrollViewer 中滚动。 -->
-                <ListView x:Name="InstalledAppsList" ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                <Grid>
+                    <!-- 🟡 审查 2026-09-10（🟡-17）：搜索过滤无结果时的空态——原先列表变空即一片空白，
+                         用户无法区分「机器上没装软件」与「过滤词没匹配到」。
+                         用 DataTrigger 判 Count：不需要转换器，也不需要 VM 新增属性。 -->
+                    <TextBlock Text="没有匹配的软件" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="{DynamicResource Font_SizeBodySm}"
+                               Foreground="{DynamicResource Brush_TextMuted}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding InstalledAppsView.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ListView x:Name="InstalledAppsList" ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                                   controls:GridViewColumnSizing.AutoFillLastColumn="True">
                     <ListView.ItemContainerStyle>
@@ -389,6 +419,7 @@
                         </GridView>
                     </ListView.View>
                 </ListView>
+                </Grid>
             </Border>
 
         </StackPanel>

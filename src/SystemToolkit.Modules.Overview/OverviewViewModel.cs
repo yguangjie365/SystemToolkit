@@ -22,6 +22,26 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     private System.Windows.Threading.DispatcherTimer? _timer;
     private OverviewData? _data;
     private bool _busy;
+
+    /// <summary>
+    /// 全量采集进行中（🟡 审查 2026-09-10：原为普通私有字段，XAML 无法绑定——
+    /// 刷新按钮的 ToolTip 因此不随采集态变化）。赋值点同步改为本属性以触发通知。
+    /// </summary>
+    public bool Busy
+    {
+        get => _busy;
+        private set
+        {
+            if (_busy == value)
+            {
+                return;
+            }
+
+            _busy = value;
+            OnPropertyChanged(nameof(Busy));
+        }
+    }
+
     /// <summary>当前展示内容来自磁盘快照（副标题标注"采集中"，全量采集完成后清除）。</summary>
     private bool _showingSnapshot;
 
@@ -193,7 +213,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             return;
         }
 
-        _busy = true;
+        Busy = true;
         try
         {
             OverviewData data = await Task.Run(_overviewService.Collect).ConfigureAwait(true);
@@ -212,7 +232,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         }
         finally
         {
-            _busy = false;
+            Busy = false;
         }
     }
 
@@ -225,7 +245,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             return;
         }
 
-        _busy = true;
+        Busy = true;
         try
         {
             // 性能审查 P1-8：两路采样并行（原串行叠加拖长节拍）
@@ -250,7 +270,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         }
         finally
         {
-            _busy = false;
+            Busy = false;
         }
     }
 
