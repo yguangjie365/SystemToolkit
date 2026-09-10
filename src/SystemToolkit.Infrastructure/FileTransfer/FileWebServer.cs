@@ -294,7 +294,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
             return Results.Ok(Browse(path));
         });
-        app.MapGet("/api/files/download", (string path) => DownloadFile(path));
+        app.MapGet("/api/files/download", (HttpContext ctx, string path) => DownloadFile(ctx, path));
+        // 末段带文件名的等价路由：部分手机浏览器/系统下载器**忽略 Content-Disposition**，
+        // 退化用 URL 末段命名文件——带上真名可避免下载成 "download"（2026-09-11 主人反馈）。
+        // 真实路径仍以 path 为准，name 仅用于客户端命名（不在服务端参与任何路径拼接）。
+        app.MapGet("/api/files/download/{name}", (HttpContext ctx, string name, string path) => DownloadFile(ctx, path));
 
         // ── 多选打包下载（流式 ZIP，不落临时文件）──
         // paths 为「|」分隔的相对路径，目录会递归展开。
@@ -1066,7 +1070,7 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <summary>
     /// 下载文件：返回文件流。路径越界 / 不存在一律 404（不泄露越界原因）。
     /// </summary>
-    private IResult DownloadFile(string path)
+    private IResult DownloadFile(HttpContext ctx, string path)
     {
         string root = ShareRoot;
         if (!IsSafeUnderRoot(root, path))
@@ -1081,8 +1085,41 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             return Results.NotFound(new { error = "文件不存在或路径越界" });
         }
 
-        string contentType = new FileShareEntry { Name = Path.GetFileName(fullTarget) }.ContentType;
-        return Results.File(fullTarget, contentType, Path.GetFileName(fullTarget), enableRangeProcessing: true);
+        string fileName = Path.GetFileName(fullTarget);
+        string contentType = new FileShareEntry { Name = fileName }.ContentType;
+
+        // 【2026-09-11 主人反馈：手机端下载下来的文件名被改】
+        // 原先走 Results.File(..., fileDownloadName)：其内部用
+        // ContentDispositionHeaderValue.SetHttpFileName，非 ASCII 字符只会出现在
+        // filename*（RFC 5987）段里，filename 段被转义成 %XX。
+        // 支持 filename* 的浏览器没问题；**但部分国产手机浏览器/系统下载器不认 filename***，
+        // 拿到的是转义串甚至退化用 URL 末段当名字 → 表现为「文件名被修改」。
+        // 改为手工构造，两类客户端各取所需：
+        //   filename=   ASCII 回退（保扩展名，非 ASCII 替换为 '_'）
+        //   filename*=  UTF-8 正确原名
+        // 再配合 URL 末段带文件名（见 /api/files/download/{name} 路由）构成三重保险。
+        ctx.Response.Headers.ContentDisposition =
+            $"attachment; filename=\"{ToAsciiFallbackFileName(fileName)}\"; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+
+        return Results.File(fullTarget, contentType, enableRangeProcessing: true);
+    }
+
+    /// <summary>
+    /// 生成 <c>Content-Disposition</c> 的 ASCII 回退文件名：非 ASCII 与不安全字符替换为 '_'，
+    /// <b>保留扩展名</b>（丢扩展名会让手机下载器无法交给正确的应用打开）。
+    /// </summary>
+    private static string ToAsciiFallbackFileName(string fileName)
+    {
+        var sb = new StringBuilder(fileName.Length);
+        foreach (char c in fileName)
+        {
+            // 可打印 ASCII 且非引号/反斜杠/分号（这三个会破坏 Content-Disposition 语法）
+            sb.Append(c is >= ' ' and <= '~' && c is not '"' and not '\\' and not ';' ? c : '_');
+        }
+
+        string ascii = sb.ToString().Trim();
+        // 全被替换（纯中文名）时至少给个可用名，别产生 "_ _ .txt" 这类空壳
+        return ascii.Trim('.', ' ', '_').Length == 0 ? "download" + Path.GetExtension(fileName) : ascii;
     }
 
     /// <summary>

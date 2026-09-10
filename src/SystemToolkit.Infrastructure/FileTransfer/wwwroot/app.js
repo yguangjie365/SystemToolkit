@@ -531,7 +531,11 @@
     function downloadFile(file) {
         const params = new URLSearchParams({ path: file.relativePath || file.name });
         if (TOKEN) params.set("t", TOKEN);
-        const url = API_BASE + "/api/files/download?" + params.toString();
+        // URL 末段带文件名（2026-09-11 主人反馈「下载的文件名被改」）：部分手机浏览器/
+        // 系统下载器忽略 Content-Disposition 的 filename*，会退化用 URL 末段命名文件——
+        // 原来末段是 "download"，于是保存成 download / download(N).bin。带上真名才稳。
+        const url = API_BASE + "/api/files/download/" + encodeURIComponent(file.name || "download")
+            + "?" + params.toString();
         // 利用 a 标签触发下载，避免 fetch 大文件占内存
         const a = document.createElement("a");
         a.href = url;

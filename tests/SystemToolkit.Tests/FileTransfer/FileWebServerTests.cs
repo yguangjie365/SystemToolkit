@@ -866,6 +866,52 @@ public class FileWebServerTests
         }
     }
 
+    /// <summary>
+    /// 下载响应必须**同时**给出 ASCII 回退名与 RFC 5987 的 UTF-8 名。
+    /// <para>
+    /// 2026-09-11 主人反馈「手机端下载下来的文件名被改」：原先走
+    /// <c>Results.File(..., fileDownloadName)</c>，非 ASCII 字符只进 <c>filename*</c> 段，
+    /// **部分手机浏览器/系统下载器不认 filename***，会退化成转义串或 URL 末段当名字。
+    /// 故改为手工构造两段并保留 URL 末段带名。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Download_NonAsciiFileName_ProvidesAsciiFallbackAndUtf8Star()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            // 中文名：ASCII 段承载不了它（会被替换为 _），原名只能靠 filename* 传递
+            const string fileName = "报告2026.txt";
+            await File.WriteAllTextAsync(Path.Combine(dir, fileName), "hello");
+
+            using var http = new HttpClient();
+            string url = $"http://localhost:{port}/api/files/download/{Uri.EscapeDataString(fileName)}"
+                + $"?path={Uri.EscapeDataString(fileName)}&t={server.Token}";
+            HttpResponseMessage resp = await http.GetAsync(url);
+            resp.EnsureSuccessStatusCode();
+
+            Assert.True(
+                resp.Content.Headers.TryGetValues("Content-Disposition", out IEnumerable<string>? values),
+                "下载响应必须带 Content-Disposition");
+            string cd = string.Join(";", values!);
+
+            // ASCII 回退：中文被替换为下划线，但**扩展名必须保住**（丢了扩展名手机无法正确打开）
+            Assert.Contains("filename=\"__2026.txt\"", cd);
+            // RFC 5987：支持 filename* 的客户端据此还原中文原名
+            Assert.Contains("filename*=UTF-8''", cd);
+            Assert.Contains(Uri.EscapeDataString(fileName), cd);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
     [Fact]
     public async Task Api_Devices_WithoutDiscovery_StillReturnsLocalDevice()
     {
