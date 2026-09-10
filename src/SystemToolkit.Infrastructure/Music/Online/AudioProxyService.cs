@@ -234,9 +234,23 @@ public sealed class AudioProxyService : IAudioProxyService
     // ── 请求处理 ──
 
     private static readonly HttpClient WebClient = CreateClient(TimeSpan.FromSeconds(30));
-    private static readonly HttpClient StreamClient = CreateClient(timeout: null, connectTimeoutSeconds: 15);
 
-    private static HttpClient CreateClient(TimeSpan? timeout, int connectTimeoutSeconds = 30)
+    /// <summary>流式（音频直链）专用：**显式无限超时**——长曲目边下边播不被掐断。</summary>
+    private static readonly HttpClient StreamClient = CreateClient(Timeout.InfiniteTimeSpan);
+
+    /// <summary>
+    /// 创建客户端；<paramref name="timeout"/> 直接写入 <see cref="HttpClient.Timeout"/>，
+    /// 流式场景传 <see cref="Timeout.InfiniteTimeSpan"/>。
+    /// <para>
+    /// 🟠 审查 2026-09-11（F-5）：原签名为 <c>CreateClient(TimeSpan? timeout, int connectTimeoutSeconds = 30)</c>，
+    /// 有两处不实——① <c>timeout: null</c> 分支**从不设置** <c>client.Timeout</c>，实际落回
+    /// <c>HttpClient</c> 默认 **100 秒**，与注释"无整体超时、长曲目不被掐断"直接矛盾
+    /// （超过 100s 的流会被默认超时掐断）；② <c>connectTimeoutSeconds</c> 形参在方法体内
+    /// **从未被使用**（死参；因是公有可选形参，`IDE0051` 不会报，故逃过 Release 门禁）。
+    /// 现改为显式无限超时 + 删除死参，使实现与注释一致。
+    /// </para>
+    /// </summary>
+    private static HttpClient CreateClient(TimeSpan timeout)
     {
         var handler = new HttpClientHandler
         {
@@ -246,17 +260,11 @@ public sealed class AudioProxyService : IAudioProxyService
             AllowAutoRedirect = false,
             UseCookies = false, // 透传代理请求，不带本地 Cookie 容器（平台直链按需在握手 API 完成）
         };
-        var client = new HttpClient(handler);
-        if (timeout is not null)
+        var client = new HttpClient(handler)
         {
-            client.Timeout = timeout.Value;
-        }
-        else
-        {
-            // 无整体超时：只有连接超时——长曲目边下边播不被掐断（NexBox 实证细节）
-            client.DefaultRequestHeaders.ConnectionClose = false;
-        }
-
+            Timeout = timeout,
+        };
+        client.DefaultRequestHeaders.ConnectionClose = false; // 复用长连接（流式读取不宜每请求重连）
         return client;
     }
 

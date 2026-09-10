@@ -55,6 +55,10 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            // 🟡 审查 2026-09-11（F-7）：apply 阶段抛异常时主题**并未切换成功**，必须把下拉回退到
+            // **实际**主题——否则选择态与真实态不一致（下拉显示"新主题"、界面仍是旧的）。
+            // 赋同值会走本方法开头的等值早退，不产生额外副作用。
+            SelectedThemeId = ThemeManager.CurrentThemeId;
             StatusText = "❌ 主题切换失败：" + ex.Message;
             _logger.Error("[Settings] 主题切换失败", ex);
         }
