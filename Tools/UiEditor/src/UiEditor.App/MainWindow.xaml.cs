@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private SourceNode? _selected;
     private readonly Dictionary<int, Border> _borderByLine = new();
     private bool _suppress;
+    private bool _busy;
 
     public MainWindow()
     {
@@ -354,6 +355,11 @@ public partial class MainWindow : Window
     // ───────────── 落盘 + 裸值预检 + 重校验回滚 ─────────────
     private async void OnSave(object sender, RoutedEventArgs e)
     {
+        if (_busy)
+        {
+            return; // 重校验进行中，拒绝重入
+        }
+
         try
         {
             if (_pending.Count == 0 || _targetPath is null)
@@ -373,9 +379,11 @@ public partial class MainWindow : Window
 
             string original = _rawText;
             AtomicFile.WriteAllText(_targetPath, patched);
-            StatusText.Text = "已落盘，重校验中（Release 构建 + 全量测试）…";
+            _busy = true;
+            StatusText.Text = "已落盘，重校验中（Release 构建 + 全量测试，约 1–2 分钟）…";
 
             (int buildCode, int testCode) = await Task.Run(Revalidate);
+            _busy = false;
 
             if (buildCode != 0 || testCode != 0)
             {
@@ -396,6 +404,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            _busy = false;
             StatusText.Text = "❌ 保存异常：" + ex.Message;
         }
     }
@@ -409,17 +418,15 @@ public partial class MainWindow : Window
 
     private int RunDotnet(string args)
     {
+        // 只需退出码：不重定向 stdout/stderr（顺序 ReadToEnd 会在子进程写满另一条管道时死锁）。
+        // GUI 宿主无控制台，子进程输出自然丢弃；CreateNoWindow 避免弹黑窗。
         var psi = new ProcessStartInfo("dotnet", args)
         {
             WorkingDirectory = _repoRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
         using Process p = Process.Start(psi)!;
-        p.StandardOutput.ReadToEnd();
-        p.StandardError.ReadToEnd();
         p.WaitForExit();
         return p.ExitCode;
     }
