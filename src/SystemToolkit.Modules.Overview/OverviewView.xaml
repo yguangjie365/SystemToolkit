@@ -350,8 +350,9 @@
             <Border Style="{StaticResource CardBorder}" Padding="0">
                 <!-- 审查 S-4：ListView 置于页面级 ScrollViewer 内会得到无限测量高度，导致虚拟化失效（数百条即卡顿）。
      给 ListView 一个有界视口让其内部 VirtualizingStackPanel 生效；顶部卡片仍在页面 ScrollViewer 中滚动。 -->
-                <ListView ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListView x:Name="InstalledAppsList" ItemsSource="{Binding InstalledAppsView}" BorderThickness="0" Background="Transparent" MaxHeight="600" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                  SizeChanged="OnAppsListSizeChanged">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -381,6 +382,9 @@
                             <GridViewColumn Header="版本" Width="150" DisplayMemberBinding="{Binding Version}"/>
                             <GridViewColumn Header="发布商" Width="240" DisplayMemberBinding="{Binding Publisher}"/>
                             <GridViewColumn Header="安装日期" Width="120" DisplayMemberBinding="{Binding InstalledOn}"/>
+                            <!-- 末列宽度由 code-behind OnAppsListSizeChanged 动态填充：
+                                 GridView 在固定列宽不足视口时会自动补一个空白表头列（实测"标题 6 列内容 5 列"），
+                                 让末列吃掉剩余宽度即可消除；MinWidth 防窗口过窄时被压没 -->
                             <GridViewColumn Header="大小" Width="100" DisplayMemberBinding="{Binding Size}"/>
                         </GridView>
                     </ListView.View>
