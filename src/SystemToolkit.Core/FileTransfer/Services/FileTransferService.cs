@@ -575,7 +575,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     private void OnClientDisconnected(object? sender, DisconnectionEventArgs e)
     {
         Guid guid = e.Client.Guid;
-        if (!_receiveContexts.TryRemove(guid, out ReceiveContext? ctx))
+        // 🔴 审查 2026-09-10（🔴-1）：此处**不得**先摘除 ctx —— ReleaseReceiveSlot 的守卫
+        // 要求任务仍登记在 _receiveContexts 中（见 :1166），先摘除会让归还被短路
+        // （Interlocked.Decrement 永不执行）→ 每次对端断开泄漏一个接收并发槽，
+        // MaxConcurrentReceives（默认 8）次后接收端彻底拒绝新握手，直到重启进程。
+        // 摘除统一挪到本方法末尾（归还之后）。
+        if (!_receiveContexts.TryGetValue(guid, out ReceiveContext? ctx))
             return;
         ctx.CloseStream();
         ctx.Dispose();
@@ -589,12 +594,14 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = "对端断开连接。";
             task.FinishedAt = DateTimeOffset.UtcNow;
-            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
+            ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽（ctx 仍在册，守卫放行）
             RaiseUpdated(task);
             RaiseCompleted(task);
             _tasks.TryRemove(task.Id, out _);
             _logger.Warn($"接收中断（对端断开）：{task.FileName}（任务 {task.Id}），断点已保留在 .part 文件。");
         }
+
+        _receiveContexts.TryRemove(guid, out _); // 归还槽之后再摘除上下文
     }
 
     /// <summary>
@@ -631,9 +638,16 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 return;
             }
 
-            lock (_pairGate)
+            // 🟠 审查 2026-09-10（🟠-5）：补冒号守卫（与 IsPairedIp/IsKnownPeer 同款）——
+            // 无冒号时 LastIndexOf 返回 -1，ipPort[..-1] 抛 ArgumentOutOfRangeException，
+            // 被外层 catch 记成"接收处理异常"，把本可正常完成的握手记成故障。
+            int colon = ipPort.LastIndexOf(':');
+            if (colon > 0)
             {
-                _pairedIps.Add(ipPort[..ipPort.LastIndexOf(':')]);
+                lock (_pairGate)
+                {
+                    _pairedIps.Add(ipPort[..colon]);
+                }
             }
             _logger.Info($"配对成功：{ipPort} 已加入本运行期已配对列表（后续传输免码）。");
         }

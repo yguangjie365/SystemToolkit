@@ -481,6 +481,85 @@ public class FileTransferServiceTests
         }
     }
 
+    /// <summary>
+    /// 🔴 审查 2026-09-10（🔴-1）：对端「握手成功后立即断开」必须归还接收并发槽。
+    /// <para>
+    /// 回归背景：<c>OnClientDisconnected</c> 曾先把 ctx 从 <c>_receiveContexts</c> 摘除、
+    /// 再调 <c>ReleaseReceiveSlot</c>，而归还守卫要求「任务仍登记在 _receiveContexts 中」
+    /// → 归还被短路，Interlocked.Decrement 永不执行。对端每次断开泄漏一个槽，
+    /// 到 MaxConcurrentReceives（默认 8）后接收端彻底拒绝新握手，直到重启进程。
+    /// </para>
+    /// <para>
+    /// 用例把上限压到 2 放大效应：连做 3 轮「握手 → 断开」后仍须能完成一次正常传输。
+    /// 顺序若回归，第 3 轮握手即被拒（等待 Ack 超时）→ 用例变红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task DisconnectAfterHandshake_ReleasesReceiveSlot_LaterTransferStillAccepted()
+    {
+        int recvPort = FreeTcpPort();
+        string dir = NewTempDir();
+        try
+        {
+            await using var receiver = new FileTransferService();
+            await receiver.StartAsync(new TransferSettings
+            {
+                TransferPort = recvPort,
+                ChunkSize = ChunkSize,
+                ReceiveDirectory = Path.Combine(dir, "recv"),
+                MaxConcurrentTransfers = 2,
+                MaxConcurrentReceives = 2, // 上限压到 2：泄漏两次即锁死接收端
+                RequirePairing = false,    // 本用例专测断开归还（配对门另有专测）
+            });
+
+            const int rounds = 3; // > 上限
+            for (int i = 0; i < rounds; i++)
+            {
+                using var client = new WatsonTcpClient("127.0.0.1", recvPort);
+                var ackTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                client.Events.MessageReceived += (_, e) =>
+                {
+                    if (ParseTestMessage(e.Metadata)?.Type == TransferMessageType.HandshakeAck)
+                    {
+                        ackTcs.TrySetResult();
+                    }
+                };
+                client.Connect();
+                await client.SendAsync(string.Empty, BuildTestMetadata(new TransferMessage
+                {
+                    Type = TransferMessageType.Handshake,
+                    TaskId = $"drop-{i}",
+                    FileName = $"drop-{i}.bin",
+                    FileSize = 4096,
+                    ChunkSize = ChunkSize,
+                    TotalChunks = 1,
+                }), CancellationToken.None);
+
+                // 收到 HandshakeAck ⇒ 握手已通过并占用接收槽；此时断开，走归还路径
+                await ackTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }   // using 作用域结束 → TCP 断开 → 服务端 OnClientDisconnected
+
+            await Task.Delay(500); // 等服务端 Disconnected 回调完成归还
+
+            // 断开之后仍必须能接收：完成一次完整的端到端传输
+            string source = CreateSourceFile(Path.Combine(dir, "src"), "after-drops.bin", 256 * 1024);
+            await using var sender = new FileTransferService();
+            await sender.StartAsync(MakeSettings(FreeTcpPort(), Path.Combine(dir, "unused")));
+            HookBothDone(receiver, sender, out Task<TransferTask> recvDone, out Task<TransferTask> sendDone);
+
+            await sender.SendFileAsync(source, "127.0.0.1", recvPort);
+            TransferTask recvFinal = await recvDone.WaitAsync(TimeSpan.FromSeconds(30));
+            await sendDone.WaitAsync(TimeSpan.FromSeconds(30));
+
+            Assert.Equal(TransferStatus.Completed, recvFinal.Status);
+            Assert.True(File.Exists(Path.Combine(dir, "recv", "after-drops.bin")));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
     // ===================== V0.5 新特性（2026-09-06 用户裁定） =====================
 
     [Fact]
