@@ -198,25 +198,37 @@ public sealed partial class EnvListService
         }
     }
 
-    /// <summary>覆盖保存 winget 清单（原子写）。</summary>
+    /// <summary>覆盖保存 winget 清单（原子写）。写盘失败上抛，调用方须显式提示（🟠-1）。</summary>
     public void SaveWinget(IEnumerable<WingetPackage> packages)
     {
         Directory.CreateDirectory(_envDir);
-        SaveJson(Path.Combine(_envDir, WingetListFile), packages.ToList());
+        string file = Path.Combine(_envDir, WingetListFile);
+        if (!SaveJson(file, packages.ToList()))
+        {
+            throw new IOException($"保存 winget 清单失败：{file}");
+        }
     }
 
-    /// <summary>覆盖保存手工软件清单（原子写）。</summary>
+    /// <summary>覆盖保存手工软件清单（原子写）。写盘失败上抛（🟠-1）。</summary>
     public void SaveManual(IEnumerable<ManualSoftware> software)
     {
         Directory.CreateDirectory(_envDir);
-        SaveJson(Path.Combine(_envDir, ManualListFile), software.ToList());
+        string file = Path.Combine(_envDir, ManualListFile);
+        if (!SaveJson(file, software.ToList()))
+        {
+            throw new IOException($"保存手工软件清单失败：{file}");
+        }
     }
 
-    /// <summary>覆盖保存驱动工具清单（原子写）。</summary>
+    /// <summary>覆盖保存驱动工具清单（原子写）。写盘失败上抛（🟠-1）。</summary>
     public void SaveDriver(IEnumerable<ManualSoftware> software)
     {
         Directory.CreateDirectory(_envDir);
-        SaveJson(Path.Combine(_envDir, DriverListFile), software.ToList());
+        string file = Path.Combine(_envDir, DriverListFile);
+        if (!SaveJson(file, software.ToList()))
+        {
+            throw new IOException($"保存驱动工具清单失败：{file}");
+        }
     }
 
     /// <summary>仅加载 winget 清单（文件缺失返回空列表）。</summary>
@@ -336,17 +348,26 @@ public sealed partial class EnvListService
 
     // 由 static 改为实例方法：保存失败必须走实例注入的 _log（可落日志面板/文件），
     // Console.WriteLine 在 WPF 进程中无人可见，等于静默丢失保存失败的线索
-    private void SaveJson<T>(string file, T data)
+    /// <summary>把 <paramref name="data"/> 原子写为 JSON。</summary>
+    /// <returns>成功 true；失败已记日志并回传 false（是否上抛由调用方决定）。</returns>
+    private bool SaveJson<T>(string file, T data)
     {
         try
         {
             string contents = JsonSerializer.Serialize(data, JsonOpts);
             // 原子写入：避免写入过程中断留下半截 JSON（统一实现见 AtomicFile）
             AtomicFile.WriteAllText(file, contents);
+            return true;
         }
         catch (Exception ex)
         {
             _log("保存清单失败：" + Path.GetFileName(file) + "（" + ex.Message + "）");
+            // 🟠 审查 2026-09-10（🟠-1）：此处**不能**假装成功——先前版本 catch 后直接返回，
+            // 调用方（PersistAll）的 catch 成了死分支，UI 照打「软件清单已保存」而磁盘上
+            // 什么都没写（假成功）。本方法还覆盖「加载期补写默认值」「损坏重建回写」等
+            // 不应阻断加载的路径，故不在此 throw，而是回传 false；
+            // 用户可见的写入口（SaveWinget/SaveManual/SaveDriver）逐个检查并上抛。
+            return false;
         }
     }
 

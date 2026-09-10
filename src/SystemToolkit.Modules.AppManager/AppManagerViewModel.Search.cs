@@ -55,10 +55,14 @@ public partial class AppManagerViewModel
         await AcquireOperationAsync();
 
         IsSearchPopupOpen = false;
+        // 🟠 审查 2026-09-10（🟠-2）：本入口此前既不建 _opCts 也不传 ct，导致
+        // CancelOperation/关窗取消对「从搜索弹窗安装」这条路径完全失效（子 winget 进程收不到取消）。
+        // 与 RunPackageOperationAsync 同构：建局部闸 → 传入 → finally 释放并 dispose。
+        _opCts = new CancellationTokenSource();
         try
         {
             AddLog($"开始安装：{item.Name}（{item.Id}）");
-            WingetRunResult result = await _winget.InstallAsync(item.Id, "winget");
+            WingetRunResult result = await _winget.InstallAsync(item.Id, "winget", _opCts.Token);
             if (result.Success)
             {
                 AddLog("✅ 安装完成：" + item.Name);
@@ -110,6 +114,8 @@ public partial class AppManagerViewModel
         finally
         {
             ExitOperation();
+            _opCts?.Dispose();
+            _opCts = null;
         }
     }
 
