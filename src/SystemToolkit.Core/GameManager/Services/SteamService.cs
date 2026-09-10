@@ -335,7 +335,11 @@ public sealed partial class SteamService
         {
             if (_http is null)
             {
-                var handler = new HttpClientHandler { AllowAutoRedirect = true };
+                // 🟠 审查 2026-09-11（🟠-8）：关闭自动重定向，改手工逐跳（每跳复验 HTTPS + host 白名单）。
+                // 本 HttpClient 只用于取头像 XML，域固定为 steamcommunity.com。
+                var handler = new SystemToolkit.Core.Utilities.RedirectFollowingHandler(
+                    new HttpClientHandler { AllowAutoRedirect = false },
+                    ["steamcommunity.com"]);
                 var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("SystemToolkit/1.0 (+SteamAvatarFallback)");
                 Volatile.Write(ref _http, client);

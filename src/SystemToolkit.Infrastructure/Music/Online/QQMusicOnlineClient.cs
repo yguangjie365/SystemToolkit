@@ -42,7 +42,11 @@ public sealed class QQMusicOnlineClient : IOnlineMusicClient, IQqMusicOnlineApi,
     public QQMusicOnlineClient(ILogger logger)
     {
         _logger = logger;
-        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
+        // 🟠 审查 2026-09-11（🟠-8）：关闭自动重定向，改手工逐跳（每跳复验 HTTPS + host 白名单）。
+        // 直连固定 API 主机，白名单按根域覆盖其子域（y.qq.com、isure.stream.qqmusic.qq.com 等）。
+        _http = new HttpClient(new SystemToolkit.Core.Utilities.RedirectFollowingHandler(
+            new HttpClientHandler { AllowAutoRedirect = false },
+            ["qq.com"]))
         {
             Timeout = TimeSpan.FromSeconds(15),
         };

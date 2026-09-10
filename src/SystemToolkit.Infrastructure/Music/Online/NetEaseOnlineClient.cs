@@ -44,7 +44,11 @@ public sealed class NetEaseOnlineClient : IOnlineMusicClient, INetEaseOnlineApi,
     public NetEaseOnlineClient(ILogger logger)
     {
         _logger = logger;
-        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
+        // 🟠 审查 2026-09-11（🟠-8）：关闭自动重定向，改手工逐跳（每跳复验 HTTPS + host 白名单）。
+        // 网易的 API 与封面 CDN 域由这两个根域覆盖（music.163.com、m801.music.126.net 等）。
+        _http = new HttpClient(new SystemToolkit.Core.Utilities.RedirectFollowingHandler(
+            new HttpClientHandler { AllowAutoRedirect = false },
+            ["163.com", "126.net"]))
         {
             Timeout = TimeSpan.FromSeconds(15),
         };
