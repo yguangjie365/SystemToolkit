@@ -189,7 +189,7 @@ public partial class MusicManagerViewModel
     public ObservableCollection<OnlineResultRowVm> SearchResults { get; } = [];
 
     // ── P3a：搜索历史（最近 10 条，新→旧；AtomicFile JSON 持久化）──
-    private ISearchHistoryStore? _searchHistoryStore;
+    private readonly ISearchHistoryStore? _searchHistoryStore; // 仅构造注入（Release 分析器 IDE0044 要求 readonly）
     private const int SearchHistoryCapacity = 10;
 
     public ObservableCollection<string> SearchHistory { get; } = [];
@@ -279,6 +279,11 @@ public partial class MusicManagerViewModel
 
     private async Task PersistSearchHistorySafeAsync(string[] snapshot)
     {
+        if (_searchHistoryStore is null)
+        {
+            return;
+        }
+
         try
         {
             await _searchHistoryStore.SaveAsync(snapshot);
