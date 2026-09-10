@@ -407,55 +407,77 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 string partPath = Path.Combine(root, $".upload_{uploadId}.part");
 
                 // 同一 uploadId 串行化：避免并发块写入把文件写乱（前端本就逐块传，这里防的是异常重试与多端同传）
+                // 🟡-4：闸门生命周期与「这次上传」绑定——未完待续保留复用；定稿/失败/异常一律移除，
+                // 否则失败分支的条目会一直躺在字典里（无法回收）。权衡与原先的定稿路径一致：以闸门复用为先。
                 SemaphoreSlim gate = _uploadGates.GetOrAdd(uploadId, static _ => new SemaphoreSlim(1, 1));
-                await gate.WaitAsync(reqCt);
+                bool keepGate = false;
                 try
                 {
-                    long current = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
-                    if (current != offset)
+                    await gate.WaitAsync(reqCt);
+                    try
                     {
-                        // 偏移与服务端已接收长度不符：客户端进度过期，重新查 status 再续
-                        return Results.Json(
-                            new { error = "偏移不匹配，请重新查询已传进度。", received = current },
-                            statusCode: 409);
+                        long current = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
+                        if (current != offset)
+                        {
+                            // 偏移与服务端已接收长度不符：客户端进度过期，重新查 status 再续
+                            return Results.Json(
+                                new { error = "偏移不匹配，请重新查询已传进度。", received = current },
+                                statusCode: 409);
+                        }
+
+                        long incoming = ctx.Request.ContentLength ?? 0;
+                        if (incoming <= 0 || offset + incoming > size)
+                        {
+                            return Results.BadRequest(new { error = "分块长度非法。" });
+                        }
+
+                        await AppendChunkAsync(partPath, ctx.Request.Body, incoming, reqCt);
+                    }
+                    finally
+                    {
+                        gate.Release();
                     }
 
-                    long incoming = ctx.Request.ContentLength ?? 0;
-                    if (incoming <= 0 || offset + incoming > size)
+                    long received = new FileInfo(partPath).Length;
+                    if (received < size)
                     {
-                        return Results.BadRequest(new { error = "分块长度非法。" });
+                        keepGate = true; // 还有后续块：保留闸门继续串行化
+                        return Results.Ok(new { received, total = size, done = false });
                     }
 
-                    await AppendChunkAsync(partPath, ctx.Request.Body, incoming, reqCt);
+                    // ── 定稿：算哈希 → 原子落定 ──
+                    string hash;
+                    await using (FileStream fs = new(partPath, FileMode.Open, FileAccess.Read, FileShare.None,
+                        bufferSize: 81920, useAsync: true))
+                    {
+                        hash = Convert.ToHexString(await SHA256.HashDataAsync(fs, reqCt)).ToLowerInvariant();
+                    }
+
+                    // 🟡-11：定稿失败时**保留** .part —— 它不是垃圾而是断点载体：
+                    // 重传同一文件（rel/size/mtime 相同）会命中同一 uploadId 与 .part，可直接定稿、免二次上传。
+                    // 故此处分歧于"失败即删"的直觉做法，只补一条可诊断的日志说明文件去向。
+                    string finalName;
+                    try
+                    {
+                        finalName = FinalizeUpload(root, partPath, rel, mtime);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn($"[Web] 上传定稿失败，已保留断点文件供重传定稿：{partPath}（{ex.Message}）");
+                        throw;
+                    }
+
+                    _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
+                    return Results.Ok(new { received, total = size, done = true, name = finalName, hash });
                 }
                 finally
                 {
-                    gate.Release();
+                    // 未完待续保留闸门（后续块复用）；定稿/失败/异常一律清理，避免条目滞留字典
+                    if (!keepGate)
+                    {
+                        _uploadGates.TryRemove(uploadId, out _);
+                    }
                 }
-
-                long received = new FileInfo(partPath).Length;
-                if (received < size)
-                {
-                    return Results.Ok(new { received, total = size, done = false });
-                }
-
-                // ── 定稿：算哈希 → 原子落定 → 清锁 ──
-                string hash;
-                try
-                {
-                    await using FileStream fs = new(partPath, FileMode.Open, FileAccess.Read, FileShare.None,
-                        bufferSize: 81920, useAsync: true);
-                    hash = Convert.ToHexString(await SHA256.HashDataAsync(fs, reqCt)).ToLowerInvariant();
-                }
-                finally
-                {
-                    // 无论改名成功与否都要清理闸门，否则同名重传会一直复用已废弃的锁对象
-                    _uploadGates.TryRemove(uploadId, out _);
-                }
-
-                string finalName = FinalizeUpload(root, partPath, rel, mtime);
-                _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
-                return Results.Ok(new { received, total = size, done = true, name = finalName, hash });
             }
             catch (OperationCanceledException)
             {
@@ -1229,15 +1251,52 @@ button:active{background:#334D63}
             }
         }
 
+        /// <summary>条目数达到该阈值时触发过期清扫（🟡-9：Map 按 IP 累积、原无回收机制）。</summary>
+        private const int PruneThreshold = 256;
+
         /// <summary>记录一次配对失败；连续失败达到阈值即进入封禁窗口。</summary>
         public static void Fail(string ip)
         {
             lock (Sync)
             {
+                PruneExpired();
+
                 (int fails, DateTimeOffset banned) = Map.TryGetValue(ip,
                     out (int Fails, DateTimeOffset BannedUntil) e) ? e : (0, DateTimeOffset.MinValue);
                 fails++;
                 Map[ip] = (fails, fails >= MaxFails ? DateTimeOffset.Now + BanWindow : banned);
+            }
+        }
+
+        /// <summary>
+        /// 清扫「封禁期已结束」的条目（🟡 审查 2026-09-10）。调用方须已持有 <see cref="Sync"/>。
+        /// <para>
+        /// 🔴 判据必须是「曾经封禁且已过期」（<c>BannedUntil != MinValue</c>）：
+        /// 从未触发封禁的条目（<c>BannedUntil == MinValue</c>）代表"失败计数仍在累积中"，
+        /// 若一并清除，攻击者只要在计数达到 MaxFails 之前触发一次清扫就能把计数清零、绕过限流。
+        /// </para>
+        /// <para>仅在条目数达阈值时才全表扫描，避免每次失败都遍历。</para>
+        /// </summary>
+        private static void PruneExpired()
+        {
+            if (Map.Count < PruneThreshold)
+            {
+                return;
+            }
+
+            DateTimeOffset now = DateTimeOffset.Now;
+            List<string> expired = [];
+            foreach (KeyValuePair<string, (int Fails, DateTimeOffset BannedUntil)> entry in Map)
+            {
+                if (entry.Value.BannedUntil != DateTimeOffset.MinValue && now >= entry.Value.BannedUntil)
+                {
+                    expired.Add(entry.Key);
+                }
+            }
+
+            foreach (string key in expired)
+            {
+                Map.Remove(key);
             }
         }
 

@@ -44,6 +44,15 @@ public sealed class ElevatedVssClient
     private static readonly TimeSpan VssTimeout = TimeSpan.FromMinutes(3);
 
     private readonly string _helperPath;
+
+    /// <summary>
+    /// 提权辅助进程的期望路径（供 VM 侧做「Helper 是否已安装」的可用性预检）。
+    /// <para>
+    /// 🟡 审查 2026-09-10（🟡-1）：此前 VM 无法访问该路径，只能"注入即认为可用"，
+    /// Helper 缺失时会误报绿色可用，直到首次备份才失败。
+    /// </para>
+    /// </summary>
+    public string HelperPath => _helperPath;
     private readonly Func<string> _tempDirectoryProvider;
     private readonly ILogger _logger;
 

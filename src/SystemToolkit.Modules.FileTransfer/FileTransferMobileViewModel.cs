@@ -19,6 +19,21 @@ public partial class FileTransferMobileViewModel : ObservableObject
     private readonly PairingService _pairing;
     private readonly Action<string> _log;
 
+    /// <remarks>
+    /// 🟡 审查 2026-09-10（🟡-13）：本 VM 与 <see cref="FileTransferDesktopViewModel"/> 的差异是**有意的**——
+    /// 它目前只有 <c>DispatcherTimer</c>（Tick 本就在 UI 线程执行），没有任何需要编组的后台事件订阅，
+    /// 因此不接 <c>Dispatcher</c>。
+    /// <para>
+    /// 若将来在此 VM 里订阅核心层事件（如 <c>ITransferService</c> 的 TaskUpdated），**必须**照 Desktop 的
+    /// <c>RunOnUi</c> 模式补「显式 Dispatcher 注入 + 死线程检测 + BeginInvoke」，
+    /// 不要直接抓 <c>Application.Current?.Dispatcher</c>（Application 为 null 时静默跳过）、
+    /// 也不要用同步 <c>Invoke</c>（有死锁风险）。
+    /// </para>
+    /// <para>
+    /// 说明：此刻提前加一个**无人调用**的 RunOnUi 只会变成死代码并触发 IDE0051
+    /// （Release 的 TreatWarningsAsErrors 会直接失败），故以本条约定替代代码。
+    /// </para>
+    /// </remarks>
     public FileTransferMobileViewModel(IFileWebServer web, PairingService pairing, Action<string> log)
     {
         _web = web;

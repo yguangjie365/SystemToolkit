@@ -50,4 +50,37 @@ public static class AtomicFile
             }
         }
     }
+
+    /// <summary>
+    /// 原子写入二进制内容（同样的「唯一 tmp + Move 覆盖」）。
+    /// <para>
+    /// 🟡 审查 2026-09-10（🟡-16）：用于下载的封面/图标等二进制资源——
+    /// 直写目标文件时若中断（网络断、进程退出）会在目标处留下半截图片且无法察觉。
+    /// </para>
+    /// </summary>
+    public static void WriteAllBytes(string path, byte[] contents)
+    {
+        string? dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        lock (Locks.GetOrAdd(Path.GetFullPath(path), _ => new object()))
+        {
+            string tmp = $"{path}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                File.WriteAllBytes(tmp, contents);
+                File.Move(tmp, path, overwrite: true);
+            }
+            catch
+            {
+                try
+                { File.Delete(tmp); }
+                catch { /* 清理失败不影响原异常语义 */ }
+                throw;
+            }
+        }
+    }
 }

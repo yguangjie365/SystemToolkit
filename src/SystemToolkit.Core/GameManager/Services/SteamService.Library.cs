@@ -197,7 +197,9 @@ public sealed partial class SteamService
                     if (bytes.Length < 4096)
                         continue;
 
-                    await File.WriteAllBytesAsync(target, bytes, ct).ConfigureAwait(false);
+                    // 🟡 审查 2026-09-10（🟡-16）：改原子写（唯一 tmp + Move 覆盖）——
+                    // 直写目标时若中断会留下半截 jpg，且下次因"文件已存在"不再重下。
+                    SystemToolkit.Core.Utilities.AtomicFile.WriteAllBytes(target, bytes);
                     return target;
                 }
                 catch (OperationCanceledException)

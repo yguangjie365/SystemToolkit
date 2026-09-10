@@ -215,10 +215,15 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
-        // 检查 Helper 可执行文件是否存在
-        // ElevatedVssClient 内部会检查 _helperPath，这里通过反射或简单探测
-        // 由于无法直接访问私有字段，我们采用保守策略：假设注入即表示可用
-        // 实际运行时若 UAC 被拒绝，BackupService 会回退并记录日志
+        // 🟡 审查 2026-09-10（🟡-1）：不能"注入即报绿"——Helper exe 缺失时 VSS 通道实际不可用，
+        // 报绿会让用户以为可备份，直到首次备份才失败。改为按文件存在性预检。
+        if (!File.Exists(_vssClient.HelperPath))
+        {
+            VssStatus = "未安装 Helper（提权组件缺失，VSS 通道不可用）";
+            VssStatusColor = ThemeBrush.Find("Brush_Warning", "#D97706");
+            return;
+        }
+
         VssStatus = "已配置（首次备份时将请求 UAC 提权）";
         VssStatusColor = ThemeBrush.Find("Brush_Success", "#059669");
     }
@@ -555,8 +560,7 @@ public partial class FileBackupViewModel : ObservableObject
         }
 
         ordered.Insert(Math.Clamp(newIndex, 0, ordered.Count), movedId);
-        _rules.Reorder(ordered);
-        _rules.Save();
+        _rules.Reorder(ordered); // 🟡 审查 2026-09-10（🟡-3）：Reorder 内部已 Save，此处不再重复写盘
         Log($"[备份] 规则顺序已调整：{movedName}");
         ReloadRules();
         SelectedRule = Rules.FirstOrDefault(r => r.RuleId == movedId);
@@ -571,8 +575,7 @@ public partial class FileBackupViewModel : ObservableObject
         }
 
         bool newValue = !SelectedRule.Model.Enabled;
-        _rules.SetEnabled(SelectedRule.RuleId, newValue);
-        _rules.Save();
+        _rules.SetEnabled(SelectedRule.RuleId, newValue); // 🟡-3：SetEnabled 内部已 Save，不再重复写盘
         ReloadRules();
         SelectedRule = Rules.FirstOrDefault(r => r.RuleId == SelectedRule.RuleId);
     }
