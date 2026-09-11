@@ -4,9 +4,11 @@ using SystemToolkit.Abstractions;
 namespace SystemToolkit.Modules.MusicManager;
 
 /// <summary>
-/// MUSIC-7：为 Shell 底部迷你播放条提供 <see cref="IPlaybackBarSource"/> 映射
+/// MUSIC-7：为 Shell 迷你播放器提供 <see cref="IPlaybackBarSource"/> 映射
 /// （隐式实现——WPF binding 要求 public 成员，显式接口实现不可见）。
-/// 全部成员是对既有播放状态的单行别名，零新逻辑；变更通知由底层 SetProperty 承担。
+/// 成员是对既有播放状态的单行别名，零新逻辑；
+/// 🔴 别名表达式属性不会随底层属性自动通知——必须经 <see cref="WirePlaybackBarProjections"/>
+/// 转发（2026-09-11 实机截图暴露：播放条标题/时间永远停在初始值）。
 /// </summary>
 public partial class MusicManagerViewModel : IPlaybackBarSource
 {
@@ -48,6 +50,27 @@ public partial class MusicManagerViewModel : IPlaybackBarSource
     /// <inheritdoc/>
     public void SeekToRatio(double ratio) => EndSeek(Math.Clamp(ratio, 0, 1) * 100);
 
-    // HasTrack 的变更通知挂在 QueueCurrent 赋值点（Main 文件 SetNowPlaying 区），
-    // 不用 OnQueueCurrentChanged partial hook——WPF 临时编译通道不跑源生成器（CS0759 实测）。
+    /// <summary>
+    /// 别名表达式属性的转发通知（构造尾调用；单例 VM 自订阅无泄漏问题）。
+    /// QueueCurrent→HasTrack 也在此统一（主文件三处赋值点的手动通知保留作双保险）。
+    /// </summary>
+    private void WirePlaybackBarProjections() =>
+        PropertyChanged += (_, e) =>
+        {
+            string? alias = e.PropertyName switch
+            {
+                nameof(CurrentTitle) => nameof(Title),
+                nameof(CurrentSub) => nameof(Subtitle),
+                nameof(CurrentCoverImage) => nameof(Cover),
+                nameof(ProgressValue) => nameof(ProgressPercent),
+                nameof(PositionCurrentText) => nameof(PositionText),
+                nameof(PositionDurationText) => nameof(DurationText),
+                nameof(QueueCurrent) => nameof(HasTrack),
+                _ => null,
+            };
+            if (alias is not null)
+            {
+                OnPropertyChanged(alias);
+            }
+        };
 }

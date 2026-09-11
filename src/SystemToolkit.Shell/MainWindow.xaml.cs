@@ -146,8 +146,8 @@ public partial class MainWindow : Window
         ThemeManager.ThemeChanged += OnThemeChanged;
         Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
 
-        // MUSIC-7：底部迷你播放条——数据源由音乐模块桥接注册（GetService 可选解析：
-        // 音乐模块被禁用时缺席，整条永久隐藏）；HasTrack=false（未选曲）时不占位
+        // MUSIC-7：顶部居中迷你播放器（悬浮胶囊）——数据源由音乐模块桥接注册
+        // （GetService 可选解析：被禁用时缺席，整体永久隐藏）；HasTrack=false（未选曲）时不占位
         _playbackBar = provider.GetService<IPlaybackBarSource>();
         if (_playbackBar is not null)
         {
@@ -164,18 +164,6 @@ public partial class MainWindow : Window
     }
 
     private readonly IPlaybackBarSource? _playbackBar;
-
-    /// <summary>播放条顶缘定位线：点击比例 → SeekToRatio。</summary>
-    private void PlaybackSeek_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (_playbackBar is null || sender is not FrameworkElement line)
-        {
-            return;
-        }
-
-        double ratio = e.GetPosition(line).X / Math.Max(1.0, line.ActualWidth);
-        _playbackBar.SeekToRatio(ratio);
-    }
 
     /// <summary>播放条左段点击：导航到来源模块页（引用比对 NavigationModule——F-1 红线禁按 Id 字符串分派）。</summary>
     private void PlaybackMeta_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)

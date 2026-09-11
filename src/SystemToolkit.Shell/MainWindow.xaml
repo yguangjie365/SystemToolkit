@@ -10,10 +10,6 @@
         WindowState="Normal"
         FontFamily="{DynamicResource Font_Body}">
     <Grid Background="{DynamicResource Brush_Background}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220"/>
             <ColumnDefinition Width="*"/>
@@ -159,22 +155,26 @@
         <!-- 页面宿主 -->
         <ContentControl x:Name="PageHost" Grid.Column="1"/>
 
-        <!-- ════════ MUSIC-7 底部迷你播放条（示意图 2026-09-11 批准）════════
+        <!-- ════════ MUSIC-7 迷你播放器（2026-09-11 用户改版：顶部居中悬浮胶囊 + 封面）════════
              DataContext=IPlaybackBarSource（代码注入）；音乐模块禁用时解析为 null、
-             无当前曲目时 HasTrack=false——两种情况整条 Collapsed 不占位 -->
-        <Border x:Name="PlaybackBar" Grid.Row="1" Grid.ColumnSpan="2" Height="44"
-                Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
-                BorderThickness="0,1,0,0" Visibility="Collapsed">
+             无当前曲目时 HasTrack=false——两种情况整体 Collapsed 不占位。
+             定位 seek 与音量留在播放器页：胶囊只承载 封面/标题/播控/时间 -->
+        <Border x:Name="PlaybackBar" Grid.ColumnSpan="2" Panel.ZIndex="10"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{DynamicResource Space_XS}"
+                Height="40" Background="{DynamicResource Brush_Surface}"
+                BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius_Pill}" Padding="{DynamicResource Space_XXS}"
+                Visibility="Collapsed">
             <Border.Resources>
                 <Style x:Key="BarButton" TargetType="Button">
                     <Setter Property="Background" Value="Transparent"/>
                     <Setter Property="BorderThickness" Value="0"/>
                     <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
                     <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
-                    <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
+                    <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
                     <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="MinWidth" Value="28"/>
-                    <Setter Property="MinHeight" Value="28"/>
+                    <Setter Property="MinWidth" Value="24"/>
+                    <Setter Property="MinHeight" Value="24"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
@@ -190,11 +190,11 @@
                         </Setter.Value>
                     </Setter>
                 </Style>
-                <!-- 主播放键：30px 圆形主色 -->
+                <!-- 主播放键：圆形主色 -->
                 <Style x:Key="BarPlayButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
                     <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
-                    <Setter Property="MinWidth" Value="30"/>
-                    <Setter Property="MinHeight" Value="30"/>
+                    <Setter Property="MinWidth" Value="26"/>
+                    <Setter Property="MinHeight" Value="26"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
@@ -210,7 +210,7 @@
                         </Setter.Value>
                     </Setter>
                 </Style>
-                <!-- 曲名/时间行：随播放态显隐的 glyph（无转换器）-->
+                <!-- 播放/暂停 glyph 互斥显隐（无转换器） -->
                 <Style x:Key="GlyphWhilePlaying" TargetType="TextBlock">
                     <Setter Property="Visibility" Value="Collapsed"/>
                     <Style.Triggers>
@@ -228,47 +228,39 @@
                     </Style.Triggers>
                 </Style>
             </Border.Resources>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="320"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- 顶缘 2px 定位线：点击 seek（拖动随 V1.1 打磨） -->
-                <Grid Grid.ColumnSpan="3" Height="2" VerticalAlignment="Top" Cursor="Hand"
-                      Background="{DynamicResource Brush_SliderTrack}" MouseLeftButtonUp="PlaybackSeek_Click">
-                    <!-- 🔴 09-11 实机二炸：RangeBase.Value 绑定默认 TwoWay，源 ProgressPercent 只读
-                         → Show() 布局期抛异常整窗崩。显示用途必须显式 OneWay -->
-                    <ProgressBar Height="2" BorderThickness="0" Minimum="0" Maximum="100"
-                                 Value="{Binding ProgressPercent, Mode=OneWay}" Background="Transparent"
-                                 Foreground="{DynamicResource Brush_Accent}" IsHitTestVisible="False"/>
-                </Grid>
-
-                <!-- 左：封面 + 曲名/艺术家，点击跳音乐页 -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
-                            Margin="{DynamicResource Space_XS}" Background="Transparent" Cursor="Hand"
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- 封面 + 标题：点击跳音乐页（09-11 用户改版要求封面图） -->
+                <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand"
                             ToolTip="跳到音乐管理" MouseLeftButtonUp="PlaybackMeta_Click">
-                    <Grid Width="32" Height="32">
-                        <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_SM}">
+                    <Grid Width="28" Height="28" Margin="{DynamicResource Space_XXS}">
+                        <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_Pill}">
                             <TextBlock Text="♪" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontSize="{DynamicResource Font_SizeCaption}"
                                        Foreground="{DynamicResource Brush_TextSecondary}"/>
                         </Border>
-                        <Image Source="{Binding Cover}" Stretch="UniformToFill"/>
+                        <!-- 圆形封面（与占位同形态）；RadiusX/Y 非棘轮扫描维度 -->
+                        <Image Source="{Binding Cover, Mode=OneWay}" Stretch="UniformToFill"
+                               Width="28" Height="28">
+                            <Image.Clip>
+                                <EllipseGeometry Center="14,14" RadiusX="14" RadiusY="14"/>
+                            </Image.Clip>
+                        </Image>
                     </Grid>
-                    <StackPanel VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
-                        <TextBlock Text="{Binding Title}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" MaxWidth="230"/>
-                        <TextBlock Text="{Binding Subtitle}" FontSize="{DynamicResource Font_SizeNano}"
-                                   Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+                    <StackPanel VerticalAlignment="Center" MaxWidth="220" Margin="{DynamicResource Space_XXS}">
+                        <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                   FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Title, Mode=OneWay}"/>
+                        <TextBlock Text="{Binding Subtitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeNano}"
+                                   Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- 中：上一首 / 播放·暂停 / 下一首 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <!-- 播控三键 -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
                     <Button Style="{StaticResource BarButton}" Command="{Binding PreviousTrackCommand}"
                             Content="&#xE892;" ToolTip="上一首"/>
-                    <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}" ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
+                    <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}"
+                            ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
                         <Grid>
                             <TextBlock Text="&#xE769;" Style="{StaticResource GlyphWhilePlaying}"/>
                             <TextBlock Text="&#xE768;" Style="{StaticResource GlyphWhileIdle}"/>
@@ -278,25 +270,19 @@
                             Content="&#xE893;" ToolTip="下一首"/>
                 </StackPanel>
 
-                <!-- 右：时间 + 音量 -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XS}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <!-- 🔴 09-11 实机事故：MonoText 是 TextBlock 样式，不能挂 StackPanel（启动即 XamlParseException）；
-                             等宽字体直接走 Font_Mono 令牌 -->
-                        <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
-                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                        <TextBlock Text=" / " FontFamily="{DynamicResource Font_Mono}"
-                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
-                                   FontSize="{DynamicResource Font_SizeCaption}"
-                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <Slider Width="72" Minimum="0" Maximum="1" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}"
-                            Value="{Binding Volume, Mode=TwoWay}" IsMoveToPointEnabled="True" ToolTip="音量"/>
+                <!-- 时间（等宽走 Font_Mono 令牌——09-11 一炸教训：MonoText 样式不能挂面板） -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
+                    <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                    <TextBlock Text=" / " FontFamily="{DynamicResource Font_Mono}"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
                 </StackPanel>
-            </Grid>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

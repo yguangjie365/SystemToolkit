@@ -147,6 +147,7 @@ public partial class MusicManagerViewModel : ObservableObject
         _credentials = credentials;
         _searchHistoryStore = searchHistory;
         NavigationModule = navigationModule; // MUSIC-7：播放条跳页导航目标（引用比对）
+        WirePlaybackBarProjections();        // MUSIC-7：别名属性转发（不接线播放条永远停在初始值）
 
         // 🔴 审查 2026-09-11（🔴-3）：主题切换后重取播放器三刷。
         // 三个 Brush 字段是**初始化即定值**（Player.cs），而本 VM 是 DI 单例、主题切换只重建
