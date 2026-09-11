@@ -16,7 +16,9 @@
             <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XLLg}"/>
+            <!-- 2026-09-12 用户反馈：方形封面 hover 上浮时从上方两角溢出圆框——上角改直角
+                 （下角保留圆角；ClipToBounds 是矩形裁剪不认圆角，上角直角后与封面边缘对齐） -->
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XLLgTopFlat}"/>
             <Setter Property="Padding" Value="0"/>
             <!-- 封面贴边 + hover 缩放不外溢：整卡裁剪（HTML .game-card overflow:hidden 等效） -->
             <Setter Property="ClipToBounds" Value="True"/>
