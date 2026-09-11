@@ -368,11 +368,12 @@ public sealed class AudioProxyService : IAudioProxyService
             // 纯流式透传：边下边播，零额外内存开销
             await upstreamResp.Content.CopyToAsync(response.Body, aborted);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
+            // 审查 v5（🟡-6）：错误路径不回显上游异常消息（可被本机网页借错误文本探测内网细节）
             response.StatusCode = StatusCodes.Status502BadGateway;
             response.ContentType = "text/plain; charset=utf-8";
-            await response.WriteAsync($"Proxy error: {ex.Message}");
+            await response.WriteAsync("Proxy error: 上游请求失败");
         }
     }
 
@@ -403,18 +404,49 @@ public sealed class AudioProxyService : IAudioProxyService
             // 审查 R1b（2026-09-10）：不发 Access-Control-Allow-Origin（同 /audio 理由）
             response.Headers.Append("Cache-Control", "public, max-age=86400");
 
-            if (upstreamResp.Content.Headers.ContentLength is not null)
+            // 审查 v6（O-2b）：大小上限必须在**设置 ContentLength 之前**判定——
+            // v5 版先设大值再写短 502 体，Kestrel 报 Content-Length mismatch、客户端拿不到干净 502。
+            // 局限留痕：WebClient 走 ResponseContentRead，整块缓冲发生在校验之前，本上限只是
+            // "不转发超大响应"的门；真要限代理内存需改 HeadersRead + 计数流拷贝（治理项）。
+            const int MaxCoverBytes = 8 * 1024 * 1024;
+            long? upstreamLength = upstreamResp.Content.Headers.ContentLength;
+            if (upstreamLength is > MaxCoverBytes)
             {
-                response.ContentLength = upstreamResp.Content.Headers.ContentLength;
+                response.StatusCode = StatusCodes.Status502BadGateway;
+                await response.WriteAsync("Proxy error: 封面响应超过大小上限");
+                return;
+            }
+
+            if (upstreamLength is not null)
+            {
+                response.ContentLength = upstreamLength.Value;
             }
 
             byte[] body = await upstreamResp.Content.ReadAsByteArrayAsync();
+            if (body.Length > MaxCoverBytes)
+            {
+                // 声明长度来自上游头、实体超限（无 Content-Length 的响应）：先清声明再写短体
+                response.ContentLength = null;
+                response.StatusCode = StatusCodes.Status502BadGateway;
+                await response.WriteAsync("Proxy error: 封面响应超过大小上限");
+                return;
+            }
+
             await response.Body.WriteAsync(body);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
+            // 审查 v5（🟡-6）：同 /audio，不回显上游异常消息。
+            // 审查 v7（A-4）：异常可能来自 Body.WriteAsync 中途——响应已开始时改头会二次抛出，
+            // 短路交由连接层收尾，保证 catch 自身无逃逸路径。
+            if (response.HasStarted)
+            {
+                return;
+            }
+
+            response.ContentLength = null;
             response.StatusCode = StatusCodes.Status502BadGateway;
-            await response.WriteAsync($"Proxy error: {ex.Message}");
+            await response.WriteAsync("Proxy error: 上游请求失败");
         }
     }
 }

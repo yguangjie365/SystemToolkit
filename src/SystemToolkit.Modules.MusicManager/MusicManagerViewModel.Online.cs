@@ -97,6 +97,10 @@ public partial class MusicManagerViewModel
             await LoadPlaylistsAsync(); // 歌单面板跟随平台（双平台用户歌单均已接线）
             await RefreshLoginStateAsync();
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
+        }
         catch (Exception ex)
         {
             OnlineStatusText = $"切换平台失败：{ex.Message}";
@@ -719,6 +723,10 @@ public partial class MusicManagerViewModel
             OnlineStatusText = _catalog.CatalogError;
             CurrentView = ContentViewMode.PlaylistDetail;
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
+        }
         catch (Exception ex)
         {
             OnlineStatusText = $"加载歌单失败：{ex.Message}";
@@ -742,6 +750,10 @@ public partial class MusicManagerViewModel
         {
             await PlayOnlineTracksAsync(tracks, tracks[0]);
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
+        }
         catch (Exception ex)
         {
             OnlineStatusText = $"播放歌单失败：{ex.Message}";
@@ -763,6 +775,10 @@ public partial class MusicManagerViewModel
         try
         {
             await PlayOnlineTracksAsync(tracks, row.Track);
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
         }
         catch (Exception ex)
         {
@@ -849,6 +865,14 @@ public partial class MusicManagerViewModel
             // 空态原因可见：未登录 / QQ 不支持 / 网络失败（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            // 审查 v6（B1 残留）：收尾分支同样要带代际——过期代的超时不得覆盖最新代状态行
+            if (seq == _recommendSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
+        }
         catch (Exception ex)
         {
             // 审查 F-02：原只有 finally，异常被吞——用户只看到"加载中"消失
@@ -889,6 +913,14 @@ public partial class MusicManagerViewModel
             }
 
             OnPropertyChanged(nameof(HasRankBoards));
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            // 审查 v6（B1 残留）：收尾分支同样要带代际
+            if (seq == _recommendSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
         }
         catch (Exception ex)
         {
@@ -942,6 +974,10 @@ public partial class MusicManagerViewModel
                 : $"已载入榜单「{board.Name}」{songs.Count} 首 — 双击曲目即以其为起点播放";
             CurrentView = ContentViewMode.OnlineSearch;
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
+        }
         catch (Exception ex)
         {
             OnlineStatusText = $"载入榜单失败：{ex.Message}";
@@ -971,6 +1007,10 @@ public partial class MusicManagerViewModel
         try
         {
             await PlayOnlineTracksAsync(tracks, row.Track);
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
         }
         catch (Exception ex)
         {
@@ -1224,6 +1264,10 @@ public partial class MusicManagerViewModel
             }
 
             RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            OnlineStatusText = "操作已取消或网络超时。";
         }
         catch (Exception ex)
         {

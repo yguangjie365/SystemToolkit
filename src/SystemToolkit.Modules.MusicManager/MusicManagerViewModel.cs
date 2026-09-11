@@ -488,7 +488,22 @@ public partial class MusicManagerViewModel : ObservableObject
         }
 
         _queue.SetQueue(Songs, start);
-        await PlayCurrentCoreAsync(engine);
+        try
+        {
+            await PlayCurrentCoreAsync(engine).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // v6 O-1c：起播取消不伪装为业务失败
+            ScanStatusText = "播放已取消。";
+        }
+        catch (Exception ex)
+        {
+            // v6 O-1c：命令体顶层兜底——上方两个嵌套 catch 只护 Pause/Resume，
+            // 起播路径（PlayCurrentCoreAsync）此前裸奔，异常被 AsyncRelayCommand 吞掉
+            ScanStatusText = $"播放失败：{ex.Message}";
+            _log.Error("[Music] 播放失败（主路径）", ex);
+        }
     }
 
     [RelayCommand]

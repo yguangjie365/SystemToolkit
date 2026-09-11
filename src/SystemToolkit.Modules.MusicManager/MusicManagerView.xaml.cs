@@ -352,7 +352,16 @@ public partial class MusicManagerView : UserControl
         catch (Exception ex)
         {
             // 登录窗异常降级为可见状态（🔴 不静默），不打崩进程
-            await _vm.OnLoginCookieObtainedAsync(provider, null);
+            // 审查 v5（🟡-11）：async void 的 catch 内再 await——若降级调用自身再抛，异常无处可去直冲 Dispatcher
+            try
+            {
+                await _vm.OnLoginCookieObtainedAsync(provider, null);
+            }
+            catch (Exception inner)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Music] 登录窗异常且降级通知也失败：{ex.Message} / {inner.Message}");
+            }
+
             System.Diagnostics.Debug.WriteLine($"[Music] 登录窗异常：{ex.Message}");
         }
     }

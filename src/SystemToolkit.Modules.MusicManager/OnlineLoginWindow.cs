@@ -172,6 +172,30 @@ public sealed class OnlineLoginWindow : Window
         _completed = true;
         _pollTimer?.Stop();
         _cookieTcs.TrySetResult(cookie);
+        _ = CloseWithCleanupAsync();
+    }
+
+    /// <summary>
+    /// 审查 v5（🟡-5）：关窗前清浏览数据——登录成功捕获 Cookie 后，Chromium profile
+    /// 内仍留存已登录会话副本（虽有 Chromium 自加密，但属本可即时清除的落盘凭据）。
+    /// 与打开时的清理对称；清理失败不阻断关窗。
+    /// </summary>
+    private async Task CloseWithCleanupAsync()
+    {
+        try
+        {
+            if (_webView?.CoreWebView2 is not null)
+            {
+                // 审查 v6（O-1d）：清理必须带超时上界——Chromium 卡住时不能让窗口悬留不关
+                await _webView.CoreWebView2.Profile.ClearBrowsingDataAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+        }
+        catch
+        {
+            // 清理尽力而为：超时/WebView 已销毁/Runtime 异常时直接关窗
+        }
+
         try
         {
             Close();
