@@ -790,12 +790,20 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             RaiseCompleted(task);
             _tasks.TryRemove(task.Id, out _);
             _logger.Info($"接收请求已拒绝：{tm.FileName}（任务 {task.Id}）——{reason}");
-            await SendControlAsync(guid, new TransferMessage
+            // 审查 v5（🟡-3）：fire-and-forget Task 内的发送失败会静默逃逸——兜底记日志，避免未观察异常
+            try
             {
-                Type = TransferMessageType.Error,
-                TaskId = tm.TaskId,
-                Error = reason,
-            }).ConfigureAwait(false);
+                await SendControlAsync(guid, new TransferMessage
+                {
+                    Type = TransferMessageType.Error,
+                    TaskId = tm.TaskId,
+                    Error = reason,
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"拒绝回执发送失败（任务 {task.Id}）：{ex.Message}");
+            }
             return;
         }
 
@@ -1291,13 +1299,20 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         catch (JsonException) { return null; }
     }
 
-    private static string SanitizeFileName(string fileName)
+    // internal + InternalsVisibleTo：消毒口径有直测锁定（v5 🟡-4，反向验证见 FileTransferServiceTests）
+    internal static string SanitizeFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))
             return "unnamed";
+        // 审查 v5（🟡-4）：剥离零宽不可见字符（U+200B/200C/200D/2060/FEFF）——
+        // Trim/InvalidFileNameChars 均不匹配，会造成落盘名与感知名不一致（伪装面）
+        fileName = TextSanitizer.StripInvisible(fileName) ?? string.Empty;
         string sanitized = string.Concat(fileName.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c));
         // Windows 保留设备名（CON/NUL/COM1…）即使带扩展名也是设备节点，落到设备而非文件——前缀 _ 规避
-        return IsWindowsReservedDeviceName(sanitized) ? "_" + sanitized : sanitized;
+        sanitized = IsWindowsReservedDeviceName(sanitized) ? "_" + sanitized : sanitized;
+        // 审查 v5（🟡-4）：Windows 落盘时静默剥离尾随点/空格——请求名与实际文件名错位
+        // 会破坏 upload-status 指纹与孤儿 .part 清理的 Ordinal 比较，先归一化
+        return sanitized.TrimEnd('.', ' ');
     }
 
     private static readonly string[] WindowsReservedDeviceNames =

@@ -181,8 +181,10 @@ public partial class FileTransferMobileViewModel : ObservableObject
     {
         if (!string.IsNullOrWhiteSpace(ShareDirectory) && Directory.Exists(ShareDirectory))
         {
-            System.Diagnostics.Process.Start(
-                new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{ShareDirectory}\"") { UseShellExecute = true });
+            // 审查 v5（🟡-12）：ArgumentList 逐参传递，替代手工引号拼接（尾反斜杠会转义闭引号）
+            var psi = new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+            psi.ArgumentList.Add(ShareDirectory);
+            System.Diagnostics.Process.Start(psi);
         }
     }
 

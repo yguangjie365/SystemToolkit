@@ -667,6 +667,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         // 空名/./..，漏了非法字符与 Windows 保留设备名（CON/NUL/COM1 及其带扩展名形式，
         // 如 CON.txt）。这类名字写进目录后会让后续访问抛异常甚至挂起（NUL 设备语义）。
         string safeName = Path.GetFileName(fileName);
+        // 审查 v5（🟡-4）：零宽字符剥离 + 尾随点/空格归一——Windows 落盘会静默剥离
+        // 尾随点/空格，请求名与实际文件名错位会破坏 upload-status 指纹比对（与
+        // FileTransferService.SanitizeFileName 同口径；集中化属治理项，v5 不做）
+        safeName = TextSanitizer.StripInvisible(safeName) ?? string.Empty;
+        safeName = safeName.TrimEnd('.', ' ');
         if (string.IsNullOrWhiteSpace(safeName)
             || safeName is "." or ".."
             || safeName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0

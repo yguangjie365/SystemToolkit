@@ -105,7 +105,10 @@ public partial class FileTransferView : UserControl
             return;
         }
 
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+        // 审查 v5（🟡-12）：ArgumentList 逐参传递，替代手工引号拼接
+        var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+        psi.ArgumentList.Add(dir);
+        Process.Start(psi);
     }
 
     private void OnTabChecked(object sender, RoutedEventArgs e)

@@ -41,6 +41,57 @@ public class FileTransferServiceTests
         RequirePairing = false,
     };
 
+    // ── 审查 v5（🟡-4）：接收文件名消毒口径直测（internal + InternalsVisibleTo）──
+
+    [Theory]
+    [InlineData("report\u200B.exe.pdf")]      // 零宽空格 U+200B：伪装面，须剥离
+    [InlineData("report\uFEFF.txt")]          // BOM U+FEFF
+    [InlineData("name\u2060x.mp3")]           // WORD JOINER U+2060
+    public void SanitizeFileName_StripsZeroWidthCharacters(string input)
+    {
+        string actual = FileTransferService.SanitizeFileName(input);
+        Assert.DoesNotContain("\u200B", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u200C", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u200D", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u2060", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain("\uFEFF", actual, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("a.txt.", "a.txt")]           // 尾随点：Windows 落盘静默剥离，须先归一化
+    [InlineData("a.txt ", "a.txt")]           // 尾随空格
+    [InlineData("a.txt. . ", "a.txt")]
+    public void SanitizeFileName_TrimsTrailingDotsAndSpaces(string input, string expected)
+    {
+        Assert.Equal(expected, FileTransferService.SanitizeFileName(input));
+    }
+
+    [Fact]
+    public void SanitizeFileName_PrefixesReservedDeviceNames()
+    {
+        Assert.StartsWith("_", FileTransferService.SanitizeFileName("CON"), StringComparison.Ordinal);
+        Assert.StartsWith("_", FileTransferService.SanitizeFileName("NUL.txt"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SanitizeFileName_EmptyOrWhitespaceFallsBack()
+    {
+        Assert.Equal("unnamed", FileTransferService.SanitizeFileName(""));
+        Assert.Equal("unnamed", FileTransferService.SanitizeFileName("   "));
+    }
+
+    [Fact]
+    public void SanitizeFileName_ReplacesInvalidCharacters()
+    {
+        string actual = FileTransferService.SanitizeFileName("a<b>:c\"d.exe");
+        Assert.DoesNotContain("<", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain(">", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain(":", actual, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"", actual, StringComparison.Ordinal);
+        Assert.StartsWith("a", actual, StringComparison.Ordinal);
+        Assert.EndsWith("d.exe", actual, StringComparison.Ordinal);
+    }
+
     /// <summary>生成含随机内容的临时文件（中文+空格文件名顺带覆盖 SanitizeFileName 路径）。</summary>
     private static string CreateSourceFile(string dir, string fileName, int sizeBytes)
     {

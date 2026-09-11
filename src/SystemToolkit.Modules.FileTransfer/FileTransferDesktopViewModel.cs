@@ -248,6 +248,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             {
                 await _transfer.StartAsync(settings).ConfigureAwait(true);
             }
+            catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+            {
+                _log("[互传] ⚠ 操作已取消或超时。");
+            }
             catch (Exception ex)
             {
                 _log($"[互传] ❌ 传输服务启动失败（TCP 18889 可能被占用）：{ex.Message}");
@@ -267,6 +271,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                     OfflineTimeout = TimeSpan.FromSeconds(10),
                 };
                 await _discovery.StartAsync(discoverySettings).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+            {
+                _log("[互传] ⚠ 操作已取消或超时。");
             }
             catch (Exception ex)
             {
@@ -291,6 +299,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             IsTransferRunning = true;
             _log("[互传] ✅ 传输与设备发现服务已启动（TCP 18889 / UDP 18888）");
             _logger.Info("互传服务启动");
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            _log("[互传] ⚠ 操作已取消或超时。");
         }
         catch (Exception ex)
         {
@@ -327,6 +339,45 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
             IsTransferRunning = false;
             _log("[互传] 服务已停止");
+
+            // 审查 v5（🟡-9）：StopAsync 仅给在途任务 50ms 收尾宽限，其 TaskUpdated 经 RunOnUi
+            // 排队后可能在上面 Clear() 之后才执行 Insert——延迟一拍再复清一次，
+            // 防止已停止任务的"幽灵行"残留并复活刚停掉的定时器。
+            // 审查 v7（A-3）：只移除非活动行、不清整表——300ms 内用户重启服务并入队的
+            // 新任务行不能被连带删掉（谓词 Any(!IsActive) + Clear() 会误伤）。
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(300).ConfigureAwait(false);
+                    RunOnUi(() =>
+                    {
+                        if (!IsTransferRunning)
+                        {
+                            foreach (TransferTaskRowVm row in ActiveTasks.Where(r => !r.IsActive).ToList())
+                            {
+                                ActiveTasks.Remove(row);
+                            }
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("[互传] 停止后延迟复清失败", ex);
+                }
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // v6 O-1c：取消不伪装为业务失败
+            _log("[互传] ⚠ 停止操作已取消。");
+        }
+        catch (Exception ex)
+        {
+            // v6 O-1c：命令体真实兜底——原 try/finally 让异常被 AsyncRelayCommand 吞掉，
+            // IsTransferRunning 停在 true 且用户零反馈（嵌套 lambda 的 catch 曾骗过守卫判据）
+            _log("[互传] ❌ 停止失败：" + ex.Message + "（服务可能仍在运行，可重试停止）");
+            _logger.Error("互传服务停止失败", ex);
         }
         finally
         {
@@ -499,6 +550,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 TransferTask task = await _transfer.SendFileAsync(file, ip, port).ConfigureAwait(true);
                 _log($"[互传] 入队发送：{task.FileName} → {ip}:{port}");
             }
+            catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+            {
+                _log("[互传] ⚠ 操作已取消或超时。");
+            }
             catch (Exception ex)
             {
                 _log($"[互传] ❌ 发送失败（{Path.GetFileName(file)}）：" + ex.Message);
@@ -653,6 +708,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         try
         {
             await _transfer.CancelAsync(target.Model.Id).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            _log("[互传] ⚠ 操作已取消或超时。");
         }
         catch (Exception ex)
         {
