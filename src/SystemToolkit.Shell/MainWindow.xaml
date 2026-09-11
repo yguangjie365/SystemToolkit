@@ -168,7 +168,7 @@
                     HorizontalAlignment="Center" Margin="{DynamicResource Space_XS}"
                     Height="40" Background="{DynamicResource Brush_Surface}"
                     BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
-                    CornerRadius="{DynamicResource Radius_Pill}" Padding="{DynamicResource Space_SM}"
+                    CornerRadius="{DynamicResource Radius_LG}" Padding="{DynamicResource Space_SM}"
                     Visibility="Collapsed">
                 <Border.Resources>
                     <Style x:Key="BarButton" TargetType="Button">

@@ -153,7 +153,7 @@
                     </Button.Style>
                 </Button>
                 <!-- P3 头部账号区（对齐 NexBox）：当前平台 chip + 账号胶囊/登录 + 退出 + 平台切换菜单 -->
-                <Border CornerRadius="{DynamicResource Radius_Pill}" Padding="10,4" Margin="8,0,0,0" VerticalAlignment="Center"
+                <Border CornerRadius="{DynamicResource Radius_LG}" Padding="10,4" Margin="8,0,0,0" VerticalAlignment="Center"
                         Background="{DynamicResource Brush_Surface}"
                         BorderBrush="{DynamicResource Brush_SurfaceAlt}" BorderThickness="1">
                     <TextBlock Text="{Binding SelectedPlatformText, StringFormat='当前平台 · {0}', Mode=OneWay}"
@@ -1376,7 +1376,7 @@
             <!-- ① 顶栏：收起钮（左）；现代态显示"歌词"pill（右，对照 NexBox，不做评论） -->
             <Grid Grid.Row="0">
                 <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,20,0"
-                        Padding="10,4" CornerRadius="{DynamicResource Radius_Pill}"
+                        Padding="10,4" CornerRadius="{DynamicResource Radius_LG}"
                         Background="{Binding PlayerAccentBrush, Mode=OneWay}"
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="♪ 歌词" FontSize="{DynamicResource Font_SizeCaption}"
