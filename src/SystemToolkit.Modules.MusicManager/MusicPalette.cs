@@ -60,21 +60,38 @@ public static class PaletteMath
             {
                 continue; // 弃近黑近白（无信息量）
             }
+            if (hsl.S < 0.08)
+            {
+                continue; // 低饱和按灰处理（对照 MatchVividPalette 的灰阈值）——灰底不再给色相桶投票
+            }
 
             int bucket = (int)(hsl.H / 360.0 * hueBuckets) % hueBuckets;
-            weightSum[bucket] += hsl.S * (hsl.L > 0.5 ? 1 - hsl.L : hsl.L) + 0.05; // 饱和度×离中间灰距离，微增底噪防全零
+            // OM-10（2026-09-12 对齐 QQ 取色）：底噪 0.05→0.005 + 饱和度超线性加权（S^1.3）——
+            // 旧实现"面积×S×dL"会让大块低饱和背景以微弱优势压过小而鲜艳的主色
+            //（实证：《齐天大圣》封面大面积紫底压过金色主元素 → QQ 同封面取金）。
+            double dL = hsl.L > 0.5 ? 1 - hsl.L : hsl.L;
+            weightSum[bucket] += hsl.S * Math.Sqrt(hsl.S) * dL + 0.005;
             sSum[bucket] += hsl.S;
             lSum[bucket] += hsl.L;
             count[bucket]++;
         }
 
         int best = -1;
-        double bestWeight = 0;
+        double bestScore = 0;
         for (int bucket = 0; bucket < hueBuckets; bucket++)
         {
-            if (count[bucket] > 0 && weightSum[bucket] > bestWeight)
+            if (count[bucket] == 0)
             {
-                bestWeight = weightSum[bucket];
+                continue;
+            }
+
+            // OM-10：桶评分 = 权重和 ×（1 + 桶均饱和度）——鲜艳度成为决定性因子，
+            // 大面积低饱和背景即使像素多也压不过小面积高饱和主色（模拟验证：紫底/金 70:30 → 金）
+            double sAvg = sSum[bucket] / count[bucket];
+            double score = weightSum[bucket] * (1 + sAvg);
+            if (score > bestScore)
+            {
+                bestScore = score;
                 best = bucket;
             }
         }

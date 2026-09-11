@@ -146,43 +146,24 @@ public partial class MainWindow : Window
         ThemeManager.ThemeChanged += OnThemeChanged;
         Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
 
-        // MUSIC-7：顶部居中迷你播放器（悬浮胶囊）——数据源由音乐模块桥接注册
-        // （GetService 可选解析：被禁用时缺席，整体永久隐藏）；HasTrack=false（未选曲）时不占位
-        _playbackBar = provider.GetService<IPlaybackBarSource>();
-        if (_playbackBar is not null)
+        // 2026-09-12（v4 用户反馈）：内嵌迷你播放条整体移除——它悬浮时遮挡页面顶栏，
+        // 且在所有页面常显。迷你控制改由音乐模块的**独立迷你窗**承载（主窗口外、置顶，
+        // 从全屏播放器底栏右区的「迷你窗」按钮开关）。
+
+        // 2026-09-12（v5 用户裁定）：播放中点 × 不退出程序——最小化到任务栏，音乐不中断；
+        // 恢复入口 = 任务栏图标 + 迷你窗「≡」。未播放时正常关闭（真正退出）。
+        _playbackSource = provider.GetService<IPlaybackBarSource>();
+        Closing += (_, args) =>
         {
-            PlaybackBar.DataContext = _playbackBar;
-            _playbackBar.PropertyChanged += (_, e) =>
+            if (_playbackSource?.IsPlaying == true)
             {
-                if (e.PropertyName == nameof(IPlaybackBarSource.HasTrack))
-                {
-                    PlaybackBar.Visibility = _playbackBar.HasTrack ? Visibility.Visible : Visibility.Collapsed;
-                }
-            };
-            PlaybackBar.Visibility = _playbackBar.HasTrack ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
-
-    private readonly IPlaybackBarSource? _playbackBar;
-
-    /// <summary>播放条左段点击：导航到来源模块页（引用比对 NavigationModule——F-1 红线禁按 Id 字符串分派）。</summary>
-    private void PlaybackMeta_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (_playbackBar?.NavigationModule is null || NavList.ItemsSource is not IEnumerable<NavEntry> entries)
-        {
-            return;
-        }
-
-        foreach (NavEntry entry in entries)
-        {
-            if (entry is NavItem nav && ReferenceEquals(nav.Module, _playbackBar.NavigationModule))
-            {
-                NavList.SelectedItem = nav;
-                return;
+                args.Cancel = true;
+                WindowState = WindowState.Minimized;
             }
-        }
+        };
     }
 
+    private readonly IPlaybackBarSource? _playbackSource;
     /// <summary>主题切换 → 重新装载当前模块视图（继承主题包样式的控件随之刷新）。</summary>
     private void OnThemeChanged()
     {

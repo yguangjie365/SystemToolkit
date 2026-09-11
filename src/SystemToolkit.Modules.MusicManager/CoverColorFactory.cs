@@ -85,7 +85,7 @@ public static class CoverColorFactory
         };
         if (dark)
         {
-            // 深色主题档：同结构的三段深灰（对照浅色档 #DFDFE2/#D8D8DC/#D1D1D6 的暗色镜像）。
+            // 深色主题档：同结构的三段深灰（对照浅色档 #F7F6F3/#F2F0EC/#ECE9E4 的暗色镜像）。
             // 🔴 2026-09-11：原来彩胶背景是**固定浅灰**（不随封面），深色主题下与宿主的深色
             // 按钮底/深侧栏直接冲突——深背景上压深灰按钮即「黑块」。深色档由此而来。
             brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x1E, 0x20, 0x24), 0.0));
@@ -94,9 +94,11 @@ public static class CoverColorFactory
         }
         else
         {
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xDF, 0xDF, 0xE2), 0.0));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD8, 0xD8, 0xDC), 0.55));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD1, 0xD1, 0xD6), 1.0));
+            // 2026-09-12 QQ 彩胶化（用户拍板"近白暖调"）：原 #DFDFE2/#D8D8DC/#D1D1D6 偏灰，
+            // 收敛为暖调近白三段——突出胶盘与柔光（对照 QQMusic 截图的近白底）。
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xF7, 0xF6, 0xF3), 0.0));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xF2, 0xF0, 0xEC), 0.55));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xEC, 0xE9, 0xE4), 1.0));
         }
 
         brush.Freeze();

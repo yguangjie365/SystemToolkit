@@ -31,20 +31,39 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    /// <summary>沉浸歌词字体（对照 NexBox "NotoSerifSC-900"）：模块内置思源宋体 Black，加载失败回退雅黑。</summary>
+    /// <summary>沉浸歌词字体（对照 NexBox "NotoSerifSC-900"）：模块内置思源宋体 Black。</summary>
+    /// <remarks>
+    /// OM-9（2026-09-12 渲染探针定位）：**复合字体串（逗号多族）在渲染期会整体回退**——
+    /// 像素级探针证实：双族名复合串渲染结果与雅黑逐字节相同（族名不匹配 → 跳过整条链尾），
+    /// 而**单名 pack URI 与 baseUri 构造形态都能真渲染出衬线字形**。故生产用 baseUri 构造形态。
+    /// 详见 tests/.../ImmersiveFontRenderProbe.cs（已转正为防回归守卫）。
+    /// </remarks>
     private void ApplyImmersionFontFamily()
     {
         try
         {
             var serif = new System.Windows.Media.FontFamily(
-                "pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/NotoSerifSC-Black.otf#Noto Serif SC");
+                new Uri("pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/"),
+                "./NotoSerifSC-Black.otf#Noto Serif SC");
             ImmersionLyricText.FontFamily = serif;
             ImmersionGhostText.FontFamily = serif;
+            // v7 补遗（用户实测反馈）：退场层（旧句上移淡出）此前仍挂主题令牌——其 pack URI 指向
+            // 入口程序集的不存在资源，解析失败落雅黑系，每次换句"闪现一下"。三层必须同字体。
+            ImmersionOutgoingText.FontFamily = serif;
+            // OM-9 追踪：真机仍报"雅黑样"而测试链路全绿——把应用结果落日志总线供用户侧定位
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Info, "Music",
+                $"沉浸歌词字体已应用：{serif.Source}", action: "ImmersiveFont",
+                outcome: SystemToolkit.Core.Logging.LogResult.Success));
         }
         catch (Exception ex)
         {
             // 字体资源缺失只降级观感，不影响功能（测试宿主/精简发布场景）
             System.Diagnostics.Debug.WriteLine($"[Music] 沉浸歌词字体加载失败：{ex.Message}");
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Error, "Music",
+                "沉浸歌词字体应用失败：" + ex.Message, ex, action: "ImmersiveFont",
+                outcome: SystemToolkit.Core.Logging.LogResult.Failed));
         }
     }
 
@@ -369,6 +388,18 @@ public partial class MusicManagerView : UserControl
     /// <summary>完整播放器进度条拖动结束。</summary>
     private void OnFullSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         => _vm.EndSeek(FullSeekSlider.Value);
+
+    /// <summary>音量图标左键：弹出/收起滑条（v8 用户反馈：图标不能只是静音开关，要能调音量）。</summary>
+    private void OnFullVolumeClick(object sender, RoutedEventArgs e)
+        => FullVolumePopup.IsOpen = !FullVolumePopup.IsOpen;
+
+    /// <summary>音量图标右键：静音 / 取消静音（保留原 ToggleMute 能力）。</summary>
+    private void OnFullVolumeRightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        => _vm.ToggleMuteCommand.Execute(null);
+
+    /// <summary>迷你窗开关（v4）：独立置顶小窗在主窗口外显示；已开则关闭（Toggle 单例见 MiniPlayerWindow）。</summary>
+    private void OnMiniPlayerClick(object sender, RoutedEventArgs e)
+        => MiniPlayerWindow.Toggle(_vm, Window.GetWindow(this));
 
     /// <summary>
     /// 队列按钮按下（反馈2）：弹层开着时先关掉并吞掉事件——
@@ -775,7 +806,7 @@ public partial class MusicManagerView : UserControl
     /// <summary>彩胶盘入场（对照 vinylDiscIn）：translate(6%,-6%) scale0.94 → 原位，0.7s。</summary>
     /// <remarks>
     /// 🔴 不能在 Completed 里把 RenderTransform 归位 Identity（2026-09-09 实测事故）：
-    /// XAML 里 DiscHost 的主变换是 TranslateTransform（右上伸出偏移 X+0.36/Y-0.30），
+    /// XAML 里 DiscHost 的主变换是 TranslateTransform（右上伸出偏移，2026-09-12 v6 后为 X+0.12/Y0），
     /// Identity 会把它覆盖丢失 → 每次切风格回彩胶，入场动画结束碟片位置突变。
     /// 正确做法：入场动画只挂在「基础变换之后」的附加层，结束后还原基础变换。
     /// </remarks>

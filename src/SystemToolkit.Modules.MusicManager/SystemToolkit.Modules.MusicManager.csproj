@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 窗口加载冒烟（ViewLoadSmokeGuardTests）直构 MiniPlayerWindow -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Web.WebView2" />
   </ItemGroup>

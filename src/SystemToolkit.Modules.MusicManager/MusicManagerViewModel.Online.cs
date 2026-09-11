@@ -705,11 +705,30 @@ public partial class MusicManagerViewModel
         // 审查 F-02：取曲目失败要可见（登录过期/网络/接口变更），不能 Task Faulted 静默
         try
         {
-            List<OnlineTrack> tracks = await _catalog.LoadPlaylistTracksAsync(
-                row.Playlist.Provider, row.Playlist.Id);
-            if (seq != _playlistTracksSeq)
+            // OM-8B（2026-09-12 打磨）：歌单分页全量加载——旧实现单页 limit=100，
+            // 大歌单静默截断。循环取页直到服务端返回不足一页（或触达防失控上限），
+            // 每页后校验代际（连点两个歌单时旧页作废），进度落状态行。
+            const int PageSize = 500;
+            const int MaxTracks = 2000;
+            var tracks = new List<OnlineTrack>();
+            int offset = 0;
+            while (tracks.Count < MaxTracks)
             {
-                return; // 期间用户又打开了另一个歌单 → 本次结果已过期（不切视图、不写集合）
+                List<OnlineTrack> page = await _catalog.LoadPlaylistTracksAsync(
+                    row.Playlist.Provider, row.Playlist.Id, offset, PageSize);
+                if (seq != _playlistTracksSeq)
+                {
+                    return; // 期间用户又打开了另一个歌单 → 本次结果已过期（不切视图、不写集合）
+                }
+
+                tracks.AddRange(page);
+                if (page.Count < PageSize)
+                {
+                    break; // 末页
+                }
+
+                offset += page.Count;
+                OnlineStatusText = $"已加载 {tracks.Count} 首…";
             }
 
             PlaylistTracks.Clear();

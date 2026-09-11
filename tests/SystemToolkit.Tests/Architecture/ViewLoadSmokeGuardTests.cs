@@ -598,6 +598,15 @@ public class ViewLoadSmokeGuardTests
                     view.Measure(new Size(1600, 900));
                     view.Arrange(new Rect(0, 0, 1600, 900));
                     view.UpdateLayout();
+
+                    // OM-9 守卫：沉浸态的两个歌词元素，本地 FontFamily 必须是双族名思源链
+                    //（真机症状"沉浸歌词变雅黑"= 构造器 catch 静默吞掉了应用失败）。
+                    if (style == "Immersion")
+                    {
+                        var lyric = (System.Windows.Controls.TextBlock)view.FindName("ImmersionLyricText");
+                        Assert.NotNull(lyric);
+                        Assert.Contains("Noto Serif SC", lyric.FontFamily.Source, StringComparison.OrdinalIgnoreCase);
+                    }
                 }
 
                 stage = "done";
@@ -646,9 +655,12 @@ public class ViewLoadSmokeGuardTests
                 // 🔴 真机第二炸沉淀（同日 22:02）：只 Measure 不触发数据绑定 attach——
                 // ProgressBar/Slider 属 RangeBase，Value 绑定默认 TwoWay，打只读源属性
                 // 在 window.Show() 的布局绑定阶段才抛。必须挂真 DataContext 并 Show。
-                stage = "attach playback bar data context";
-                ((System.Windows.FrameworkElement)window.FindName("PlaybackBar")!)
-                    .DataContext = new FakePlaybackBarSource();
+                // 2026-09-12（v4）：内嵌 PlaybackBar 已移除（迷你控制改独立迷你窗）——冒烟对象同步迁移。
+                stage = "construct MiniPlayerWindow (floating mini)";
+                var mini = new SystemToolkit.Modules.MusicManager.MiniPlayerWindow(new FakePlaybackBarSource(), window);
+                mini.ShowInTaskbar = false;
+                mini.Show();
+                mini.Close();
 
                 stage = "show + close";
                 window.ShowInTaskbar = false;
@@ -669,6 +681,57 @@ public class ViewLoadSmokeGuardTests
 
         Assert.True(captured is null,
             $"宿主 MainWindow 构造抛异常（阶段：{stage}）：\n{captured}");
+    }
+
+    /// <summary>
+    /// OM-9 诊断守卫：沉浸歌词字体的**运行时解析链**必须成立——
+    /// ① 资源包 URI 可取流；② 包 URI 能枚举出思源宋体族；③ 双族名 FontFamily 可构造。
+    /// 真机症状"沉浸歌词变雅黑"= 链条断在某环（构造器 catch 静默），本测试把断点钉出来。
+    /// </summary>
+    [Fact]
+    public void ImmersionFont_PackResource_Resolves()
+    {
+        Exception? captured = null;
+        string stage = "init";
+        string detail = string.Empty;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+                stage = "get resource stream";
+                Uri uri = new("pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/NotoSerifSC-Black.otf");
+                System.Windows.Resources.StreamResourceInfo? streamInfo = System.Windows.Application.GetResourceStream(uri);
+                detail += $"stream={(streamInfo is null ? "null" : streamInfo.Stream.Length + "B")}; ";
+
+                stage = "enumerate font families from pack uri";
+                detail += "families=[" + string.Join("|", System.Windows.Media.Fonts
+                    .GetFontFamilies(uri)
+                    .SelectMany(f => f.FamilyNames.Values)) + "]; ";
+                Assert.Contains(
+                    System.Windows.Media.Fonts.GetFontFamilies(uri).SelectMany(f => f.FamilyNames.Values),
+                    n => n.Contains("Noto Serif SC", StringComparison.OrdinalIgnoreCase));
+
+                stage = "construct composite FontFamily (双族名链)";
+                var ff = new System.Windows.Media.FontFamily(
+                    "pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/NotoSerifSC-Black.otf#Noto Serif SC Black, "
+                    + "pack://application:,,,/SystemToolkit.Modules.MusicManager;component/Assets/Fonts/NotoSerifSC-Black.otf#Noto Serif SC, "
+                    + "Microsoft YaHei UI");
+                detail += $"compositeSource={ff.Source}";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"沉浸字体解析链断裂（阶段：{stage}）：{detail}\n{captured}");
     }
 
     private static IEnumerable<string> EnumerateModuleXamls()

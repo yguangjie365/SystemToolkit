@@ -79,6 +79,30 @@ public class MusicPaletteTests
         Assert.Equal(empty, transparent);
     }
 
+    [Fact]
+    public void VividMinority_Wins_Over_LargeMutedBackground()
+    {
+        // OM-10 基准用例（《齐天大圣》封面的合成替身）：70% 低饱和紫底 + 30% 高饱和金 →
+        // 取色应选金（QQ 同封面取金）；旧面积加权会取紫/红棕
+        byte[] px = TwoTone(Solid(120, 80, 170, 700), Solid(212, 175, 55, 300), 700, 300);
+
+        PaletteMath.Rgb rgb = PaletteMath.PickDominant(px, 1000);
+
+        Assert.True(rgb.R > 140 && rgb.G > 110 && rgb.B < 110,
+            $"小面积高饱和金应胜过大面积低饱和紫，实际 {rgb}");
+    }
+
+    [Fact]
+    public void LowSaturationBackground_DoesNotVoteForHue()
+    {
+        // 高饱和青主体 + 大面积近灰底 → 灰底不计入色相桶（S<0.08 跳过），主色仍落青族
+        byte[] px = TwoTone(Solid(30, 140, 180, 400), Solid(205, 205, 205, 600), 400, 600);
+
+        PaletteMath.Rgb rgb = PaletteMath.PickDominant(px, 1000);
+
+        Assert.True(rgb.B > rgb.R + 40, $"实际 {rgb}");
+    }
+
     [Theory]
     [InlineData(255, 0, 0, 0)] // 纯红 → H=0
     [InlineData(0, 255, 0, 120)] // 纯绿 → H=120

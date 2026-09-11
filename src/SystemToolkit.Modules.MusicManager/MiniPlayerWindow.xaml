@@ -1,0 +1,183 @@
+<Window x:Class="SystemToolkit.Modules.MusicManager.MiniPlayerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SystemToolkit.Modules.MusicManager"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        SizeToContent="WidthAndHeight" ResizeMode="NoResize"
+        MouseLeftButtonDown="OnWindowDrag"
+        Title="迷你播放器" AutomationProperties.Name="迷你播放器">
+    <!-- 2026-09-12（v6 用户四条反馈，对照 QQMusic 迷你模式）：
+         ① 拖拽提升到 Window 级（原挂 Border——拖封面圆时 Image 吃掉事件、冒泡到 Window 而非兄弟 Border，导致拖不动）；
+         ② 按钮组三列布局（左占位/中居中/右 ×），消除 ≡ 与 × 重叠；
+         ③ 条体加高（对照参考图 90px 比例）、封面圆加大、间距统一；
+         ④ 仍不设 Owner（主程序最小化时本窗独立留在桌面）。
+         数据源 = IPlaybackBarSource（MusicManagerViewModel 隐式实现，构造注入） -->
+    <Window.Resources>
+        <Geometry x:Key="IconVolumeHigh">M4,9 H8 L13,5 V19 L8,15 H4 Z M16,8.5 A4.5,4.5 0 0 1 16,15.5 M18.5,6 A8,8 0 0 1 18.5,18</Geometry>
+        <Geometry x:Key="IconQueue">M8.1 16.6A1.7 1.7 0 1 1 4.7 16.6A1.7 1.7 0 1 1 8.1 16.6 M8.1 16.6V7.4 M8.1 7.4C11.2 7.3 12.2 9.4 11 10.8 M12.4 8.6H19.4M12.4 12.8H19.4M12.4 17H19.4</Geometry>
+        <Style x:Key="BarIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBody}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="32"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius_MD}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Brush_Track}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 主播放键：圆形 accent（与全屏播放器同源） -->
+        <Style x:Key="BarPlayButton" TargetType="Button" BasedOn="{StaticResource BarIconButton}">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+            <Setter Property="MinWidth" Value="42"/>
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{DynamicResource Brush_Accent}" CornerRadius="{DynamicResource Radius_Pill}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GlyphWhilePlaying" TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="GlyphWhileIdle" TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Visible"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <!-- 根 Grid 顶部预留 44px：封面圆上溢部分留在窗口**内部**（窗口内容外不渲染——v6 顶部被裁根因）；
+         v7：播放键等全部固定宽高 + 垂直居中（横向 StackPanel 会纵向拉伸子项，42px 圆被拉成椭圆） -->
+    <Grid Margin="0,44,0,4">
+        <!-- 大封面圆：左上溢出条外（参考图构图）；Background=Transparent 保证整圆可拖；RadiusX/Y 非棘轮扫描维度 -->
+        <Grid Width="104" Height="104" HorizontalAlignment="Left" VerticalAlignment="Top"
+              Margin="22,0,0,0" Panel.ZIndex="2" Background="Transparent">
+            <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_Pill}">
+                <TextBlock Text="♪" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="{DynamicResource Font_SizeTitleLg}"
+                           Foreground="{DynamicResource Brush_TextSecondary}"/>
+            </Border>
+            <Image Source="{Binding Cover, Mode=OneWay}" Stretch="UniformToFill" Width="104" Height="104">
+                <Image.Clip>
+                    <EllipseGeometry Center="52,52" RadiusX="52" RadiusY="52"/>
+                </Image.Clip>
+            </Image>
+        </Grid>
+
+        <!-- 白条：三列布局（左占位让封面 / 中按钮组居中 / 右 × 独立），右上角关闭不再与按钮组重叠 -->
+        <Border Margin="0,52,0,0" Background="{DynamicResource Brush_Surface}"
+                BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius_LG}" Padding="{DynamicResource Space_SM}" MinHeight="76">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0.25"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <!-- 封面占位列（v7 反馈：封面圆压住播放键——按钮组必须在封面右缘之后布局） -->
+                    <ColumnDefinition Width="126"/>
+                    <ColumnDefinition Width="*"/>
+                    <!-- × 独立小列（v9 用户指定：× 在白条内部右上角） -->
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="Transparent"/>
+
+                <Grid Grid.Column="1">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- ♥ 位 → 静音切换（无收藏功能，取最贴近的"红色开关"语义；静音时转红 ×） -->
+                    <Button Style="{StaticResource BarIconButton}" Command="{Binding ToggleMuteCommand}"
+                            AutomationProperties.Name="静音切换" ToolTip="静音 / 取消静音"
+                            Margin="{DynamicResource Space_XXS}" VerticalAlignment="Center">
+                        <Button.Resources>
+                            <Style x:Key="VolSpeaker" TargetType="Path">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding VolumeIconKind, Mode=OneWay}" Value="muted">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                            <Style x:Key="VolMutedMark" TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding VolumeIconKind, Mode=OneWay}" Value="muted">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Resources>
+                        <Grid VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconVolumeHigh}" StrokeLineJoin="Round"
+                                  Stroke="{DynamicResource Brush_TextPrimary}" StrokeThickness="1.6"
+                                  Width="18" Height="18" Stretch="Uniform"
+                                  Style="{StaticResource VolSpeaker}"/>
+                            <TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="{DynamicResource Font_SizeBody}"
+                                       Foreground="{DynamicResource Brush_Danger}"
+                                       Style="{StaticResource VolMutedMark}"/>
+                        </Grid>
+                    </Button>
+                    <Button Style="{StaticResource BarIconButton}" Command="{Binding PreviousTrackCommand}"
+                            Content="&#xE892;" AutomationProperties.Name="上一首" ToolTip="上一首"
+                            Margin="{DynamicResource Space_XXS}" VerticalAlignment="Center"/>
+                    <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}"
+                            Width="44" Height="44" VerticalAlignment="Center"
+                            AutomationProperties.Name="播放 / 暂停" ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
+                        <Grid>
+                            <TextBlock Text="&#xE769;" Style="{StaticResource GlyphWhilePlaying}"/>
+                            <TextBlock Text="&#xE768;" Style="{StaticResource GlyphWhileIdle}"/>
+                        </Grid>
+                    </Button>
+                    <Button Style="{StaticResource BarIconButton}" Command="{Binding NextTrackCommand}"
+                            Content="&#xE893;" AutomationProperties.Name="下一首" ToolTip="下一首"
+                            Margin="{DynamicResource Space_XXS}" VerticalAlignment="Center"/>
+                    <!-- ≡ → 回主窗口（恢复最小化中的主程序并关闭迷你窗） -->
+                    <Button Style="{StaticResource BarIconButton}" Click="OnRestoreClick"
+                            AutomationProperties.Name="回主窗口" ToolTip="回主窗口"
+                            Margin="{DynamicResource Space_XXS}" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconQueue}" StrokeLineJoin="Round"
+                              Stroke="{DynamicResource Brush_TextPrimary}" StrokeThickness="1.6"
+                              Width="17" Height="17" Stretch="Uniform"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+            <!-- × 关闭：白条内部右上角（独立小列，顶部对齐；只关迷你窗，不影响播放） -->
+            <Button Grid.Column="2" Style="{StaticResource BarIconButton}" Click="OnCloseClick"
+                    Content="&#xE711;" AutomationProperties.Name="关闭迷你播放器" ToolTip="关闭迷你播放器"
+                    VerticalAlignment="Top" MinWidth="26" MinHeight="26" Margin="{DynamicResource Space_XXS}"/>
+            </Grid>
+        </Border>
+        <!-- /白条 -->
+    </Grid>
+</Window>

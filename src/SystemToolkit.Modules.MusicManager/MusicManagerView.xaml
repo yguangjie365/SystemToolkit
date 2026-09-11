@@ -1480,18 +1480,19 @@
                                Visibility="{Binding LyricsHint, Converter={StaticResource StrToVis}}"/>
                 </Grid>
 
-                <!-- 右：彩胶圆盘（NexBox VinylDisc 100% 复刻，2026-09-09）：
-                     盘径 min(80vh,48vw)→按 Row1 高 80%（钳制 240–640），右上伸出（X+0.36/Y-0.30）；
+                <!-- 右：彩胶圆盘（NexBox VinylDisc 复刻；2026-09-12 v6 用户反馈：**上部也不得裁剪**——
+                     盘径 Row1 高 95%（钳制 240–720），Y 归零（顶边贴 Row1 顶、不出屏），
+                     仅右缘轻出屏（X+0.12）；左/下/上三边完整；覆盖层不占布局；
                      层序：光晕(1.7×,呼吸) → 旋转层[accent 0.56 半透明盘 + 湍流胶纹纹理 + 封面圆 70%] → conic 高光(不转) -->
-                <Grid Grid.Column="1" x:Name="DiscHost"
+                <Grid Grid.Column="0" Grid.ColumnSpan="2" x:Name="DiscHost"
                       IsHitTestVisible="False"
-                      Width="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.92|240|720}"
-                      Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.92|240|720}"
+                      Width="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.95|240|720}"
+                      Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource Ratio}, ConverterParameter=0.95|240|720}"
                       HorizontalAlignment="Right" VerticalAlignment="Top">
                     <Grid.RenderTransform>
                         <TranslateTransform
-                            X="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.36}"
-                            Y="{Binding ActualHeight, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=-0.30}"/>
+                            X="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.12}"
+                            Y="0"/>
                     </Grid.RenderTransform>
 
                     <!-- 光晕层：与盘同心 1.7×，accent 染色（Fill 由 code-behind 随 accent 重建），播放时呼吸 -->
@@ -1691,19 +1692,20 @@
 
             </Grid>
 
-            <!-- ③ 底控制栏：模式 + 传输 + 分列进度（引擎未就绪整组禁用） -->
-            <Grid Grid.Row="2" Margin="72,0,72,26" IsEnabled="{Binding IsEngineReady}">
+            <!-- ③ 底控制栏（2026-09-12 QQ 彩胶三区布局：左歌名-艺术家 / 中循环+传输+音量 / 右音质·字号·队列；
+                 进度线贴窗口底边全宽。引擎未就绪整组禁用） -->
+            <Grid Grid.Row="2" IsEnabled="{Binding IsEngineReady}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
+                <Grid Grid.Row="0" Margin="40,0,40,6">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <!-- 左：风格切换（反馈5：参考 NexBox 移到下方）+ 音质（反馈2/3：左/右键均可开） -->
+                    <!-- 左：风格切换芯片（v8 用户反馈：左下角要的是切换按钮而非风格名；从顶栏移回，动态开关仅现代态显示） -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="StyleVinylButton" Height="26" Padding="9,0" Content="彩胶" Margin="0,0,6,0"
                                 Command="{Binding SwitchPlayerStyleCommand}" CommandParameter="Vinyl"
@@ -1771,7 +1773,113 @@
                             </ToggleButton.Style>
                             <TextBlock Text="动态" FontSize="{DynamicResource Font_SizeCaption}"/>
                         </ToggleButton>
-                        <Button x:Name="PlayerQualityButton" Height="26" Padding="9,0" Margin="12,0,0,0"
+                    </StackPanel>
+
+                    <!-- 中：循环 / 上一首 / 金色圆形播放 / 下一首 / 音量 -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!-- 循环模式（v7 用户拍板新增；三态图标随 ModeIconKind 切换，ToolTip=ModeText） -->
+                        <Button Width="36" Height="40" Margin="0,0,18,0" Padding="0"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Command="{Binding ToggleModeCommand}"
+                                AutomationProperties.Name="播放模式" ToolTip="{Binding ModeText, Mode=OneWay}">
+                            <Grid>
+                                <Path Data="{StaticResource IconLoop}" StrokeLineJoin="Round"
+                                      Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=list}"/>
+                                <Path Data="{StaticResource IconModeShuffle}" StrokeLineJoin="Round"
+                                      Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=shuffle}"/>
+                                <Path Data="{StaticResource IconModeOne}" StrokeLineJoin="Round"
+                                      Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding ModeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=one}"/>
+                            </Grid>
+                        </Button>
+                        <!-- 上一首/下一首：accent（专辑取色）圆底白图标——v4 用户拍板与播放键同源取色 -->
+                        <Button Width="44" Height="44" Margin="0,0,20,0" Padding="0" BorderThickness="0"
+                                Command="{Binding PreviousCommand}" AutomationProperties.Name="上一首" ToolTip="上一首">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid Background="Transparent">
+                                        <Ellipse Fill="{Binding DataContext.PlayerAccentBrush, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}" Opacity="0.85"/>
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <Path Data="{StaticResource IconPrev}" Fill="{DynamicResource Brush_Background}"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
+                        <!-- 金色圆形播放键（对照 QQ 彩胶）：圆底随封面取色（PlayerAccentBrush） -->
+                        <Button Width="56" Height="56" Padding="0" BorderThickness="0"
+                                Command="{Binding PlayPauseCommand}" AutomationProperties.Name="播放或暂停" ToolTip="播放 / 暂停">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid Background="Transparent">
+                                        <Ellipse Fill="{Binding DataContext.PlayerAccentBrush, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}"/>
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <Grid>
+                                <Path Fill="{DynamicResource Brush_Background}" Data="{StaticResource IconPlaySolid}"
+                                      Width="20" Height="20" Stretch="Uniform"
+                                      Visibility="{Binding IsPlaying, Converter={StaticResource InverseToVis}}"/>
+                                <Path Fill="{DynamicResource Brush_Background}" Data="{StaticResource IconPauseBars}"
+                                      Width="20" Height="20" Stretch="Uniform"
+                                      Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}"/>
+                            </Grid>
+                        </Button>
+                        <Button Width="44" Height="44" Margin="20,0,0,0" Padding="0" BorderThickness="0"
+                                Command="{Binding NextCommand}" AutomationProperties.Name="下一首" ToolTip="下一首">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid Background="Transparent">
+                                        <Ellipse Fill="{Binding DataContext.PlayerAccentBrush, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}" Opacity="0.85"/>
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <Path Data="{StaticResource IconNext}" Fill="{DynamicResource Brush_Background}"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
+                        <!-- 音量（v8 用户反馈：点图标要弹滑条调音量，不能只是静音切换）：
+                             左键弹出/收起滑条；右键静音切换 -->
+                        <Button x:Name="FullVolumeButton" Width="36" Height="40" Margin="18,0,0,0" Padding="0"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Click="OnFullVolumeClick" MouseRightButtonUp="OnFullVolumeRightClick"
+                                AutomationProperties.Name="音量" ToolTip="音量（左键滑条 / 右键静音）">
+                            <Grid>
+                                <Path Data="{StaticResource IconVolumeHigh}" StrokeLineJoin="Round"
+                                      Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding VolumeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=high}"/>
+                                <Path Data="{StaticResource IconVolumeLow}" StrokeLineJoin="Round"
+                                      Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding VolumeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=low}"/>
+                                <Path Data="{StaticResource IconVolumeMuted}" StrokeLineJoin="Round"
+                                      Stroke="{DynamicResource Brush_Warning}" StrokeThickness="1.6"
+                                      Width="17" Height="17" Stretch="Uniform"
+                                      Visibility="{Binding VolumeIconKind, Mode=OneWay, Converter={StaticResource StrEqToVis}, ConverterParameter=muted}"/>
+                            </Grid>
+                        </Button>
+                        <Popup x:Name="FullVolumePopup" PlacementTarget="{Binding ElementName=FullVolumeButton}"
+                               Placement="Top" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Background="{DynamicResource Brush_Surface}" CornerRadius="{DynamicResource Radius_LG}"
+                                    BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1" Padding="{DynamicResource Space_SM}">
+                                <Slider Minimum="0" Maximum="100" Width="140"
+                                        Value="{Binding VolumePercent, Mode=TwoWay}"
+                                        IsMoveToPointEnabled="True"
+                                        AutomationProperties.Name="音量大小"/>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+
+                    <!-- 右：音质 / 歌词字号 / 队列 -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="PlayerQualityButton" Height="26" Padding="9,0" Margin="0,0,10,0"
                                 Click="OnQualityButtonClick" MouseRightButtonUp="OnQualityButtonRightClick"
                                 AutomationProperties.Name="音质" Cursor="Hand"
                                 ToolTip="音质（左键/右键弹出菜单）">
@@ -1783,36 +1891,6 @@
                             <TextBlock Text="{Binding SelectedQualityText, Mode=OneWay}"
                                        FontSize="{DynamicResource Font_SizeCaption}"/>
                         </Button>
-                    </StackPanel>
-                    <!-- 中：运输控制（原样保留） -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Width="44" Height="40" Margin="0,0,28,0" Padding="0"
-                            Style="{DynamicResource RowActionButton}"
-                            Command="{Binding PreviousCommand}" AutomationProperties.Name="上一首" ToolTip="上一首">
-                        <Path Data="{StaticResource IconPrev}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
-                              Width="18" Height="18" Stretch="Uniform"/>
-                    </Button>
-                    <Button Width="56" Height="56" Padding="0"
-                            Background="{DynamicResource Brush_Accent}" BorderThickness="0"
-                            Command="{Binding PlayPauseCommand}" AutomationProperties.Name="播放或暂停" ToolTip="播放 / 暂停">
-                        <Grid>
-                            <Path Fill="{DynamicResource Brush_Background}" Data="{StaticResource IconPlaySolid}"
-                                  Width="20" Height="20" Stretch="Uniform"
-                                  Visibility="{Binding IsPlaying, Converter={StaticResource InverseToVis}}"/>
-                            <Path Fill="{DynamicResource Brush_Background}" Data="{StaticResource IconPauseBars}"
-                                  Width="20" Height="20" Stretch="Uniform"
-                                  Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}"/>
-                        </Grid>
-                    </Button>
-                    <Button Width="44" Height="40" Margin="28,0,0,0" Padding="0"
-                            Style="{DynamicResource RowActionButton}"
-                            Command="{Binding NextCommand}" AutomationProperties.Name="下一首" ToolTip="下一首">
-                        <Path Data="{StaticResource IconNext}" Fill="{Binding PlayerForegroundBrush, Mode=OneWay}"
-                              Width="18" Height="18" Stretch="Uniform"/>
-                    </Button>
-                </StackPanel>
-                    <!-- 右：歌词字号（反馈4）+ 播放队列（反馈6） -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Height="26" Padding="7,0" Content="A−" Command="{Binding DecreaseLyricFontCommand}"
                                 AutomationProperties.Name="减小歌词字号" ToolTip="减小歌词字号"
                                 FontSize="{DynamicResource Font_SizeCaption}">
@@ -1840,9 +1918,19 @@
                                   Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
                                   Width="16" Height="16" Stretch="Uniform"/>
                         </Button>
+                        <!-- 迷你窗（v4 用户裁定）：独立置顶小窗在主窗口外显示，不遮挡页面；再点一次关闭 -->
+                        <Button Height="26" Width="30" Padding="0" Margin="8,0,0,0"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Click="OnMiniPlayerClick" AutomationProperties.Name="迷你播放器"
+                                ToolTip="迷你播放器（独立小窗，再点一次关闭）">
+                            <Path Data="{StaticResource IconExpandUp}" StrokeLineJoin="Round"
+                                  Stroke="{Binding PlayerForegroundBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                  Width="16" Height="16" Stretch="Uniform"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="1" Margin="40,16,40,0">
+                <!-- 进度线：贴窗口底边全宽，时间嵌两端（对照 QQ） -->
+                <Grid Grid.Row="1" Margin="0,2,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="48"/>
                         <ColumnDefinition Width="*"/>
