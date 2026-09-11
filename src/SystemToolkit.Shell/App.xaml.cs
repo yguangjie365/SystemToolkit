@@ -83,7 +83,11 @@ public partial class App : Application
             {
                 string path = DiagnosticsExporter.Export();
                 _shellLogger.Info($"诊断包已导出：{path}");
-                Process.Start("explorer.exe", $"/select,\"{path}\"");
+                // 审查 v5（🟡-12）：经 ArgumentList 整体加引号传递（对照 SteamService S-5 样板）；
+                // 注意 explorer 的 /select, 前缀必须与路径在同一个参数内，拆开传会选中失败
+                var psi = new ProcessStartInfo("explorer.exe");
+                psi.ArgumentList.Add("/select," + path);
+                Process.Start(psi);
             }
             catch (Exception ex)
             {

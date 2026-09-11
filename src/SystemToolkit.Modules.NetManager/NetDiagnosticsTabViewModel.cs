@@ -290,6 +290,10 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
             BenchmarkStatusText = best is null ? "全部服务器均不可达" : $"推荐：{best.Server}（平均 {best.AvgMs} ms）";
             _log("[诊断] DNS 优选基准完成：" + BenchmarkStatusText);
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            BenchmarkStatusText = "基准已取消（2 分钟超时或手动停止）。";
+        }
         catch (Exception ex)
         {
             BenchmarkStatusText = "基准失败：" + ex.Message;
@@ -353,6 +357,10 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
         {
             await _continuousPing.RunAsync(target, intervalMs: 1000, progress, token).ConfigureAwait(true);
             _log($"[诊断] 持续 ping 结束：{PingStatsText}");
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            _log("[诊断] ⚠ 持续 ping 已停止。");
         }
         catch (Exception ex)
         {

@@ -376,11 +376,28 @@ public partial class NetSettingsTabViewModel : ObservableObject
             await _snapshots.CaptureAsync(
                 NetworkSnapshotService.ReasonBeforeChange, relatedAction: "SetProxy",
                 onLine: _log).ConfigureAwait(true);
+
             _info.SetSystemProxy(ProxyEnabled, server, _log);
-            _log("[设置] ✅ 系统代理已更新");
+
+            // 审查 v5（O-2）：对齐同页 IP/DNS 入口的 Snapshot→Modify→Verify 纪律——写后回读
+            // 实际状态逐项比对，不得无条件打 ✅（同款残留清单见 v5 报告 §二：本入口是九个写入口的最后一个漏网）。
+            ProxyInfo actual = _info.GetSystemProxy();
+            bool enabledOk = actual.Enabled == ProxyEnabled;
+            bool serverOk = !ProxyEnabled
+                || (string.Equals((server ?? "").Trim(), (actual.Server ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+            if (enabledOk && serverOk)
+            {
+                _log($"[设置] ✅ 系统代理已更新并回读验证（{desc}）");
+            }
+            else
+            {
+                _log($"[设置] ❌ 代理写入未生效：预期 {desc}，实际回读「{(actual.Enabled ? "启用，服务器 " + actual.Server : "禁用")}」。" +
+                     "写入前已自动保存快照，可用「恢复配置快照」一键回滚。");
+            }
         }
         catch (Exception ex)
         {
+            // 审查 v6（T1 文案）：异常可能来自快照采集本身——此时声称"已保存快照"是状态欺骗
             _log("[设置] ❌ 代理写入失败：" + ex.Message);
         }
         finally

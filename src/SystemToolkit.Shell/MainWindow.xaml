@@ -263,16 +263,16 @@
                     <!-- 播控三键 -->
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
                         <Button Style="{StaticResource BarButton}" Command="{Binding PreviousTrackCommand}"
-                                Content="&#xE892;" ToolTip="上一首"/>
+                                Content="&#xE892;" AutomationProperties.Name="上一首" ToolTip="上一首"/>
                         <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}"
-                                ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
+                                AutomationProperties.Name="播放 / 暂停" ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
                             <Grid>
                                 <TextBlock Text="&#xE769;" Style="{StaticResource GlyphWhilePlaying}"/>
                                 <TextBlock Text="&#xE768;" Style="{StaticResource GlyphWhileIdle}"/>
                             </Grid>
                         </Button>
                         <Button Style="{StaticResource BarButton}" Command="{Binding NextTrackCommand}"
-                                Content="&#xE893;" ToolTip="下一首"/>
+                                Content="&#xE893;" AutomationProperties.Name="下一首" ToolTip="下一首"/>
                     </StackPanel>
 
                     <!-- 时间（等宽走 Font_Mono 令牌——09-11 一炸教训：MonoText 样式不能挂面板） -->
