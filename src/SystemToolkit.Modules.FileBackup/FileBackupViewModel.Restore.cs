@@ -247,62 +247,93 @@ public partial class FileBackupViewModel
     [RelayCommand(CanExecute = nameof(CanRestoreAll))]
     private async Task RestoreAllAsync()
     {
-        var targets = new List<(BackupRule Rule, SnapshotInfo Info)>();
-        foreach (RuleRowVm row in Rules.Where(r => r.Enabled).ToList())
+        // 审查 v6（O-3b）：与兄弟入口（RestoreSnapshotAsync / BackupAllAsync）同构——IsBusy 闸门 + catch 兜底。
+        // v5 O-3 只做了离线程，漏了两者，竞态异常会被 AsyncRelayCommand 吞成静默空操作。
+        IsBusy = true;
+        RefreshCanExecute();
+        try
         {
-            var manager = SnapshotManager.FromRule(row.Model, GlobalRoot, _logger);
-            SnapshotInfo? latest = manager.LatestSnapshot();
-            if (latest is not null)
+            // 审查 v5（O-3）+ v6（O-3b）：LatestSnapshot() 的目录+manifest 同步 IO 必须离 UI 线程；
+            // 但 Rules 是 UI 绑定的 ObservableCollection——**在 UI 线程先物化**，线程池只摸不可变快照，
+            // 杜绝"探测期间用户改规则"的跨线程枚举竞态。
+            var enabled = Rules.Where(r => r.Enabled).ToList();
+            List<(BackupRule Rule, SnapshotInfo Info)> targets = await Task.Run(() =>
             {
-                targets.Add((row.Model, latest));
-            }
-        }
+                var found = new List<(BackupRule Rule, SnapshotInfo Info)>();
+                foreach (RuleRowVm row in enabled)
+                {
+                    var manager = SnapshotManager.FromRule(row.Model, GlobalRoot, _logger);
+                    SnapshotInfo? latest = manager.LatestSnapshot();
+                    if (latest is not null)
+                    {
+                        found.Add((row.Model, latest));
+                    }
+                }
 
-        if (targets.Count == 0)
-        {
-            Log("[恢复] 没有可恢复的快照（已启用规则均无快照）。");
-            return;
-        }
+                return found;
+            }).ConfigureAwait(true);
 
-        string list = string.Join("\n", targets.Select(t => $"  · {t.Rule.RuleName}（{t.Info.DisplayTime}，{t.Info.FileCount} 个文件）"));
-        RestoreChoice? choice = RestoreRequest?.Invoke(
-            $"将恢复以下 {targets.Count} 个已启用规则的最新快照：\n\n{list}",
-            "各规则自身的原始源路径");
-        if (choice is null)
-        {
-            Log("[恢复] 已取消恢复全部。");
-            return;
-        }
-
-        if (ConfirmRequest?.Invoke("恢复全部",
-                $"即将恢复 {targets.Count} 个规则的最新快照。\n" +
-                $"目标：{choice.TargetRoot ?? "各规则原始位置"}\n" +
-                $"冲突策略：{PolicyText(choice.Policy)}\n\n" +
-                "⚠️ 这是破坏性操作，可能覆盖现有文件。确定继续吗？") != true)
-        {
-            Log("[恢复] 已取消恢复全部。");
-            return;
-        }
-
-        foreach ((BackupRule rule, SnapshotInfo info) in targets)
-        {
-            string target = choice.TargetRoot ?? rule.Sources().FirstOrDefault() ?? "";
-            if (choice.TargetRoot is null && rule.Sources().Count() > 1)
+            if (targets.Count == 0)
             {
-                // 🟠-4 产品语义现状：未指定目标时仅回首个源（多源原位还原待 BKP-3 收口时定夺）——显式日志不静默
-                Log($"[恢复] ⚠️ 「{rule.RuleName}」为多源规则，当前仅以首个源作为恢复目标：{target}");
+                Log("[恢复] 没有可恢复的快照（已启用规则均无快照）。");
+                return;
             }
 
-            if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target))
+            string list = string.Join("\n", targets.Select(t => $"  · {t.Rule.RuleName}（{t.Info.DisplayTime}，{t.Info.FileCount} 个文件）"));
+            RestoreChoice? choice = RestoreRequest?.Invoke(
+                $"将恢复以下 {targets.Count} 个已启用规则的最新快照：\n\n{list}",
+                "各规则自身的原始源路径");
+            if (choice is null)
             {
-                Log($"[恢复] ⚠️ 跳过「{rule.RuleName}」：恢复目标不存在（{target}）");
-                continue;
+                Log("[恢复] 已取消恢复全部。");
+                return;
             }
 
-            await RestoreCoreAsync(info, rule, target, choice.Policy).ConfigureAwait(true);
-        }
+            if (ConfirmRequest?.Invoke("恢复全部",
+                    $"即将恢复 {targets.Count} 个规则的最新快照。\n" +
+                    $"目标：{choice.TargetRoot ?? "各规则原始位置"}\n" +
+                    $"冲突策略：{PolicyText(choice.Policy)}\n\n" +
+                    "⚠️ 这是破坏性操作，可能覆盖现有文件。确定继续吗？") != true)
+            {
+                Log("[恢复] 已取消恢复全部。");
+                return;
+            }
 
-        Log($"[恢复] 恢复全部结束（共 {targets.Count} 条）。");
+            foreach ((BackupRule rule, SnapshotInfo info) in targets)
+            {
+                string target = choice.TargetRoot ?? rule.Sources().FirstOrDefault() ?? "";
+                if (choice.TargetRoot is null && rule.Sources().Count() > 1)
+                {
+                    // 🟠-4 产品语义现状：未指定目标时仅回首个源（多源原位还原待 BKP-3 收口时定夺）——显式日志不静默
+                    Log($"[恢复] ⚠️ 「{rule.RuleName}」为多源规则，当前仅以首个源作为恢复目标：{target}");
+                }
+
+                if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target))
+                {
+                    Log($"[恢复] ⚠️ 跳过「{rule.RuleName}」：恢复目标不存在（{target}）");
+                    continue;
+                }
+
+                await RestoreCoreAsync(info, rule, target, choice.Policy).ConfigureAwait(true);
+            }
+
+            Log($"[恢复] 恢复全部结束（共 {targets.Count} 条）。");
+        }
+        catch (OperationCanceledException)
+        {
+            Log("[恢复] ⚠️ 恢复全部已取消。");
+        }
+        catch (Exception ex)
+        {
+            // v6 O-3b：命令体兜底（AsyncRelayCommand 会吞异常，用户此前看不到任何结果）
+            Log("[恢复] ❌ 恢复全部失败：" + ex.Message);
+            _logger.Error("恢复全部失败", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+            RefreshCanExecute();
+        }
     }
 
     private bool CanRestoreAll => !IsBusy && Rules.Any(r => r.Enabled);

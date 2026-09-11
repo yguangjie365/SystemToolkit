@@ -94,10 +94,10 @@
                 <Button Style="{DynamicResource RowActionButton}" Height="32" Content="导出规则" Margin="0,0,6,0"
                         Command="{Binding ExportRulesCommand}"/>
                 <Button Style="{DynamicResource RowActionButton}" Height="32" Content="备份全部" Margin="0,0,6,0"
-                        ToolTip="按顺序备份所有已启用规则，逐项执行、可随时取消"
+                        ToolTipService.ShowOnDisabled="True" ToolTip="按顺序备份所有已启用规则，逐项执行、可随时取消"
                         Command="{Binding BackupAllCommand}"/>
                 <Button Style="{DynamicResource RowDangerButton}" Height="32" Content="恢复全部" Margin="0,0,8,0"
-                        ToolTip="按启用规则各自恢复最新快照，逐项执行；恢复前可选择冲突策略"
+                        ToolTipService.ShowOnDisabled="True" ToolTip="按启用规则各自恢复最新快照，逐项执行；恢复前可选择冲突策略"
                         Command="{Binding RestoreAllCommand}"/>
                 <Button Style="{DynamicResource RowPrimaryButton}" Height="32" Content="+ 新建规则"
                         Command="{Binding NewRuleCommand}"/>

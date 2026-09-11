@@ -346,7 +346,7 @@
                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
                                                        Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                                             <Button Grid.Column="1" Style="{StaticResource CardActionButton}" Content="⋯"
-                                                    Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" ToolTip="更多操作"
+                                                    Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" AutomationProperties.Name="更多操作" ToolTip="更多操作"
                                                     MinWidth="28" MinHeight="24"
                                                     Click="OnCardMenuClick"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">

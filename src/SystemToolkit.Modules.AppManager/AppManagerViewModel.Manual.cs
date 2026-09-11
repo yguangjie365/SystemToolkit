@@ -120,7 +120,7 @@ public partial class AppManagerViewModel
 
         PersistAll();
         RebuildArchives();
-        _ = RefreshStatesAsync();
+        _ = RefreshStatesSafeAsync(); // v5 B2（🟡-2）：fire-and-forget 必须带兜底
     }
 
     [RelayCommand]
@@ -414,7 +414,7 @@ public partial class AppManagerViewModel
             RebuildArchives();
             AddLog($"已导入清单：{catalog.Winget.Count} 个商店/第三方应用，{catalog.Manual.Count} 个手动条目，{catalog.Driver.Count} 个驱动条目"
                 + (backupPath is not null ? $"（原清单已备份：{backupPath}）" : "（备份失败，原清单可能无法恢复）"));
-            _ = RefreshStatesAsync();
+            _ = RefreshStatesSafeAsync(); // v5 B2（🟡-2）：fire-and-forget 必须带兜底
         }
         catch (Exception ex)
         {
