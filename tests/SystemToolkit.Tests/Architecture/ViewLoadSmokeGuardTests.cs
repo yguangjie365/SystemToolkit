@@ -616,6 +616,54 @@ public class ViewLoadSmokeGuardTests
             $"音乐管理三风格模板加载抛异常（阶段：{stage}）：\n{captured}");
     }
 
+    /// <summary>
+    /// 宿主主窗口构造冒烟（2026-09-11 MUSIC-7 事故复盘沉淀——规则 6：回归必须变成守卫）。
+    /// <para>
+    /// 实锤教训：播放条把 TextBlock 样式 <c>MonoText</c> 挂到 StackPanel 上，
+    /// 1087/1087 全绿、真机启动即 XamlParseException——此前冒烟清单只有模块 View，
+    /// <b>MainWindow 本身从未被构造过</b>。空模块列表即可让 XAML/样式全树求值
+    /// （DynamicResource 样式在合并主题包后解析即校验 TargetType），
+    /// 不触发任何模块视图装载，边界干净。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void MainWindow_Constructs_WithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct MainWindow (empty modules)";
+                var window = new SystemToolkit.Shell.MainWindow(
+                    Array.Empty<SystemToolkit.Abstractions.IModule>(),
+                    new ServiceCollection().BuildServiceProvider());
+
+                stage = "measure + arrange";
+                window.Measure(new Size(1280, 800));
+                window.Arrange(new Rect(0, 0, 1280, 800));
+                window.UpdateLayout();
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"宿主 MainWindow 构造抛异常（阶段：{stage}）：\n{captured}");
+    }
+
     private static IEnumerable<string> EnumerateModuleXamls()
         => Directory.EnumerateFiles(Path.Combine(RepoRoot(), "src"), "*.xaml", SearchOption.AllDirectories)
             .Where(p => !p.Contains("/obj/", StringComparison.Ordinal) && !p.Contains("/bin/", StringComparison.Ordinal));

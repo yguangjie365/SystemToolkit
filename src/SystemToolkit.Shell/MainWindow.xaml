@@ -278,12 +278,17 @@
 
                 <!-- 右：时间 + 音量 -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XS}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Style="{DynamicResource MonoText}">
-                        <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- 🔴 09-11 实机事故：MonoText 是 TextBlock 样式，不能挂 StackPanel（启动即 XamlParseException）；
+                             等宽字体直接走 Font_Mono 令牌 -->
+                        <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
                                    Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                        <TextBlock Text=" / " FontSize="{DynamicResource Font_SizeCaption}"
+                        <TextBlock Text=" / " FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
                                    Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontSize="{DynamicResource Font_SizeCaption}"
+                        <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
                                    Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Slider Width="72" Minimum="0" Maximum="1" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}"
