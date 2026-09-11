@@ -153,136 +153,144 @@
         </Border>
 
         <!-- 页面宿主 -->
-        <ContentControl x:Name="PageHost" Grid.Column="1"/>
+        <!-- 内容列（09-11 微调）：胶囊占独立行（Auto，无曲目时收为 0），不再悬浮遮页头 -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <!-- ════════ MUSIC-7 迷你播放器（2026-09-11 用户改版：顶部居中悬浮胶囊 + 封面）════════
-             DataContext=IPlaybackBarSource（代码注入）；音乐模块禁用时解析为 null、
-             无当前曲目时 HasTrack=false——两种情况整体 Collapsed 不占位。
-             定位 seek 与音量留在播放器页：胶囊只承载 封面/标题/播控/时间 -->
-        <Border x:Name="PlaybackBar" Grid.ColumnSpan="2" Panel.ZIndex="10"
-                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{DynamicResource Space_XS}"
-                Height="40" Background="{DynamicResource Brush_Surface}"
-                BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius_Pill}" Padding="{DynamicResource Space_XXS}"
-                Visibility="Collapsed">
-            <Border.Resources>
-                <Style x:Key="BarButton" TargetType="Button">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
-                    <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
-                    <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
-                    <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="MinWidth" Value="24"/>
-                    <Setter Property="MinHeight" Value="24"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius_MD}">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Brush_Track}"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-                <!-- 主播放键：圆形主色 -->
-                <Style x:Key="BarPlayButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
-                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
-                    <Setter Property="MinWidth" Value="26"/>
-                    <Setter Property="MinHeight" Value="26"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{DynamicResource Brush_Accent}" CornerRadius="{DynamicResource Radius_Pill}">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Opacity" Value="0.9"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-                <!-- 播放/暂停 glyph 互斥显隐（无转换器） -->
-                <Style x:Key="GlyphWhilePlaying" TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                            <Setter Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-                <Style x:Key="GlyphWhileIdle" TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Visible"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Resources>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- 封面 + 标题：点击跳音乐页（09-11 用户改版要求封面图） -->
-                <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand"
-                            ToolTip="跳到音乐管理" MouseLeftButtonUp="PlaybackMeta_Click">
-                    <Grid Width="28" Height="28" Margin="{DynamicResource Space_XXS}">
-                        <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_Pill}">
-                            <TextBlock Text="♪" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       FontSize="{DynamicResource Font_SizeCaption}"
-                                       Foreground="{DynamicResource Brush_TextSecondary}"/>
-                        </Border>
-                        <!-- 圆形封面（与占位同形态）；RadiusX/Y 非棘轮扫描维度 -->
-                        <Image Source="{Binding Cover, Mode=OneWay}" Stretch="UniformToFill"
-                               Width="28" Height="28">
-                            <Image.Clip>
-                                <EllipseGeometry Center="14,14" RadiusX="14" RadiusY="14"/>
-                            </Image.Clip>
-                        </Image>
-                    </Grid>
-                    <StackPanel VerticalAlignment="Center" MaxWidth="220" Margin="{DynamicResource Space_XXS}">
-                        <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBodySm}"
-                                   FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}"
-                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Title, Mode=OneWay}"/>
-                        <TextBlock Text="{Binding Subtitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeNano}"
-                                   Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis"/>
+            <!-- ════════ MUSIC-7 迷你播放器（2026-09-11 用户改版：顶部居中胶囊 + 封面）════════
+                 DataContext=IPlaybackBarSource（代码注入）；音乐模块禁用时解析为 null、
+                 无当前曲目时 HasTrack=false——两种情况整体 Collapsed，本行自动收起。
+                 定位 seek 与音量留在播放器页：胶囊只承载 封面/标题/播控/时间 -->
+            <Border x:Name="PlaybackBar" Grid.Row="0"
+                    HorizontalAlignment="Center" Margin="{DynamicResource Space_XS}"
+                    Height="40" Background="{DynamicResource Brush_Surface}"
+                    BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius_Pill}" Padding="{DynamicResource Space_SM}"
+                    Visibility="Collapsed">
+                <Border.Resources>
+                    <Style x:Key="BarButton" TargetType="Button">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
+                        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+                        <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="MinWidth" Value="24"/>
+                        <Setter Property="MinHeight" Value="24"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius_MD}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush_Track}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                    <!-- 主播放键：圆形主色 -->
+                    <Style x:Key="BarPlayButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                        <Setter Property="MinWidth" Value="26"/>
+                        <Setter Property="MinHeight" Value="26"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{DynamicResource Brush_Accent}" CornerRadius="{DynamicResource Radius_Pill}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Opacity" Value="0.9"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                    <!-- 播放/暂停 glyph 互斥显隐（无转换器） -->
+                    <Style x:Key="GlyphWhilePlaying" TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                    <Style x:Key="GlyphWhileIdle" TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Resources>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 封面 + 标题：点击跳音乐页（09-11 用户改版要求封面图） -->
+                    <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand"
+                                ToolTip="跳到音乐管理" MouseLeftButtonUp="PlaybackMeta_Click">
+                        <Grid Width="28" Height="28" Margin="{DynamicResource Space_XXS}">
+                            <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_Pill}">
+                                <TextBlock Text="♪" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontSize="{DynamicResource Font_SizeCaption}"
+                                           Foreground="{DynamicResource Brush_TextSecondary}"/>
+                            </Border>
+                            <!-- 圆形封面（与占位同形态）；RadiusX/Y 非棘轮扫描维度 -->
+                            <Image Source="{Binding Cover, Mode=OneWay}" Stretch="UniformToFill"
+                                   Width="28" Height="28">
+                                <Image.Clip>
+                                    <EllipseGeometry Center="14,14" RadiusX="14" RadiusY="14"/>
+                                </Image.Clip>
+                            </Image>
+                        </Grid>
+                        <StackPanel VerticalAlignment="Center" MaxWidth="220" Margin="{DynamicResource Space_XXS}">
+                            <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Title, Mode=OneWay}"/>
+                            <TextBlock Text="{Binding Subtitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeNano}"
+                                       Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 播控三键 -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
+                        <Button Style="{StaticResource BarButton}" Command="{Binding PreviousTrackCommand}"
+                                Content="&#xE892;" ToolTip="上一首"/>
+                        <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}"
+                                ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
+                            <Grid>
+                                <TextBlock Text="&#xE769;" Style="{StaticResource GlyphWhilePlaying}"/>
+                                <TextBlock Text="&#xE768;" Style="{StaticResource GlyphWhileIdle}"/>
+                            </Grid>
+                        </Button>
+                        <Button Style="{StaticResource BarButton}" Command="{Binding NextTrackCommand}"
+                                Content="&#xE893;" ToolTip="下一首"/>
+                    </StackPanel>
+
+                    <!-- 时间（等宽走 Font_Mono 令牌——09-11 一炸教训：MonoText 样式不能挂面板） -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
+                        <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock Text=" / " FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
+                                   FontSize="{DynamicResource Font_SizeCaption}"
+                                   Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
+            </Border>
 
-                <!-- 播控三键 -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
-                    <Button Style="{StaticResource BarButton}" Command="{Binding PreviousTrackCommand}"
-                            Content="&#xE892;" ToolTip="上一首"/>
-                    <Button Style="{StaticResource BarPlayButton}" Command="{Binding TogglePlayCommand}"
-                            ToolTip="播放 / 暂停" Margin="{DynamicResource Space_XXS}">
-                        <Grid>
-                            <TextBlock Text="&#xE769;" Style="{StaticResource GlyphWhilePlaying}"/>
-                            <TextBlock Text="&#xE768;" Style="{StaticResource GlyphWhileIdle}"/>
-                        </Grid>
-                    </Button>
-                    <Button Style="{StaticResource BarButton}" Command="{Binding NextTrackCommand}"
-                            Content="&#xE893;" ToolTip="下一首"/>
-                </StackPanel>
-
-                <!-- 时间（等宽走 Font_Mono 令牌——09-11 一炸教训：MonoText 样式不能挂面板） -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Space_XXS}">
-                    <TextBlock Text="{Binding PositionText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
-                               FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                    <TextBlock Text=" / " FontFamily="{DynamicResource Font_Mono}"
-                               FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding DurationText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
-                               FontSize="{DynamicResource Font_SizeCaption}"
-                               Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+            <ContentControl x:Name="PageHost" Grid.Row="1"/>
+        </Grid>
     </Grid>
 </Window>
