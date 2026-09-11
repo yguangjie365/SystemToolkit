@@ -480,7 +480,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="以下均为写操作——每项均已标注权限与重启要求" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
-                                           Foreground="{DynamicResource Brush_Danger}"/>
+                                           Foreground="{DynamicResource Brush_DangerText}"/>
                                 <TextBlock Text="安全修复（无需管理员）失败即停；重置类操作完成后需要重启计算机。" FontSize="{DynamicResource Font_SizeMicro}"
                                            Foreground="{DynamicResource Brush_TextMuted}" Margin="0,4,0,0"/>
                             </StackPanel>
@@ -506,7 +506,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                                 <TextBlock Text="需管理员" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
                                             </Border>
                                             <Border Style="{StaticResource Badge}" Visibility="{Binding RequiresReboot, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="需重启" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Danger}"/>
+                                                <TextBlock Text="需重启" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_DangerText}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{Binding Description}" FontSize="{DynamicResource Font_SizeBodySm}" TextWrapping="Wrap"

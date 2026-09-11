@@ -333,7 +333,7 @@
                                                         BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1"
                                                         CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
                                                     <TextBlock Text="库离线" FontFamily="{DynamicResource Font_Mono}"
-                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Danger}"/>
+                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_DangerText}"/>
                                                 </Border>
                                             </StackPanel>
                                         </Grid>

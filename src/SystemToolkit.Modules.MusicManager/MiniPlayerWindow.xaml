@@ -42,7 +42,7 @@
         </Style>
         <!-- 主播放键：圆形 accent（与全屏播放器同源） -->
         <Style x:Key="BarPlayButton" TargetType="Button" BasedOn="{StaticResource BarIconButton}">
-            <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_OnAccent}"/>
             <Setter Property="MinWidth" Value="42"/>
             <Setter Property="MinHeight" Value="42"/>
             <Setter Property="Template">
@@ -144,7 +144,7 @@
                                   Style="{StaticResource VolSpeaker}"/>
                             <TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                        FontSize="{DynamicResource Font_SizeBody}"
-                                       Foreground="{DynamicResource Brush_Danger}"
+                                       Foreground="{DynamicResource Brush_DangerText}"
                                        Style="{StaticResource VolMutedMark}"/>
                         </Grid>
                     </Button>

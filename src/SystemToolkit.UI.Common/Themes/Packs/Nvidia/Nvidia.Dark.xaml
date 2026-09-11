@@ -82,6 +82,9 @@
     <SolidColorBrush x:Key="Brush_WarningSoft" Color="#1FDF6500"/>
     <SolidColorBrush x:Key="Brush_NavySoft" Color="#33FFFFFF"/>
     <SolidColorBrush x:Key="Brush_SuccessBorder" Color="#663F8500"/>
+    <SolidColorBrush x:Key="Brush_OnAccent" Color="{StaticResource Color_Background}"/>
+    <SolidColorBrush x:Key="Brush_SuccessText" Color="#7ED63F"/>
+    <SolidColorBrush x:Key="Brush_DangerText" Color="#FF5C5C"/>
     <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="{StaticResource Color_Disabled}"/>
     <LinearGradientBrush x:Key="Brush_CoverFade" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#00000000" Offset="0"/>
@@ -265,8 +268,9 @@
         <!-- 🟠 审查 2026-09-11（F-2）：白字 Brush_OnDark(#F5F5F5) on #76B900 对比度仅 **2.21:1**，
              未达正文 4.5（甚至未达大字 3:1）。改用页底黑 Brush_Background → **8.71:1** 达标。
              ⚠️ 这是"单点已修、同款残留"：下方 RowPrimaryButton 早已修过完全相同的缺陷，此处与
-             FilterChip 选中态两处遗留——修改时务必同时改，勿只改一处。 -->
-        <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
+             FilterChip 选中态两处遗留——修改时务必同时改，勿只改一处。
+             OM-主题优化 2026-09-12：黑字统一走语义键 Brush_OnAccent（值仍=Color_Background 黑）。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="14,7"/>
         <Setter Property="FontSize" Value="12"/>
@@ -334,8 +338,9 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="ChipBg" Property="Background" Value="{StaticResource Brush_Accent}"/>
                             <!-- 🟠 审查 2026-09-11（F-2）：同 PrimaryButton——OnDark(#F5F5F5) on #76B900
-                                 仅 2.21:1，改页底黑 → 8.71:1（与 RowPrimaryButton 统一） -->
-                            <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
+                                 仅 2.21:1，改页底黑 → 8.71:1（与 RowPrimaryButton 统一）。
+                                 OM-主题优化 2026-09-12：统一语义键 Brush_OnAccent。 -->
+                            <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
                             <Setter TargetName="ChipBg" Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -410,8 +415,9 @@
         <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <!-- 2026-09-10 优化：白字(#F5F5F5) on #76B900 对比度仅 2.41（要求 4.5）；
-             改用页底黑 Brush_Background → 8.71 达标 -->
-        <Setter Property="Foreground" Value="{StaticResource Brush_Background}"/>
+             改用页底黑 Brush_Background → 8.71 达标。
+             OM-主题优化 2026-09-12：黑字统一走语义键 Brush_OnAccent。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
     </Style>
 
     <!-- KV 对标签/值（NetManager 网卡详情/优化参数表单用） -->

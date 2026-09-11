@@ -344,7 +344,7 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Success}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_SuccessText}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <TextBlock Text="已安装软件" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>
                 <TextBlock Text="INSTALLED APPLICATIONS" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>

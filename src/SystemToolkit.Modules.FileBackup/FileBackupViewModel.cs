@@ -217,7 +217,7 @@ public partial class FileBackupViewModel : ObservableObject
         if (_vssClient is null)
         {
             VssStatus = "不可用（VSS 客户端未注入）";
-            VssStatusColor = ThemeBrush.Find("Brush_Danger", "#DC2626");
+            VssStatusColor = ThemeBrush.Find("Brush_DangerText", "#DC2626");
             return;
         }
 
@@ -231,7 +231,7 @@ public partial class FileBackupViewModel : ObservableObject
         }
 
         VssStatus = "已配置（首次备份时将请求 UAC 提权）";
-        VssStatusColor = ThemeBrush.Find("Brush_Success", "#059669");
+        VssStatusColor = ThemeBrush.Find("Brush_SuccessText", "#059669");
     }
 
     /// <summary>定时任务是否已注册（控制注册/注销按钮文案）。</summary>

@@ -86,6 +86,9 @@ public static class TokenKeys
         public const string Brush_OnDarkMuted = "Brush_OnDarkMuted";
         public const string Brush_CoverFade = "Brush_CoverFade";
         public const string Brush_CoverOverlay = "Brush_CoverOverlay";
+        public const string Brush_OnAccent = "Brush_OnAccent";
+        public const string Brush_SuccessText = "Brush_SuccessText";
+        public const string Brush_DangerText = "Brush_DangerText";
         public const string Brush_SuccessOnDark = "Brush_SuccessOnDark";
         public const string Brush_DangerOnDark = "Brush_DangerOnDark";
         // ── 状态语义画刷（2026-09-08 阶段 2）

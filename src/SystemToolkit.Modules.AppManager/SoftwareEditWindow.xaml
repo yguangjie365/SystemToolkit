@@ -49,13 +49,13 @@
 
         <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <Button Content="删除" Width="76" Height="32" Margin="0,0,8,0" Click="OnDeleteClick"
-                    Background="{DynamicResource Brush_DangerSoft}" Foreground="{DynamicResource Brush_Danger}"
+                    Background="{DynamicResource Brush_DangerSoft}" Foreground="{DynamicResource Brush_DangerText}"
                     BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1" Cursor="Hand"/>
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick"
                     Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"
-                    Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
+                    Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnAccent}"
                     BorderThickness="0" Cursor="Hand"/>
         </StackPanel>
     </Grid>

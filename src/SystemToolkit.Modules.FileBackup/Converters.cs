@@ -12,7 +12,7 @@ public sealed class EnabledToBrushConverter : IValueConverter
     // 主题切换后徽标颜色永不跟随（Claude→Nvidia 后浅色主题的成功/静音色直接压在近黑底上）。
     // 改为「按主题 id 缓存」：既跟随主题，又避免每次 Convert 都走一遍资源查找。
     private static string? _cachedThemeId;
-    private static Brush _enabledBrush = ThemeBrush.Find("Brush_Success", "#047857");
+    private static Brush _enabledBrush = ThemeBrush.Find("Brush_SuccessText", "#047857");
     private static Brush _disabledBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
 
     private static void EnsureThemeCache()
@@ -24,7 +24,7 @@ public sealed class EnabledToBrushConverter : IValueConverter
         }
 
         // 走主题资源（主题未就绪时回退 hex）——直接 new SolidColorBrush 会让徽标脱离主题机制
-        _enabledBrush = ThemeBrush.Find("Brush_Success", "#047857");
+        _enabledBrush = ThemeBrush.Find("Brush_SuccessText", "#047857");
         _disabledBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
         _cachedThemeId = current;
     }

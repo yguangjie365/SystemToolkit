@@ -16,8 +16,8 @@
     <Color x:Key="Color_Background">#F7F8FA</Color>
     <Color x:Key="Color_SurfaceAlt">#F1F3F5</Color>
     <Color x:Key="Color_Surface">#ffffff</Color>
-    <Color x:Key="Color_Border">#E5E7EB</Color>
-    <Color x:Key="Color_Track">#E5E7EB</Color>
+    <Color x:Key="Color_Border">#D1D5DB</Color>
+    <Color x:Key="Color_Track">#D1D5DB</Color>
     <Color x:Key="Color_TextPrimary">#111827</Color>
     <Color x:Key="Color_TextSecondary">#4B5563</Color>
     <!-- M-UI-2（2026-09-06）：#6B7280→#616D7C——SurfaceAlt(#F1F3F5) 底 4.35→4.74 达 WCAG AA；
@@ -83,6 +83,9 @@
     <SolidColorBrush x:Key="Brush_WarningSoft" Color="#1FF59E0B"/>
     <SolidColorBrush x:Key="Brush_NavySoft" Color="#1F111827"/>
     <SolidColorBrush x:Key="Brush_SuccessBorder" Color="#6610B981"/>
+    <SolidColorBrush x:Key="Brush_OnAccent" Color="{StaticResource Color_OnDark}"/>
+    <SolidColorBrush x:Key="Brush_SuccessText" Color="{StaticResource Color_Success}"/>
+    <SolidColorBrush x:Key="Brush_DangerText" Color="{StaticResource Color_Danger}"/>
     <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="#9CA3AF"/>
     <!-- 卡片封面遮罩（M-UI-2 游戏页审查处置：原在 GameManagerView 页面资源裸写 ARGB，
          违反「页面禁止裸写颜色」契约——收编进主题；游戏卡片封面模式可跨模块复用） -->
@@ -110,7 +113,7 @@
     <SolidColorBrush x:Key="Brush_Selection" Color="{StaticResource Color_Selection}"/>
     <!-- 🔴 审查 2026-09-11（🔴-4）：浮层边界令牌。浅色下层次主要由投影承担，
          这里保持与 Brush_SurfaceAlt 同值（外观不变）；深色包的同名键才承担真正的分离职责 -->
-    <SolidColorBrush x:Key="Brush_Shadow" Color="#F1F3F5"/>
+    <SolidColorBrush x:Key="Brush_Shadow" Color="#D8DBDF"/>
 
     <!-- ===== 字体族（五款打包字体按 NOTICE.md §五加载；西文在前中文在后按字符回退） ===== -->
     <!-- 正文：Inter（西文）→ HarmonyOS Sans SC（中文）→ 系统兜底 -->
@@ -272,7 +275,7 @@
          （与 GameManager.html 参考稿 button:disabled 语义一致；对 Secondary 同样生效） -->
     <Style x:Key="PrimaryButton" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="14,7"/>
         <Setter Property="FontSize" Value="12"/>
@@ -339,7 +342,7 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="ChipBg" Property="Background" Value="{StaticResource Brush_Accent}"/>
-                            <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                            <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
                             <Setter TargetName="ChipBg" Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -413,7 +416,7 @@
     <Style x:Key="RowPrimaryButton" TargetType="Button" BasedOn="{StaticResource RowActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_Accent}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush_OnAccent}"/>
     </Style>
 
     <!-- KV 对标签/值（NetManager 网卡详情/优化参数表单用） -->

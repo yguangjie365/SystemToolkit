@@ -269,7 +269,7 @@
                                                 <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}" Width="110"/>
                                                 <TextBlock Text="{Binding EndpointText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <TextBlock Text="{Binding OnlineText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="10,0,0,0"
-                                                           Foreground="{DynamicResource Brush_Success}"/>
+                                                           Foreground="{DynamicResource Brush_SuccessText}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

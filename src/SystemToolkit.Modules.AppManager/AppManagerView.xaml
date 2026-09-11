@@ -464,7 +464,7 @@ Background="{DynamicResource Brush_Background}">
                                             <Run Text="{Binding Count, Mode=OneWay}"/><Run Text=" 个软件"/>
                                         </TextBlock>
                                         <Button Content="恢复此环境" Height="32" FontSize="{DynamicResource Font_SizeBodySm}"
-                                                Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
+                                                Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnAccent}"
                                                 BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left" Padding="10,0"
                                                 Command="{Binding DataContext.RestoreEnvironmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"/>
@@ -515,12 +515,12 @@ Background="{DynamicResource Brush_Background}">
                      保留禁用（9-8 审查 S-7：不做"能点但不响应"的按钮），改用 ToolTip 明示原因 -->
                 <Button Grid.Column="2" Content="批量升级" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
                         Background="Transparent" BorderBrush="{DynamicResource Brush_Success}" BorderThickness="1"
-                        Foreground="{DynamicResource Brush_Success}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        Foreground="{DynamicResource Brush_SuccessText}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
                         ToolTipService.ShowOnDisabled="True" ToolTip="批量升级功能开发中（V0.x 后续版本提供），当前请先逐条升级"
                         Command="{Binding BatchUpgradeSelectedCommand}"/>
                 <Button Grid.Column="3" Content="批量卸载" MinWidth="72" Height="32" Padding="12,0" Margin="8,0,0,0"
                         Background="Transparent" BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1"
-                        Foreground="{DynamicResource Brush_Danger}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
+                        Foreground="{DynamicResource Brush_DangerText}" FontWeight="Bold" FontSize="{DynamicResource Font_SizeCaption}" Cursor="Hand"
                         ToolTipService.ShowOnDisabled="True" ToolTip="批量卸载功能开发中（V0.x 后续版本提供），当前请先逐条卸载"
                         Command="{Binding BatchUninstallSelectedCommand}"/>
                 <Button Grid.Column="4" Style="{DynamicResource RowActionButton}" Content="清空选择" Margin="8,0,0,0"
@@ -532,7 +532,7 @@ Background="{DynamicResource Brush_Background}">
                         Command="{Binding BatchInstallCommand}"/>
                 <Button Grid.Column="6" Content="取消当前操作" Command="{Binding CancelOperationCommand}"
                         Style="{DynamicResource CardButton}" Margin="{DynamicResource Space_XS}"
-                        Foreground="{DynamicResource Brush_Danger}"
+                        Foreground="{DynamicResource Brush_DangerText}"
                         Visibility="{Binding IsOperating, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </Border>
