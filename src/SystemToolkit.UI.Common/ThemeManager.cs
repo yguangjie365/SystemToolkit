@@ -13,14 +13,38 @@ namespace SystemToolkit.UI.Common;
 /// </summary>
 public static class ThemeManager
 {
-    /// <summary>可用主题 id → 包 URI（新增主题在此登记 + SettingsView 下拉）。</summary>
-    public static readonly (string Id, string Label, string PackUri)[] Themes =
+    /// <summary>
+    /// 可用主题 id → 包 URI（新增主题在此登记 + SettingsView 下拉）。
+    /// <para>
+    /// <b>IsDark</b>：该主题是否为深色底。供需要「按明暗分档」的派生色使用
+    /// （2026-09-11 起：音乐播放器皮肤在深色主题下改走深染档）——
+    /// 把语义放进主题定义，而不是散落各处的 id 字符串比较，新增主题时不会漏登记。
+    /// </para>
+    /// </summary>
+    public static readonly (string Id, string Label, string PackUri, bool IsDark)[] Themes =
     [
-        ("claude", "Claude 浅色", "pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Packs/Claude/Claude.Light.xaml"),
-        ("nvidia", "NVIDIA 深色", "pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Packs/Nvidia/Nvidia.Dark.xaml"),
+        ("claude", "Claude 浅色", "pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Packs/Claude/Claude.Light.xaml", false),
+        ("nvidia", "NVIDIA 深色", "pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Packs/Nvidia/Nvidia.Dark.xaml", true),
     ];
 
     public const string DefaultThemeId = "claude";
+
+    /// <summary>当前主题是否为深色底（未登记的主题按浅色处理）。</summary>
+    public static bool IsDarkTheme
+    {
+        get
+        {
+            foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
+            {
+                if (t.Id == CurrentThemeId)
+                {
+                    return t.IsDark;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>当前主题 id（未应用过 = Default）。</summary>
     public static string CurrentThemeId { get; private set; } = DefaultThemeId;
@@ -39,8 +63,8 @@ public static class ThemeManager
     public static void Apply(string? themeId)
     {
         string id = themeId is null ? DefaultThemeId : themeId.Trim().ToLowerInvariant();
-        (string Id, string Label, string PackUri) match = default;
-        foreach ((string Id, string Label, string PackUri) t in Themes)
+        (string Id, string Label, string PackUri, bool IsDark) match = default;
+        foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
         {
             if (t.Id == id)
             {
@@ -52,7 +76,7 @@ public static class ThemeManager
         if (match.Id is null) // 未知 id → 回退默认
         {
             id = DefaultThemeId;
-            foreach ((string Id, string Label, string PackUri) t in Themes)
+            foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
             {
                 if (t.Id == id)
                 {

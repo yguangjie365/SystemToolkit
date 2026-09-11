@@ -473,7 +473,11 @@
 
     <!-- ===== 原生控件皮肤化（2026-09-06 系统性审查 P0-1：消除 ComboBox/CheckBox/RadioButton 割裂感） ===== -->
     
-    <!-- ComboBox 定制（深青边框+选中态 Accent 色；简单 Style 覆盖方案，非完整 ControlTemplate） -->
+    <!-- ComboBox 定制。
+         🔴 2026-09-11：「简单 Style 覆盖」不足——**下拉弹层（Popup）由系统默认模板渲染**，
+         其背景取 SystemColors.WindowBrush，与本案 Foreground 不同源。深色包因此出现
+         「浅字压白底」（主人截图实证）；本包在 Windows 深色模式下会有反向问题。
+         两包对称改成完整 ControlTemplate，弹层与选项全部走本包令牌。 -->
     <Style x:Key="ThemedComboBox" TargetType="ComboBox">
         <Setter Property="Background" Value="{StaticResource Brush_Surface}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Border}"/>
@@ -483,12 +487,87 @@
         <Setter Property="Height" Value="32"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="ToggleButton" Focusable="False" ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd"
+                                            Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            CornerRadius="{DynamicResource Radius_SM}">
+                                        <Path HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Margin="0,0,10,0" Data="M0,0 L4.5,4.5 L9,0"
+                                              Stroke="{StaticResource Brush_TextMuted}" StrokeThickness="1.4"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                        <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
+                               IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False"
+                               PopupAnimation="Fade">
+                            <Border MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                    Margin="0,2,0,0"
+                                    Background="{StaticResource Brush_Surface}"
+                                    BorderBrush="{StaticResource Brush_Border}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius_SM}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <!-- Triggers 必须排在所有 Setter 之后（XAML 属性元素不能在内容中间 —— MC3088） -->
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
             </Trigger>
             <Trigger Property="IsFocused" Value="True">
                 <Setter Property="BorderBrush" Value="{StaticResource Brush_Accent}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 下拉选项（隐式样式，仅本包生效）：透明底继承弹层表面，高亮/选中用 AccentSoft -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush_TextPrimary}"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{StaticResource Brush_AccentSoft}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource Brush_AccentSoft}"/>
             </Trigger>
         </Style.Triggers>
     </Style>

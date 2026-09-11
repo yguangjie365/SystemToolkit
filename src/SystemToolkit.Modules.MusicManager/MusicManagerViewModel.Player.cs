@@ -217,21 +217,34 @@ public partial class MusicManagerViewModel
     private void RefreshPlayerChromeBrushes()
     {
         // NexBox 复刻：文字色随风格与封面明暗
-        // 彩胶 = 固定深灰 #333338 / 55%；沉浸 = OnDark 浅字；现代 = 按封面明暗切换深/浅
+        // 彩胶 = 深灰 #333338 / 55%（浅色主题）；沉浸 = OnDark 浅字；现代 = 按背景明暗切换深/浅
+        //
+        // 🔴 2026-09-11 主人反馈「暗色模式播放器按键变黑块」后的修正：
+        // 三刷原本**只看播放器皮肤**，不看应用主题；而按钮底色取自应用主题（深色下近黑）——
+        // 深色主题 + 彩胶时「深灰字压深底」即黑块。现改为：深色主题下皮肤背景走深染档
+        // （见 RefreshPlayerBackgrounds），文字相应转浅，两者同源。
+        bool darkTheme = SystemToolkit.UI.Common.ThemeManager.IsDarkTheme;
         switch (PlayerStyle)
         {
             case PlayerStyleKind.Vinyl:
                 // 55% 静音色：冻结刷不可改 Opacity（实测设置即抛只读异常），alpha 建在色里
-                PlayerForegroundBrush = CoverColorFactory.FromRgb(0x33, 0x33, 0x38);
-                PlayerMutedBrush = CoverColorFactory.FromRgbWithOpacity(0x33, 0x33, 0x38, 0.55);
+                PlayerForegroundBrush = darkTheme
+                    ? CoverColorFactory.FromRgb(0xE8, 0xE8, 0xEC)
+                    : CoverColorFactory.FromRgb(0x33, 0x33, 0x38);
+                PlayerMutedBrush = darkTheme
+                    ? CoverColorFactory.FromRgbWithOpacity(0xE8, 0xE8, 0xEC, 0.62)
+                    : CoverColorFactory.FromRgbWithOpacity(0x33, 0x33, 0x38, 0.55);
                 PlayerAccentBrush = VinylAccentBrush;
                 break;
             case PlayerStyleKind.Modern:
-                bool light = CoverColorFactory.IsLight(CurrentAccentBrush);
-                PlayerForegroundBrush = light
-                    ? ThemeBrush.Find("Brush_TextPrimary", "#1a1a2e")
+                // 深色主题下背景已压暗（ModernBackgroundGradient(dark)）→ 恒用浅字，不看封面明暗。
+                // 另：浅底分支不再借 ThemeBrush.Find("Brush_TextPrimary")——深色主题下那个刷是**浅色**，
+                // 浅底配浅字同样不可读（旧实现的隐患，本次一并消除）。
+                bool lightBg = !darkTheme && CoverColorFactory.IsLight(CurrentAccentBrush);
+                PlayerForegroundBrush = lightBg
+                    ? CoverColorFactory.FromRgb(0x1A, 0x1A, 0x2E)
                     : CoverColorFactory.FromRgb(0xF0, 0xF0, 0xF0);
-                PlayerMutedBrush = light
+                PlayerMutedBrush = lightBg
                     ? CoverColorFactory.FromRgb(0x4A, 0x4A, 0x5E)
                     : CoverColorFactory.FromRgb(0xB0, 0xB0, 0xB0);
                 PlayerAccentBrush = CoverColorFactory.AccentLight(CurrentAccentBrush.Color);
@@ -245,11 +258,42 @@ public partial class MusicManagerViewModel
     }
 
     /// <summary>
+    /// 按「应用主题明暗 + 当前封面色」重算三种皮肤的背景渐变（含彩胶主色）。
+    /// <para>
+    /// 🔴 2026-09-11 主人反馈「暗色模式播放器按键变黑块」：播放器背景取自**皮肤/封面色**，
+    /// 而按钮底色取自**应用主题**——深色主题 + 彩胶（固定浅灰底）时两者失配。故深色主题下
+    /// 三种皮肤统一改走深染档，与宿主主题连成一体（浅色主题行为完全不变）。
+    /// </para>
+    /// <para>
+    /// 封面加载完成与主题切换都要调本方法；用 <see cref="CurrentAccentBrush"/> 作输入，
+    /// 未加载封面时它是中性色，结果同样是协调的深/浅底。
+    /// </para>
+    /// </summary>
+    private void RefreshPlayerBackgrounds()
+    {
+        SolidColorBrush accent = CurrentAccentBrush;
+        bool darkTheme = SystemToolkit.UI.Common.ThemeManager.IsDarkTheme;
+
+        // 沉浸背景本身就是深色（DarkImmersive 明度 0.30），两主题通用，无需分档
+        (_immersionVividColor, ImmersionBackgroundBrush) =
+            CoverColorFactory.ImmersionBackgroundGradient(accent);
+        ModernBackgroundBrush = CoverColorFactory.ModernBackgroundGradient(accent, darkTheme);
+        VinylBackgroundBrush = CoverColorFactory.VinylBackgroundGradient(darkTheme);
+        VinylAccentBrush = CoverColorFactory.VinylAccent(accent);
+    }
+
+    /// <summary>
     /// 主题切换回调（🔴 审查 2026-09-11，🔴-3）。三个 Brush 字段是**初始化即定值**，
     /// 而 VM 是 DI 单例、主题切换只重建视图不重建 VM——由 <see cref="RefreshPlayerChromeBrushes"/>
     /// 把三刷重取到新主题，否则切换后播放器会停留旧主题配色。
     /// </summary>
-    private void OnThemeChangedRefreshBrushes() => RefreshPlayerChromeBrushes();
+    private void OnThemeChangedRefreshBrushes()
+    {
+        // 背景与文字必须一起重算：深色主题下背景走深染档、文字随之转浅；
+        // 只刷文字会出现「深底 + 深字」的中间态（即本次黑块故障的同型问题）
+        RefreshPlayerBackgrounds();
+        RefreshPlayerChromeBrushes();
+    }
 
     /// <summary>起播/切歌后装载封面与主色（后台 IO；结果经 RunOnUi 回 UI）。</summary>
     private async Task LoadCoverAsync(MusicSong song)
@@ -296,11 +340,8 @@ public partial class MusicManagerViewModel
             SolidColorBrush accent = image is null ? CoverColorFactory.Neutral : CoverColorFactory.FromBitmap(image);
             CurrentAccentBrush = accent;
 
-            // NexBox 复刻：三风格背景渐变 + 彩胶主色（HSV 钳制）
-            (_immersionVividColor, ImmersionBackgroundBrush) =
-                CoverColorFactory.ImmersionBackgroundGradient(accent);
-            ModernBackgroundBrush = CoverColorFactory.ModernBackgroundGradient(accent);
-            VinylAccentBrush = CoverColorFactory.VinylAccent(accent);
+            // NexBox 复刻：三风格背景渐变 + 彩胶主色（HSV 钳制）——按当前主题明暗分档
+            RefreshPlayerBackgrounds();
             RefreshPlayerChromeBrushes();
         });
     }

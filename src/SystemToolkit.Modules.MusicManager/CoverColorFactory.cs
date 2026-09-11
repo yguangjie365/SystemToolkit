@@ -31,10 +31,14 @@ public static class CoverColorFactory
     /// <summary>
     /// 沉浸风格深背景：主色压暗加深（对照 NexBox 沉浸的深色主色渐变底）。
     /// </summary>
-    public static SolidColorBrush DarkImmersive(SolidColorBrush accent)
+    /// <param name="lightness">
+    /// 目标明度（默认 0.30）。深色主题下现代背景要更暗一档（用 0.16）——
+    /// 复用同一套 HSL 派生，避免为深色档另造颜色字面量。
+    /// </param>
+    public static SolidColorBrush DarkImmersive(SolidColorBrush accent, double lightness = 0.30)
     {
         PaletteMath.Hsl hsl = PaletteMath.RgbToHsl(accent.Color.R, accent.Color.G, accent.Color.B);
-        PaletteMath.Rgb rgb = PaletteMath.HslToRgb(hsl.H, Math.Max(hsl.S, 0.40), 0.30);
+        PaletteMath.Rgb rgb = PaletteMath.HslToRgb(hsl.H, Math.Max(hsl.S, 0.40), lightness);
         return Create(rgb.R, rgb.G, rgb.B);
     }
 
@@ -72,16 +76,29 @@ public static class CoverColorFactory
     /// 彩胶页背景（对照 NexBox）：固定浅灰三段渐变 160°（#dfdfe2/#d8d8dc/#d1d1d6）——
     /// 不随封面变化，彩色只在盘体。
     /// </summary>
-    public static Brush VinylBackgroundGradient()
+    public static Brush VinylBackgroundGradient(bool dark = false)
     {
         var brush = new LinearGradientBrush
         {
             StartPoint = GradientPoint(160),
             EndPoint = GradientEnd(160),
         };
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xDF, 0xDF, 0xE2), 0.0));
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD8, 0xD8, 0xDC), 0.55));
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD1, 0xD1, 0xD6), 1.0));
+        if (dark)
+        {
+            // 深色主题档：同结构的三段深灰（对照浅色档 #DFDFE2/#D8D8DC/#D1D1D6 的暗色镜像）。
+            // 🔴 2026-09-11：原来彩胶背景是**固定浅灰**（不随封面），深色主题下与宿主的深色
+            // 按钮底/深侧栏直接冲突——深背景上压深灰按钮即「黑块」。深色档由此而来。
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x1E, 0x20, 0x24), 0.0));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x23, 0x26, 0x2B), 0.55));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x19, 0x1B, 0x1F), 1.0));
+        }
+        else
+        {
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xDF, 0xDF, 0xE2), 0.0));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD8, 0xD8, 0xDC), 0.55));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xD1, 0xD1, 0xD6), 1.0));
+        }
+
         brush.Freeze();
         return brush;
     }
@@ -120,17 +137,21 @@ public static class CoverColorFactory
     }
 
     /// <summary>现代页背景（对照 modernBgGradient）：封面原色 135°，0–40% 平铺、100% 压暗 ×0.25。</summary>
-    public static Brush ModernBackgroundGradient(SolidColorBrush accent)
+    public static Brush ModernBackgroundGradient(SolidColorBrush accent, bool dark = false)
     {
-        SolidColorBrush dark = ModernDark(accent);
+        // 深色主题档：封面原色**不再铺满**（浅封面会把整个播放器带亮，与宿主深色割裂），
+        // 改走压暗版（HSL 明度 0.30，收尾 0.16），只保留封面色相作品牌感。
+        SolidColorBrush baseColor = dark ? DarkImmersive(accent) : accent;
+        SolidColorBrush tail = dark ? DarkImmersive(accent, 0.16) : ModernDark(accent);
+
         var brush = new LinearGradientBrush
         {
             StartPoint = new Point(0, 0),
             EndPoint = new Point(1, 1),
         };
-        brush.GradientStops.Add(new GradientStop(accent.Color, 0.0));
-        brush.GradientStops.Add(new GradientStop(accent.Color, 0.4));
-        brush.GradientStops.Add(new GradientStop(dark.Color, 1.0));
+        brush.GradientStops.Add(new GradientStop(baseColor.Color, 0.0));
+        brush.GradientStops.Add(new GradientStop(baseColor.Color, 0.4));
+        brush.GradientStops.Add(new GradientStop(tail.Color, 1.0));
         brush.Freeze();
         return brush;
     }
