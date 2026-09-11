@@ -16,6 +16,10 @@ if not errorlevel 1 (
     taskkill /F /IM SystemToolkit.Shell.exe >nul 2>&1
     timeout /t 1 /nobreak >nul
 )
+rem NuGet 直连、绕过系统代理（2026-09-11 实测）：系统代理常指向 127.0.0.1:7890，
+rem 代理软件没开时走它会直接 NU1301，脚本就卡在构建这一步。NO_PROXY 只作用于本进程，
+rem 不改动系统代理设置（实测：无效代理 + NO_PROXY 后缀匹配时 NuGet 仍可正常联网）。
+set "NO_PROXY=.nuget.org,.huaweicloud.com"
 dotnet build "%ROOT%\SystemToolkit.sln" -c Release --nologo -v q
 if errorlevel 1 (
     color 4F
