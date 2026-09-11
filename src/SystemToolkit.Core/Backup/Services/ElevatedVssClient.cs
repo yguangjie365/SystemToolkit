@@ -3,6 +3,7 @@ using System.Runtime.Versioning;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Drivers;
 using SystemToolkit.Core.Elevated;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Network.Services;
 
 namespace SystemToolkit.Core.Backup.Services;
@@ -70,9 +71,14 @@ public sealed class ElevatedVssClient
     /// </summary>
     public async Task<VssLease?> CreateAsync(string volumeRoot, Action<string>? onLog = null, CancellationToken ct = default)
     {
+        LogTiming timing = _logger.Time("VssCreateSnapshot");
         (int exit, string? content) = await RunVssAsync(["create", volumeRoot], onLog, ct).ConfigureAwait(false);
         if (exit != 0 || content is null)
         {
+            // 1223 = 用户拒绝 UAC：属安全终止而非执行失败，语义上归 Rejected
+            bool uacDenied = exit == 1223;
+            timing.Complete(uacDenied ? LogResult.Rejected : LogResult.Failed, LogLevel.Warn,
+                $"VSS 快照创建未成功（卷 {volumeRoot}，退出码 {exit}），回退普通复制");
             return null;
         }
 
@@ -80,20 +86,26 @@ public sealed class ElevatedVssClient
         if (parts.Length != 2 || !Guid.TryParse(parts[0], out Guid shadowId))
         {
             onLog?.Invoke($"[VSS] ❌ helper 输出格式异常：{content}");
+            timing.Complete(LogResult.Failed, LogLevel.Warn, $"VSS helper 输出格式异常（卷 {volumeRoot}）");
             return null;
         }
 
         var lease = new VssLease(
             parts[0].ToUpperInvariant(), parts[1],
             lease => DeleteAsync(lease.ShadowId, onLog, CancellationToken.None));
-        _logger.Info($"VSS 快照已创建：{parts[1]}（{lease.ShadowId}）");
+        timing.Complete(LogResult.Success, LogLevel.Info, $"VSS 快照已创建：{parts[1]}（{lease.ShadowId}）");
         return lease;
     }
 
     /// <summary>删除卷影快照（幂等；失败仅记日志）。</summary>
     public async Task DeleteAsync(string shadowId, Action<string>? onLog = null, CancellationToken ct = default)
     {
-        await RunVssAsync(["delete", shadowId], onLog, ct).ConfigureAwait(false);
+        LogTiming timing = _logger.Time("VssDeleteSnapshot");
+        (int exit, _) = await RunVssAsync(["delete", shadowId], onLog, ct).ConfigureAwait(false);
+        timing.Complete(
+            exit == 0 ? LogResult.Success : LogResult.Failed,
+            exit == 0 ? LogLevel.Info : LogLevel.Warn,
+            $"VSS 快照删除（{shadowId}）退出码 {exit}");
     }
 
     /// <summary>执行一次 helper vss 调用；返回退出码与 out 文件内容（首行）。</summary>

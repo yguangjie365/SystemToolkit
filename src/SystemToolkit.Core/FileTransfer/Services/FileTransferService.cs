@@ -6,6 +6,7 @@ using System.Text.Json;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.FileTransfer.Models;
 using SystemToolkit.Core.FileTransfer.Services.Protocol;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Utilities;
 using WatsonTcp;
 
@@ -1196,7 +1197,46 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
     private void RaiseUpdated(TransferTask task) => TaskUpdated?.Invoke(this, task);
 
-    private void RaiseCompleted(TransferTask task) => TaskCompleted?.Invoke(this, task);
+    private void RaiseCompleted(TransferTask task)
+    {
+        // LOG-3：所有终态（完成/失败/取消/替换）都经过这里——任务级三字段单点落齐，
+        // Duration 取 StartedAt→FinishedAt 真实传输耗时（而非 SendFileAsync 的移交耗时）
+        LogTransferOutcome(task);
+        TaskCompleted?.Invoke(this, task);
+    }
+
+    /// <summary>传输任务终态结构化留痕（Action/Result/Duration）；NullLogger 注入时静默。</summary>
+    private void LogTransferOutcome(TransferTask task)
+    {
+        if (_logger is NullLogger)
+        {
+            return;
+        }
+
+        LogResult outcome = task.Status switch
+        {
+            TransferStatus.Completed => LogResult.Success,
+            TransferStatus.Cancelled => LogResult.Cancelled,
+            _ => LogResult.Failed,
+        };
+        LogLevel level = outcome switch
+        {
+            LogResult.Success => LogLevel.Info,
+            LogResult.Cancelled => LogLevel.Info,
+            _ => LogLevel.Warn,
+        };
+        long? durationMs = task.FinishedAt is { } finished && task.StartedAt != default
+            ? (long)(finished - task.StartedAt).TotalMilliseconds
+            : null;
+        string dir = task.Direction == TransferDirection.Send ? "发送" : "接收";
+        AppLog.Write(LogEntry.Create(
+            level, _logger.Source,
+            $"传输结束：{dir}「{task.FileName}」→ {task.Status}"
+                + (string.IsNullOrEmpty(task.ErrorMessage) ? string.Empty : $"（{task.ErrorMessage}）"),
+            action: task.Direction == TransferDirection.Send ? "SendFile" : "ReceiveFile",
+            outcome: outcome,
+            durationMs: durationMs));
+    }
 
     private void FinalizeTerminal(TransferTask task, TransferStatus status, string? message)
     {

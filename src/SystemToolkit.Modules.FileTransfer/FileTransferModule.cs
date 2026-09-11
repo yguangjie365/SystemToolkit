@@ -31,7 +31,11 @@ public sealed class FileTransferModule : ModuleBase
         services.AddKeyedSingleton<ILogger>("filetransfer", new FileLogger("filetransfer"));
 
         services.AddSingleton<IDeviceDiscoveryService, DeviceDiscoveryService>();
-        services.AddSingleton<FileTransferService>();
+        // LOG-3：工厂显式喂键控日志器——原纯类型注册下 ILogger? 可选参数拿 NullLogger，
+        // RaiseCompleted 的任务级三字段在生产不会落盘
+        services.AddSingleton(sp => new FileTransferService(
+            sp.GetRequiredService<IDeviceDiscoveryService>(),
+            sp.GetRequiredKeyedService<ILogger>("filetransfer")));
         services.AddSingleton<IFileTransferService>(sp => sp.GetRequiredService<FileTransferService>());
         services.AddSingleton<TransferHistoryService>();
         // 统一配对模型：Web 通道与桌面 TCP 通道共用同一 PairingService 实例（批次二）

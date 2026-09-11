@@ -1,3 +1,6 @@
+using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
+
 namespace SystemToolkit.Core.Network.Services;
 
 /// <summary>
@@ -8,58 +11,99 @@ namespace SystemToolkit.Core.Network.Services;
 public sealed class NetConfigService : INetConfigService
 {
     private readonly ICommandRunner _runner;
+    private readonly ILogger _logger;
 
-    /// <summary>构造；命令执行器经接口注入（测试用 fake 记录命令行、可编程退出码）。</summary>
-    public NetConfigService(ICommandRunner runner)
+    /// <summary>构造；命令执行器经接口注入（测试用 fake 记录命令行、可编程退出码）；日志可选（LOG-3）。</summary>
+    public NetConfigService(ICommandRunner runner, ILogger? logger = null)
     {
         _runner = runner;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <inheritdoc cref="INetConfigService.SetDhcpAsync"/>
     public Task<int> SetDhcpAsync(string adapter, Action<string> onLine)
-        => RunAsync(() => NetshArgs.SetDhcp(adapter), onLine);
+        => CompleteExitAsync(_logger.Time("SetDhcp"),
+            RunAsync(() => NetshArgs.SetDhcp(adapter), onLine), $"网卡「{adapter}」恢复 DHCP");
 
     /// <inheritdoc cref="INetConfigService.SetStaticIpAsync"/>
-    public Task<int> SetStaticIpAsync(string adapter, string ip, string mask, string? gateway, Action<string> onLine)
+    public async Task<int> SetStaticIpAsync(string adapter, string ip, string mask, string? gateway, Action<string> onLine)
     {
-        RequireIPv4(ip, nameof(ip));
-        RequireIPv4(mask, nameof(mask));
-        if (gateway is not null)
+        LogTiming timing = _logger.Time("SetStaticIp");
+        try
         {
-            RequireIPv4(gateway, nameof(gateway));
+            RequireIPv4(ip, nameof(ip));
+            RequireIPv4(mask, nameof(mask));
+            if (gateway is not null)
+            {
+                RequireIPv4(gateway, nameof(gateway));
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"静态 IP 参数被拒：{ex.Message}");
+            throw;
         }
 
-        return RunAsync(() => NetshArgs.SetStaticIp(adapter, ip, mask, gateway), onLine);
+        return await CompleteExitAsync(timing,
+            RunAsync(() => NetshArgs.SetStaticIp(adapter, ip, mask, gateway), onLine),
+            $"网卡「{adapter}」静态 IP {ip}").ConfigureAwait(false);
     }
 
     /// <inheritdoc cref="INetConfigService.SetDnsAsync"/>
     public async Task<int> SetDnsAsync(string adapter, string? primary, string? secondary, Action<string> onLine)
     {
+        LogTiming timing = _logger.Time("SetDns");
         if (primary is null)
         {
             // 恢复自动：备用 DNS 一并交给 DHCP，忽略 secondary
-            return await RunAsync(() => NetshArgs.SetDnsToDhcp(adapter), onLine).ConfigureAwait(false);
+            return await CompleteExitAsync(timing,
+                RunAsync(() => NetshArgs.SetDnsToDhcp(adapter), onLine),
+                $"网卡「{adapter}」DNS 恢复自动").ConfigureAwait(false);
         }
 
         // 两段校验都放在执行之前：不出现「主 DNS 已应用、备用格式非法抛异常」的半套状态
-        RequireIPv4(primary, nameof(primary));
-        if (secondary is not null)
+        try
         {
-            RequireIPv4(secondary, nameof(secondary));
+            RequireIPv4(primary, nameof(primary));
+            if (secondary is not null)
+            {
+                RequireIPv4(secondary, nameof(secondary));
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"DNS 参数被拒：{ex.Message}");
+            throw;
         }
 
         int exit = await RunAsync(() => NetshArgs.SetDnsPrimary(adapter, primary), onLine).ConfigureAwait(false);
         if (exit != 0 || secondary is null)
         {
+            timing.Complete(exit == 0 ? LogResult.Success : LogResult.Failed,
+                exit == 0 ? LogLevel.Info : LogLevel.Warn,
+                $"网卡「{adapter}」DNS {primary}：退出码 {exit}");
             return exit;
         }
 
-        return await RunAsync(() => NetshArgs.AddDnsSecondary(adapter, secondary), onLine).ConfigureAwait(false);
+        return await CompleteExitAsync(timing,
+            RunAsync(() => NetshArgs.AddDnsSecondary(adapter, secondary), onLine),
+            $"网卡「{adapter}」DNS {primary}+{secondary}").ConfigureAwait(false);
     }
 
     /// <inheritdoc cref="INetConfigService.SetAdapterEnabledAsync"/>
     public Task<int> SetAdapterEnabledAsync(string adapter, bool enabled, Action<string> onLine)
-        => RunAsync(() => NetshArgs.SetAdapterEnabled(adapter, enabled), onLine);
+        => CompleteExitAsync(_logger.Time(enabled ? "EnableAdapter" : "DisableAdapter"),
+            RunAsync(() => NetshArgs.SetAdapterEnabled(adapter, enabled), onLine),
+            $"网卡「{adapter}」{(enabled ? "启用" : "禁用")}");
+
+    private static async Task<int> CompleteExitAsync(LogTiming timing, Task<int> run, string what)
+    {
+        int exit = await run.ConfigureAwait(false);
+        timing.Complete(exit == 0 ? LogResult.Success : LogResult.Failed,
+            exit == 0 ? LogLevel.Info : LogLevel.Warn,
+            $"{what}：退出码 {exit}");
+        return exit;
+    }
 
     // netsh 配置类命令统一超时：防进程挂起锁死 UI
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(Configuration.AppConstants.NetshCommandTimeoutSeconds);

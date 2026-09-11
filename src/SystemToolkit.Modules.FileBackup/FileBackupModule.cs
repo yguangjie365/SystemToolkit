@@ -40,9 +40,17 @@ public sealed class FileBackupModule : ModuleBase
         // 配置服务（BackupConfigService）已提升至 Shell 的共享基础设施：
         // 设置模块同样需要读写它，模块各自注册会形成两份实例（状态分裂、互相覆盖）。
         services.AddSingleton<RuleManager>();
-        services.AddSingleton<ElevatedVssClient>();
-        services.AddSingleton<BackupService>();
-        services.AddSingleton<RestoreService>();
+        // LOG-3：工厂显式喂键控日志器——纯类型注册下 ILogger? 可选参数在生产拿到
+        // NullLogger，BackupRule/RestoreSnapshot/Vss* 的三字段留痕只剩测试里有
+        services.AddSingleton(sp => new ElevatedVssClient(
+            logger: sp.GetRequiredKeyedService<ILogger>("filebackup")));
+        services.AddSingleton(sp => new BackupService(
+            sp.GetRequiredService<BackupConfigService>(),
+            logger: sp.GetRequiredKeyedService<ILogger>("filebackup"),
+            vssClient: sp.GetRequiredService<ElevatedVssClient>()));
+        services.AddSingleton(sp => new RestoreService(
+            sp.GetRequiredService<BackupConfigService>(),
+            logger: sp.GetRequiredKeyedService<ILogger>("filebackup")));
         services.AddSingleton<IBackupService>(sp => sp.GetRequiredService<BackupService>());
         services.AddSingleton<IRestoreService>(sp => sp.GetRequiredService<RestoreService>());
         services.AddSingleton<IRestorePreviewProvider>(sp => sp.GetRequiredService<RestoreService>());

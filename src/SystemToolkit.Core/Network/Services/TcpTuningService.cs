@@ -1,5 +1,7 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Network.Models;
 
 namespace SystemToolkit.Core.Network.Services;
@@ -33,6 +35,7 @@ public sealed class TcpTuningService : ITcpTuningService
 
     private readonly ICommandRunner _runner;
     private readonly string _snapshotPath;
+    private readonly ILogger _logger;
 
     /// <summary>
     /// 默认快照路径（02 §六统一配置根）。历史版本写的是 <c>%APPDATA%\FileBackupTool\net\</c>
@@ -50,9 +53,10 @@ public sealed class TcpTuningService : ITcpTuningService
     /// <summary>构造；快照路径缺省为 <c>%LOCALAPPDATA%\SystemToolkit\net\tuning_snapshot.json</c>（测试注入临时目录）。
     /// 【非提权宿主适配 2026-09-06】<paramref name="throttlingWriter"/>：HKLM 直写在新宿主（按需 UAC 架构）必失败，
     /// 注入委托时 NetworkThrottlingIndex 改走提权 Helper 通道；未注入（旧测试/旧宿主）保持直写 + 权限失败降级。</summary>
-    public TcpTuningService(ICommandRunner runner, string? snapshotPath = null, Func<uint, Action<string>, Task<int>>? throttlingWriter = null)
+    public TcpTuningService(ICommandRunner runner, string? snapshotPath = null, Func<uint, Action<string>, Task<int>>? throttlingWriter = null, ILogger? logger = null)
     {
         _runner = runner;
+        _logger = logger ?? NullLogger.Instance;
         if (snapshotPath is null)
         {
             _snapshotPath = DefaultSnapshotPath;
@@ -119,6 +123,7 @@ public sealed class TcpTuningService : ITcpTuningService
     /// <inheritdoc cref="ITcpTuningService.ApplyAsync"/>
     public async Task<TcpApplyResult> ApplyAsync(TcpGlobalSettings target, Action<string> onLine, CancellationToken ct = default)
     {
+        LogTiming timing = _logger.Time("TcpTuningApply");
         // 改前快照先行：哪怕后面某一步失败，用户手里也有一份可还原的原始状态
         //（快照同时记录 TCP 参数与全部接口 metric——「一份改前快照」完整语义）
         TcpGlobalSettings current = await ReadAsync(ct).ConfigureAwait(false);
@@ -221,14 +226,19 @@ public sealed class TcpTuningService : ITcpTuningService
             }
         }
 
+        timing.Complete(failed.Count == 0 ? LogResult.Success : LogResult.Failed,
+            failed.Count == 0 ? LogLevel.Info : LogLevel.Warn,
+            $"TCP 调优应用：写入 {applied.Count}、跳过 {skipped.Count}、失败 {failed.Count}");
         return new TcpApplyResult(applied, skipped, failed);
     }
 
     /// <inheritdoc cref="ITcpTuningService.RestoreAsync"/>
     public async Task RestoreAsync(Action<string> onLine, CancellationToken ct = default)
     {
+        LogTiming timing = _logger.Time("TcpTuningRestore");
         if (!HasSnapshot)
         {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, "无优化快照可还原");
             throw new InvalidOperationException("没有可还原的优化快照——从未应用过更改，或快照文件已被清理");
         }
 
@@ -239,11 +249,13 @@ public sealed class TcpTuningService : ITcpTuningService
         }
         catch (JsonException ex)
         {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"优化快照文件损坏，拒绝还原：{ex.Message}");
             throw new InvalidOperationException($"优化快照文件损坏（{ex.Message}），为安全起见拒绝还原", ex);
         }
 
         if (snapshot is null)
         {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, "优化快照内容为空，拒绝还原");
             throw new InvalidOperationException("优化快照为空，拒绝还原");
         }
 
@@ -331,6 +343,9 @@ public sealed class TcpTuningService : ITcpTuningService
             ? "[调优] ✅ 已还原改前快照（此项操作不覆盖快照，可重复执行）"
             : $"[调优] ⚠️ 还原未完全成功：{failed.Count} 项未写入（{string.Join("、", failed)}）——"
               + "常见原因是 UAC 提权被拒，其余项不受影响；本操作不覆盖快照，可重复执行");
+        timing.Complete(failed.Count == 0 ? LogResult.Success : LogResult.Failed,
+            failed.Count == 0 ? LogLevel.Info : LogLevel.Warn,
+            $"TCP 调优还原：{snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss} 快照，未写入 {failed.Count} 项");
     }
 
     /// <inheritdoc cref="ITcpTuningService.ListInterfaceMetricsAsync"/>
@@ -344,6 +359,7 @@ public sealed class TcpTuningService : ITcpTuningService
     /// <inheritdoc cref="ITcpTuningService.ApplyInterfaceMetricAsync"/>
     public async Task ApplyInterfaceMetricAsync(string adapter, int metric, Action<string> onLine, CancellationToken ct = default)
     {
+        LogTiming timing = _logger.Time("ApplyInterfaceMetric");
         IReadOnlyList<InterfaceMetricInfo> currentMetrics = await ListInterfaceMetricsAsync(ct).ConfigureAwait(false);
         TcpGlobalSettings currentTcp = await ReadAsync(ct).ConfigureAwait(false);
         SaveSnapshot(currentTcp, currentMetrics, onLine);
@@ -352,16 +368,21 @@ public sealed class TcpTuningService : ITcpTuningService
         if (cur is null)
         {
             onLine($"[调优] ❌ 接口「{adapter}」不存在（可能已断开/被移除），未执行");
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"跃点数设置被拒：接口「{adapter}」不存在");
             return;
         }
 
         if (cur.Metric == metric)
         {
             onLine($"[调优] 「{adapter}」跃点数已是 {metric}，无需修改");
+            timing.Complete(LogResult.Success, LogLevel.Info, $"跃点数无需修改：「{adapter}」已是 {metric}");
             return;
         }
 
-        await WriteInterfaceMetric(adapter, metric, onLine, ct).ConfigureAwait(false);
+        bool written = await WriteInterfaceMetric(adapter, metric, onLine, ct).ConfigureAwait(false);
+        timing.Complete(written ? LogResult.Success : LogResult.Failed,
+            written ? LogLevel.Info : LogLevel.Warn,
+            $"跃点数设置「{adapter}」→ {metric}：{(written ? "已写入" : "未写入（提权被拒或命令失败）")}");
     }
 
     /// <summary>

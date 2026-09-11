@@ -1,3 +1,5 @@
+using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Network.Models;
 
 namespace SystemToolkit.Core.Network.Services;
@@ -14,12 +16,14 @@ public sealed class NetRepairService : INetRepairService
 
     private readonly ICommandRunner _runner;
     private readonly INetworkInfoService _info;
+    private readonly ILogger _logger;
 
-    /// <summary>构造；命令执行器与适配器信息经接口注入（适配器自动选取依赖后者）。</summary>
-    public NetRepairService(ICommandRunner runner, INetworkInfoService info)
+    /// <summary>构造；命令执行器与适配器信息经接口注入（适配器自动选取依赖后者）；日志可选（LOG-3）。</summary>
+    public NetRepairService(ICommandRunner runner, INetworkInfoService info, ILogger? logger = null)
     {
         _runner = runner;
         _info = info;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <inheritdoc cref="INetRepairService.Steps"/>
@@ -53,6 +57,24 @@ public sealed class NetRepairService : INetRepairService
 
     /// <inheritdoc cref="INetRepairService.ExecuteAsync"/>
     public async Task<int> ExecuteAsync(string stepId, Action<string> onLine, string? adapter = null, CancellationToken ct = default)
+    {
+        LogTiming timing = _logger.Time("RepairStep");
+        try
+        {
+            int exit = await ExecuteStepAsync(stepId, onLine, adapter, ct).ConfigureAwait(false);
+            timing.Complete(exit == 0 ? LogResult.Success : LogResult.Failed,
+                exit == 0 ? LogLevel.Info : LogLevel.Warn,
+                $"修复步骤「{stepId}」结束（退出码 {exit}）");
+            return exit;
+        }
+        catch (ArgumentException ex)
+        {
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"未知修复步骤：{ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<int> ExecuteStepAsync(string stepId, Action<string> onLine, string? adapter, CancellationToken ct)
     {
         switch (stepId)
         {
@@ -125,12 +147,14 @@ public sealed class NetRepairService : INetRepairService
     /// <inheritdoc cref="INetRepairService.RunSafeSequenceAsync"/>
     public async Task<IReadOnlyList<string>> RunSafeSequenceAsync(Action<string> onLine, CancellationToken ct = default)
     {
+        LogTiming timing = _logger.Time("RepairSafeSequence");
         var executed = new List<string>(2);
 
         int flushExit = await ExecuteAsync("flushdns", onLine, ct: ct).ConfigureAwait(false);
         if (flushExit != 0)
         {
             onLine($"[修复] ❌ 安全序列在「刷新 DNS 缓存」处失败（退出码 {flushExit}），已停止——未执行后续步骤");
+            timing.Complete(LogResult.Failed, LogLevel.Warn, $"安全序列中止于 flushdns（已执行 {executed.Count} 步）");
             return executed;
         }
 
@@ -140,10 +164,12 @@ public sealed class NetRepairService : INetRepairService
         if (renewExit != 0)
         {
             onLine($"[修复] ❌ 安全序列在「重新获取 IP」处失败（退出码 {renewExit}），已停止");
+            timing.Complete(LogResult.Failed, LogLevel.Warn, $"安全序列中止于 renew（已执行 {executed.Count} 步）");
             return executed;
         }
 
         executed.Add("renew");
+        timing.Complete(LogResult.Success, LogLevel.Info, "安全序列完成（flushdns + renew）");
         return executed;
     }
 
