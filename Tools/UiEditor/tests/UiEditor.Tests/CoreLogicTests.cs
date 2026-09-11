@@ -123,6 +123,22 @@ public class CoreLogicTests
         Assert.Empty(hits);
     }
 
+    // ───────────── GridBands：拖拽落位指针→轨道吸附 ─────────────
+    [Fact]
+    public void GridBands_ResolveTrack_MapsPointerToBand()
+    {
+        // 三条轨道：高 100 / 50 / 150（累计边界 100 / 150 / 300）
+        double[] sizes = { 100, 50, 150 };
+        Assert.Equal(0, GridBands.ResolveTrack(sizes, 0));
+        Assert.Equal(0, GridBands.ResolveTrack(sizes, 99));
+        Assert.Equal(1, GridBands.ResolveTrack(sizes, 100));
+        Assert.Equal(1, GridBands.ResolveTrack(sizes, 149));
+        Assert.Equal(2, GridBands.ResolveTrack(sizes, 150));
+        Assert.Equal(2, GridBands.ResolveTrack(sizes, 299));
+        Assert.Equal(2, GridBands.ResolveTrack(sizes, 9999)); // 越界钳到末轨
+        Assert.Equal(0, GridBands.ResolveTrack(System.Array.Empty<double>(), 5)); // 空轨道安全
+    }
+
     // ───────────── DesignTextPrep：剥 x:Class 与事件句柄 ─────────────
     [Fact]
     public void DesignTextPrep_StripsClassAndEvents()

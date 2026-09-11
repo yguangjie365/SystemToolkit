@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using UiEditor.Core;
 using SystemToolkit.Core.Utilities;
@@ -27,6 +28,15 @@ public partial class MainWindow : Window
     private readonly Dictionary<int, Border> _borderByLine = new();
     private bool _suppress;
     private bool _busy;
+
+    // ── M2 拖拽落位状态 ──
+    private readonly Dictionary<Border, SourceNode> _nodeByBorder = new();
+    private readonly Dictionary<SourceNode, Grid> _parentGridByNode = new();
+    private Border? _dragBorder;
+    private SourceNode? _dragNode;
+    private Grid? _dragParentGrid;
+    private Point _dragStart;
+    private bool _dragging;
 
     public MainWindow()
     {
@@ -51,6 +61,9 @@ public partial class MainWindow : Window
     }
 
     // ───────────── 目标发现与载入 ─────────────
+    /// <summary>App 层未捕获异常兜底入口：把异常落到状态栏，不让工具硬崩。</summary>
+    public void ReportUnhandled(System.Exception ex) => StatusText.Text = "⚠ 已拦截异常：" + ex.Message;
+
     private void DiscoverTargets()
     {
         TargetCombo.Items.Clear();
@@ -189,6 +202,8 @@ public partial class MainWindow : Window
     private void RebuildSchematic()
     {
         _borderByLine.Clear();
+        _nodeByBorder.Clear();
+        _parentGridByNode.Clear();
         PreviewHost.Content = _tree is null ? null : RenderNode(_tree);
         if (_selected is not null)
         {
@@ -229,6 +244,7 @@ public partial class MainWindow : Window
                 Grid.SetRow(cv, IntAttr(child, "Grid.Row"));
                 Grid.SetColumn(cv, IntAttr(child, "Grid.Column"));
                 grid.Children.Add(cv);
+                _parentGridByNode[child] = grid; // M2：记录子元素的父 Grid，供拖拽落位取轨道
             }
 
             body.Children.Add(grid);
@@ -247,7 +263,13 @@ public partial class MainWindow : Window
             border.SetResourceReference(Border.BackgroundProperty, bgToken);
         }
 
+        // M2：让每个元素块可拖拽改落位（Down 选中 + 起拖，Move 吸附预览，Up 提交 Grid.Row/Column）
+        border.MouseLeftButtonDown += OnElementDown;
+        border.MouseMove += OnElementMove;
+        border.MouseLeftButtonUp += OnElementUp;
+
         _borderByLine[n.Line] = border;
+        _nodeByBorder[border] = n;
         return border;
     }
 
@@ -288,6 +310,109 @@ public partial class MainWindow : Window
             b.SetResourceReference(Border.BorderBrushProperty, "Brush_Accent");
             b.BorderThickness = new Thickness(2);
         }
+    }
+
+    // ───────────── M2 拖拽落位（吸附到父 Grid 行/列轨道） ─────────────
+    private void OnElementDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Border b || !_nodeByBorder.TryGetValue(b, out SourceNode? node))
+        {
+            return;
+        }
+
+        SelectNode(node); // 点击即选中（复用 M1 检视器同步）
+
+        if (ReferenceEquals(node, _tree) || !_parentGridByNode.TryGetValue(node, out Grid? pg))
+        {
+            return; // 根或不在可落位 Grid 内的元素：只选中，不拖
+        }
+
+        _dragBorder = b;
+        _dragNode = node;
+        _dragParentGrid = pg;
+        _dragStart = e.GetPosition(pg);
+        _dragging = false;
+        b.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnElementMove(object sender, MouseEventArgs e)
+    {
+        if (_dragBorder is null || _dragParentGrid is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        Point p;
+        try
+        {
+            p = e.GetPosition(_dragParentGrid);
+        }
+        catch
+        {
+            return; // 父 Grid 已脱离可视树（异常路径），静默丢弃本次 move
+        }
+
+        if (!_dragging && (Math.Abs(p.Y - _dragStart.Y) > 4 || Math.Abs(p.X - _dragStart.X) > 4))
+        {
+            _dragging = true;
+        }
+
+        if (_dragging)
+        {
+            int row = GridBands.ResolveTrack(RowHeights(_dragParentGrid), p.Y);
+            int col = GridBands.ResolveTrack(ColWidths(_dragParentGrid), p.X);
+            _dragBorder.Opacity = 0.55;
+            StatusText.Text = $"拖拽中 → 目标 R{row} C{col}（松手提交）";
+        }
+    }
+
+    private void OnElementUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragBorder is null)
+        {
+            return;
+        }
+
+        Border dragged = _dragBorder;
+        SourceNode? node = _dragNode;
+        Grid? pg = _dragParentGrid;
+        bool wasDragging = _dragging;
+
+        // 关键顺序：趁 dragged/pg 仍挂在可视树上，先释放捕获 + 复位透明度 + 清拖拽字段，
+        // 再 RebuildSchematic（它会替换掉所有 Border——若在之后才碰旧 dragged 会抛异常致崩）。
+        dragged.Opacity = 1.0;
+        dragged.ReleaseMouseCapture();
+        _dragBorder = null;
+        _dragNode = null;
+        _dragParentGrid = null;
+        _dragging = false;
+
+        if (wasDragging && node is not null && pg is not null)
+        {
+            Point p = e.GetPosition(pg);
+            int row = GridBands.ResolveTrack(RowHeights(pg), p.Y);
+            int col = GridBands.ResolveTrack(ColWidths(pg), p.X);
+            RecordPending(node, "Grid.Row", row.ToString());
+            RecordPending(node, "Grid.Column", col.ToString());
+            RebuildSchematic();
+            StatusText.Text = $"落位：{node.LocalName} → R{row} C{col}（{_pending.Count} 个元素待保存）";
+        }
+    }
+
+    private static List<double> RowHeights(Grid g) => g.RowDefinitions.Select(rd => rd.ActualHeight).ToList();
+
+    private static List<double> ColWidths(Grid g) => g.ColumnDefinitions.Select(cd => cd.ActualWidth).ToList();
+
+    private void RecordPending(SourceNode n, string attr, string value)
+    {
+        if (!_pending.TryGetValue(n.Line, out Dictionary<string, string>? dict))
+        {
+            dict = new Dictionary<string, string>();
+            _pending[n.Line] = dict;
+        }
+
+        dict[attr] = value;
     }
 
     // ───────────── 检视器编辑 → pending ─────────────
