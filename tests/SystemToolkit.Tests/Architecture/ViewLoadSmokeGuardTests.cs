@@ -643,10 +643,17 @@ public class ViewLoadSmokeGuardTests
                     Array.Empty<SystemToolkit.Abstractions.IModule>(),
                     new ServiceCollection().BuildServiceProvider());
 
-                stage = "measure + arrange";
-                window.Measure(new Size(1280, 800));
-                window.Arrange(new Rect(0, 0, 1280, 800));
-                window.UpdateLayout();
+                // 🔴 真机第二炸沉淀（同日 22:02）：只 Measure 不触发数据绑定 attach——
+                // ProgressBar/Slider 属 RangeBase，Value 绑定默认 TwoWay，打只读源属性
+                // 在 window.Show() 的布局绑定阶段才抛。必须挂真 DataContext 并 Show。
+                stage = "attach playback bar data context";
+                ((System.Windows.FrameworkElement)window.FindName("PlaybackBar")!)
+                    .DataContext = new FakePlaybackBarSource();
+
+                stage = "show + close";
+                window.ShowInTaskbar = false;
+                window.Show();
+                window.Close();
 
                 stage = "done";
             }
@@ -679,5 +686,35 @@ public class ViewLoadSmokeGuardTests
         }
 
         return dir?.FullName ?? throw new InvalidOperationException("未找到仓库根目录");
+    }
+
+    /// <summary>播放条假数据源（MUSIC-7 冒烟）：HasTrack=true 点亮整条，命令空转。</summary>
+    private sealed class FakePlaybackBarSource : SystemToolkit.Abstractions.IPlaybackBarSource
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        public bool HasTrack => true;
+        public SystemToolkit.Abstractions.IModule? NavigationModule => null;
+        public string Title => "冒烟曲";
+        public string Subtitle => "冒烟艺术家";
+        public object? Cover => null;
+        public bool IsPlaying => false;
+        public double ProgressPercent => 42;
+        public string PositionText => "01:00";
+        public string DurationText => "02:00";
+        public double Volume { get; set; } = 0.8;
+        public System.Windows.Input.ICommand TogglePlayCommand { get; } = new NoopCommand();
+        public System.Windows.Input.ICommand NextTrackCommand { get; } = new NoopCommand();
+        public System.Windows.Input.ICommand PreviousTrackCommand { get; } = new NoopCommand();
+        public void SeekToRatio(double ratio) => _ = ratio;
+        public void RaiseChanged(string name) => PropertyChanged?.Invoke(this,
+            new System.ComponentModel.PropertyChangedEventArgs(name));
+
+        private sealed class NoopCommand : System.Windows.Input.ICommand
+        {
+            public event EventHandler? CanExecuteChanged { add { } remove { } }
+            public bool CanExecute(object? parameter) => true;
+            public void Execute(object? parameter) { }
+        }
     }
 }

@@ -238,8 +238,10 @@
                 <!-- 顶缘 2px 定位线：点击 seek（拖动随 V1.1 打磨） -->
                 <Grid Grid.ColumnSpan="3" Height="2" VerticalAlignment="Top" Cursor="Hand"
                       Background="{DynamicResource Brush_SliderTrack}" MouseLeftButtonUp="PlaybackSeek_Click">
+                    <!-- 🔴 09-11 实机二炸：RangeBase.Value 绑定默认 TwoWay，源 ProgressPercent 只读
+                         → Show() 布局期抛异常整窗崩。显示用途必须显式 OneWay -->
                     <ProgressBar Height="2" BorderThickness="0" Minimum="0" Maximum="100"
-                                 Value="{Binding ProgressPercent}" Background="Transparent"
+                                 Value="{Binding ProgressPercent, Mode=OneWay}" Background="Transparent"
                                  Foreground="{DynamicResource Brush_Accent}" IsHitTestVisible="False"/>
                 </Grid>
 
