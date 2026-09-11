@@ -52,7 +52,11 @@ public sealed class NetManagerModule : ModuleBase
         services.AddSingleton<INetConfigService>(sp => new NetConfigService(
             sp.GetRequiredService<ICommandRunner>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager")));
-        services.AddSingleton<INetDiagnosticService, NetDiagnosticService>();
+        services.AddSingleton<INetDiagnosticService>(sp => new NetDiagnosticService(
+            sp.GetRequiredService<INetworkInfoService>(),
+            sp.GetRequiredService<INetProbe>(),
+            sp.GetRequiredService<IHostsCheckService>(),
+            sp.GetRequiredKeyedService<ILogger>("netmanager")));
         services.AddSingleton<INetRepairService>(sp => new NetRepairService(
             sp.GetRequiredService<ICommandRunner>(),
             sp.GetRequiredService<INetworkInfoService>(),

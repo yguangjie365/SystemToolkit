@@ -673,13 +673,20 @@ public sealed class LocalMusicScannerTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        MusicScanResult result = await _scanner.ScanAsync([dir.Path], null, cts.Token);
+        var result = MusicScanResult.Empty();
+        List<SystemToolkit.Core.Logging.LogEntry> bus = await BusCapture.RecordAsync(async () =>
+        {
+            result = await _scanner.ScanAsync([dir.Path], null, cts.Token);
+        });
 
         Assert.True(result.WasCancelled);
         Assert.Empty(result.Songs);
         Assert.False(result.IsClean);
         Assert.Equal(0, _tagReader.ReadCount);
-        Assert.True(_logger.HasWarning, _logger.Dump());
+        // LOG-4：取消留痕由 timing 记录承载（Warn 级 + Cancelled），不再走散点 logger
+        Assert.Contains(bus, e => e.Action == "ScanMusicLibrary"
+            && e.Outcome == SystemToolkit.Core.Logging.LogResult.Cancelled
+            && e.Level == SystemToolkit.Core.Logging.LogLevel.Warn);
     }
 
     /// <remarks>
@@ -704,13 +711,20 @@ public sealed class LocalMusicScannerTests
             return new MusicTagInfo { Title = Path.GetFileNameWithoutExtension(path) };
         };
 
-        MusicScanResult result = await _scanner.ScanAsync([dir.Path], null, cts.Token);
+        var result = MusicScanResult.Empty();
+        List<SystemToolkit.Core.Logging.LogEntry> bus = await BusCapture.RecordAsync(async () =>
+        {
+            result = await _scanner.ScanAsync([dir.Path], null, cts.Token);
+        });
 
         Assert.True(result.WasCancelled);
         // 至少 3 首（触发取消的那次读取本身也会入账），且远少于总数
         Assert.InRange(result.Songs.Count, 3, total - 1);
         Assert.All(result.Songs, s => Assert.False(string.IsNullOrWhiteSpace(s.Name)));
-        Assert.True(_logger.HasWarning, _logger.Dump());
+        // LOG-4：取消（保留部分结果）由 timing 记录承载，消息含「保留部分结果」
+        Assert.Contains(bus, e => e.Action == "ScanMusicLibrary"
+            && e.Outcome == SystemToolkit.Core.Logging.LogResult.Cancelled
+            && e.Message.Contains("保留部分结果", StringComparison.Ordinal));
     }
 
     // ───────────────────────── 日志 ─────────────────────────
@@ -739,10 +753,16 @@ public sealed class LocalMusicScannerTests
         dir.Write("bad.mp3", StubBytes);
         _tagReader.FailWhenPathContains = "bad";
 
-        await _scanner.ScanAsync([dir.Path, dir.Resolve("gone")]);
+        List<SystemToolkit.Core.Logging.LogEntry> bus =
+            await BusCapture.RecordAsync(async () =>
+            {
+                await _scanner.ScanAsync([dir.Path, dir.Resolve("gone")]);
+            });
 
         Assert.Contains(_logger.Messages, m => m.Contains("开始扫描 2 个文件", StringComparison.Ordinal));
-        Assert.Contains(_logger.Messages, m => m.Contains("成功 1、失败 1、不可达目录 1", StringComparison.Ordinal));
+        // LOG-4：终态三计数由 ScanMusicLibrary 结构化记录承载（成功/失败/不可达必须可见）
+        Assert.Contains(bus, e => e.Action == "ScanMusicLibrary"
+            && e.Message.Contains("成功 1、失败 1、不可达目录 1", StringComparison.Ordinal));
     }
 
     // ───────────────────────── 夹具 ─────────────────────────

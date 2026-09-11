@@ -19,13 +19,6 @@ public class LogFieldBoundaryTests : IDisposable
 
     public void Dispose() => AppLog.Reset();
 
-    private sealed class BusCapture : ILogSink
-    {
-        public List<LogEntry> Entries { get; } = new();
-
-        public void Emit(LogEntry entry) => Entries.Add(entry);
-    }
-
     private sealed class FakeRunner : ICommandRunner
     {
         public int ExitCode { get; set; }

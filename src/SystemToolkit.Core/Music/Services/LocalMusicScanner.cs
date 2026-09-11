@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Music.Models;
 
 namespace SystemToolkit.Core.Music.Services;
@@ -72,8 +73,11 @@ public sealed class LocalMusicScanner
         IProgress<MusicScanProgress>? progress = null,
         CancellationToken ct = default)
     {
+        // LOG-4：曲库扫描是分钟级长操作——四出口全部经 timing 收敛为一条三字段记录
+        LogTiming timing = _logger.Time("ScanMusicLibrary");
         if (rootDirectories is null || rootDirectories.Count == 0)
         {
+            timing.Complete(LogResult.Rejected, LogLevel.Info, "曲库扫描未启动：未提供任何根目录");
             return MusicScanResult.Empty();
         }
 
@@ -85,13 +89,15 @@ public sealed class LocalMusicScanner
         }
         catch (OperationCanceledException)
         {
-            _logger.Warn("[Music] 扫描在枚举阶段被取消");
+            timing.Complete(LogResult.Cancelled, LogLevel.Warn,
+                $"曲库扫描在枚举阶段被取消（不可达目录 {inaccessible.Count} 个）");
             return MusicScanResult.Empty() with { WasCancelled = true };
         }
 
         if (files.Count == 0)
         {
-            _logger.Info($"[Music] 扫描完成：未发现音频文件（不可达目录 {inaccessible.Count} 个）");
+            timing.Complete(LogResult.Success, LogLevel.Info,
+                $"曲库扫描完成：未发现音频文件（不可达目录 {inaccessible.Count} 个）");
             return new MusicScanResult([], [], [.. inaccessible]);
         }
 
@@ -136,12 +142,14 @@ public sealed class LocalMusicScanner
         {
             // 保留已扫到的部分结果：用户扫到第 3000 首时点取消，不该让这 3000 首作废。
             cancelled = true;
-            _logger.Warn($"[Music] 扫描被取消，保留已解析的 {songs.Count} 首");
         }
 
-        _logger.Info($"[Music] 扫描完成：成功 {songs.Count}、失败 {failures.Count}、不可达目录 {inaccessible.Count}（取消={cancelled}）");
-
         List<MusicSong> ordered = [.. songs.OrderBy(s => s.LocalPath, StringComparer.OrdinalIgnoreCase)];
+        timing.Complete(
+            cancelled ? LogResult.Cancelled : LogResult.Success,
+            cancelled ? LogLevel.Warn : LogLevel.Info,
+            $"曲库扫描{(cancelled ? "被取消（保留部分结果）" : "完成")}：成功 {songs.Count}、失败 {failures.Count}、不可达目录 {inaccessible.Count}");
+
         return new MusicScanResult(ordered, [.. failures], [.. inaccessible]) { WasCancelled = cancelled };
     }
 

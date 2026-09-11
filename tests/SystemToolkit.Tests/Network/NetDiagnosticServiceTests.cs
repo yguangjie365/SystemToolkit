@@ -1,3 +1,4 @@
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Network.Models;
 using SystemToolkit.Core.Network.Services;
 
@@ -47,6 +48,26 @@ public class NetDiagnosticServiceTests
         Assert.Equal(DiagStatus.Failed, StatusOf(steps, "适配器"));
         Assert.Equal(DiagStatus.Skipped, StatusOf(steps, "网关"));
         Assert.Contains("未检测到", Create().BuildConclusion(steps));
+    }
+
+    [Fact]
+    public async Task RunAsync_ChainCompletes_LogsRunDiagnosticsEntry()
+    {
+        _info.Adapters.Add(new NetAdapterInfo("以太网", "fake", NetType.Ethernet, OperStatus.Down, 1000, "AA", true,
+            new[] { "192.168.1.10/24" }, new[] { "192.168.1.1" }, Array.Empty<string>()));
+
+        List<LogEntry> bus = await BusCapture.RecordAsync(async () =>
+        {
+            var svc = new NetDiagnosticService(_info, _probe, new NetworkTestFakes.FakeHostsService(),
+                new BusLogger("net"));
+            await svc.RunAsync();
+        });
+
+        // 只读长链跑完即 Success（发现问题是诊断成果）；结论与步数进消息
+        LogEntry entry = Assert.Single(bus, e => e.Action == "RunDiagnostics");
+        Assert.Equal(LogResult.Success, entry.Outcome);
+        Assert.Contains("诊断链跑完", entry.Message);
+        Assert.NotNull(entry.DurationMs);
     }
 
     [Fact]

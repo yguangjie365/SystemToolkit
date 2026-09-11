@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Network.Models;
 
 namespace SystemToolkit.Core.Network.Services;
@@ -42,13 +44,15 @@ public sealed class NetDiagnosticService : INetDiagnosticService
     private readonly INetworkInfoService _info;
     private readonly INetProbe _probe;
     private readonly IHostsCheckService _hosts;
+    private readonly ILogger _logger;
 
-    /// <summary>依赖注入构造：信息采集 / 探针 / hosts 检查均经接口注入（测试以 fake 覆盖结论规则）。</summary>
-    public NetDiagnosticService(INetworkInfoService info, INetProbe probe, IHostsCheckService hosts)
+    /// <summary>依赖注入构造：信息采集 / 探针 / hosts 检查均经接口注入（测试以 fake 覆盖结论规则）；日志可选（LOG-4）。</summary>
+    public NetDiagnosticService(INetworkInfoService info, INetProbe probe, IHostsCheckService hosts, ILogger? logger = null)
     {
         _info = info;
         _probe = probe;
         _hosts = hosts;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>最近一次诊断的结论；未诊断过为空串。</summary>
@@ -61,6 +65,9 @@ public sealed class NetDiagnosticService : INetDiagnosticService
     /// <inheritdoc cref="INetDiagnosticService.RunWithProgressAsync"/>
     public async Task<IReadOnlyList<DiagStepResult>> RunWithProgressAsync(IProgress<DiagStepResult>? progress, CancellationToken ct = default)
     {
+        // LOG-4：诊断链整跑可达十几秒（量化 10 包 + MTU 二分）——三字段留一条链级记录，
+        // 步骤级明细仍走进度/结论；链本身跑完即 Success（发现问题是诊断的成果不是失败）
+        LogTiming timing = _logger.Time("RunDiagnostics");
         var results = new List<DiagStepResult>(4);
 
         // 结果进列表的同时上报进度（Running 快照在每步开始时上报，VM 按 Step 名对位刷新）
@@ -151,6 +158,8 @@ public sealed class NetDiagnosticService : INetDiagnosticService
         Add(await QuantifyStepAsync(gatewayOk ? gateways.First(g => reachable.Contains(g)) : null, publicOk, clock, ct).ConfigureAwait(false));
 
         Conclusion = BuildConclusion(results);
+        timing.Complete(LogResult.Success, LogLevel.Info,
+            $"诊断链跑完（{results.Count} 步）：{Conclusion}");
         return results;
     }
 
