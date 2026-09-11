@@ -15,15 +15,18 @@ public sealed class LogTiming : IDisposable
 {
     private readonly string _source;
     private readonly string _action;
+    private readonly bool _silent;
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
     private bool _completed;
 
     /// <summary>由 <see cref="LoggerExtensions.Time"/> 创建，勿直接 new。</summary>
-    internal LogTiming(ILogger logger, string source, string action)
+    internal LogTiming(ILogger logger, string action)
     {
         Logger = logger;
-        _source = source;
+        _source = logger.Source;
         _action = action;
+        // NullLogger 语义是「一切写入皆无」——Time 也不得绕过注入直写总线
+        _silent = logger is NullLogger || _source == "null";
     }
 
     private ILogger Logger { get; }
@@ -41,6 +44,12 @@ public sealed class LogTiming : IDisposable
         }
 
         _completed = true;
+        _stopwatch.Stop();
+        if (_silent)
+        {
+            return;
+        }
+
         AppLog.Write(LogEntry.Create(
             level, _source,
             message ?? $"{_action} {(outcome == LogResult.Success ? "完成" : outcome.ToString())}",

@@ -1,5 +1,9 @@
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
+using SystemToolkit.Core.Backup.Contracts;
+using SystemToolkit.Core.Backup.Models;
+using SystemToolkit.Core.Backup.Services;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Logging;
 using SystemToolkit.Shell;
@@ -690,7 +694,7 @@ public class LoggingGuardTests : IDisposable
         AppLog.AddSink(capture);
         var logger = new BusLogger("t");
 
-        using (LogTiming t = logger.Time("t", "RunRule"))
+        using (LogTiming t = logger.Time("RunRule"))
         {
             t.Complete();
         }
@@ -709,7 +713,7 @@ public class LoggingGuardTests : IDisposable
         AppLog.AddSink(capture);
         var logger = new BusLogger("t");
 
-        using (logger.Time("t", "RunRule"))
+        using (logger.Time("RunRule"))
         {
             // 模拟提前 return：不显式 Complete
         }
@@ -717,6 +721,121 @@ public class LoggingGuardTests : IDisposable
         LogEntry entry = Assert.Single(capture.Entries);
         Assert.Equal(LogLevel.Warn, entry.Level);
         Assert.Equal(LogResult.Cancelled, entry.Outcome);
+    }
+
+    /* ====================================================================
+     * 10. LOG-2：操作边界三字段（Action/Outcome/Duration）行为测试
+     * ==================================================================== */
+
+    [Fact]
+    public void Time_NullLogger_SilencesWholeChain()
+    {
+        var capture = new ListSink();
+        AppLog.AddSink(capture);
+
+        using (NullLogger.Instance.Time("Noop"))
+        {
+        }
+
+        Assert.Empty(capture.Entries); // NullLogger 注入时 Time 不得绕过注入直写总线
+    }
+
+    [Fact]
+    public async Task BackupRule_Success_LogsActionOutcomeAndDuration()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("log2_bak");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(temp, "src"));
+            string src = Path.Combine(temp, "src", "a.txt");
+            File.WriteAllText(src, "content", Encoding.UTF8);
+            var capture = new ListSink();
+            AppLog.AddSink(capture);
+            var svc = new BackupService(cfg, logger: new BusLogger("backup"));
+
+            BackupResult result = await svc.BackupRuleAsync(
+                new BackupRule { RuleName = "字段规则", SourcePath = src, SourceType = SourceTypes.File });
+
+            Assert.True(result.Success, result.Message);
+            LogEntry timingEntry = Assert.Single(capture.Entries, e => e.Action == "BackupRule");
+            Assert.Equal("backup", timingEntry.Source);
+            Assert.Equal(LogResult.Success, timingEntry.Outcome);
+            Assert.NotNull(timingEntry.DurationMs);
+        }
+        finally
+        {
+            AppLog.Reset();
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BackupRule_MissingSource_LogsFailedOutcome()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("log2_bak");
+        try
+        {
+            var capture = new ListSink();
+            AppLog.AddSink(capture);
+            var svc = new BackupService(cfg, logger: new BusLogger("backup"));
+
+            BackupResult result = await svc.BackupRuleAsync(
+                new BackupRule { RuleName = "缺源", SourcePath = Path.Combine(temp, "src3", "nope"), SourceType = SourceTypes.Folder });
+
+            Assert.False(result.Success);
+            LogEntry timingEntry = Assert.Single(capture.Entries, e => e.Action == "BackupRule");
+            Assert.Equal(LogResult.Failed, timingEntry.Outcome);
+        }
+        finally
+        {
+            AppLog.Reset();
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BackupRule_PreCancelled_LogsCancelledOutcome()
+    {
+        (BackupConfigService? cfg, string? temp) = TestHelpers.MakeConfig("log2_bak");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(temp, "src2"));
+            string src = Path.Combine(temp, "src2", "b.txt");
+            File.WriteAllText(src, "x", Encoding.UTF8);
+            var capture = new ListSink();
+            AppLog.AddSink(capture);
+            var svc = new BackupService(cfg, logger: new BusLogger("backup"));
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            BackupResult result = await svc.BackupRuleAsync(
+                new BackupRule { RuleName = "取消", SourcePath = src, SourceType = SourceTypes.File }, ct: cts.Token);
+
+            Assert.True(result.Canceled, $"Success={result.Success} Msg={result.Message}");
+            LogEntry timingEntry = Assert.Single(capture.Entries, e => e.Action == "BackupRule");
+            Assert.Equal(LogResult.Cancelled, timingEntry.Outcome);
+        }
+        finally
+        {
+            AppLog.Reset();
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RestoreSnapshot_MissingFilesDir_LogsFailedOutcome()
+    {
+        var capture = new ListSink();
+        AppLog.AddSink(capture);
+        var svc = new RestoreService(logger: new BusLogger("backup"));
+        var info = new SnapshotInfo { SnapshotId = "s1", BackupPath = @"C:\definitely\missing\snapshot\files" };
+
+        RestoreReport report = await svc.RestoreSnapshotAsync(info, null, ConflictPolicy.Overwrite);
+
+        Assert.False(report.Success);
+        LogEntry timingEntry = Assert.Single(capture.Entries, e => e.Action == "RestoreSnapshot");
+        Assert.Equal(LogResult.Failed, timingEntry.Outcome);
+        Assert.NotNull(timingEntry.DurationMs);
     }
 
     /* ====================================================================

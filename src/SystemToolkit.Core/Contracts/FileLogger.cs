@@ -29,6 +29,9 @@ public sealed class FileLogger : ILogger
     }
 
     /// <inheritdoc/>
+    public string Source => _inner.Source;
+
+    /// <inheritdoc/>
     public void Info(string message) => _inner.Info(message);
 
     /// <inheritdoc/>

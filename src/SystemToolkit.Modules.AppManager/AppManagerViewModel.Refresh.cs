@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Input;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Software.Services;
 
 namespace SystemToolkit.Modules.AppManager;
@@ -191,12 +192,13 @@ public partial class AppManagerViewModel
         if (pkg is null || pkg.IsBusy)
         {
             AddLog("安装未启动：目标为空或该行正忙，请稍后重试。");
+            _logger.Time("InstallPackage").Complete(LogResult.Rejected, LogLevel.Info, "安装未启动：目标为空或行忙");
             return;
         }
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "安装", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, "安装", "InstallPackage", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -205,12 +207,13 @@ public partial class AppManagerViewModel
         if (pkg is null || pkg.IsBusy)
         {
             AddLog("升级未启动：目标为空或该行正忙，请稍后重试。");
+            _logger.Time("UpgradePackage").Complete(LogResult.Rejected, LogLevel.Info, "升级未启动：目标为空或行忙");
             return;
         }
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "升级", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, "升级", "UpgradePackage", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -220,6 +223,7 @@ public partial class AppManagerViewModel
         if (pkg is null || pkg.IsBusy)
         {
             AddLog("卸载未启动：目标为空或该行正忙，请稍后重试。");
+            _logger.Time("UninstallPackage").Complete(LogResult.Rejected, LogLevel.Info, "卸载未启动：目标为空或行忙");
             return;
         }
 
@@ -227,18 +231,21 @@ public partial class AppManagerViewModel
                 $"确定要卸载以下软件吗？\n{pkg.Name}（{pkg.Id}）\n\n此操作将移除该软件，请谨慎操作。") != true)
         {
             AddLog("已取消卸载：" + pkg.Name);
+            _logger.Time("UninstallPackage").Complete(LogResult.Cancelled, LogLevel.Info, $"已取消卸载：{pkg.Name}");
             return;
         }
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "卸载", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
+        await RunPackageOperationAsync(pkg, "卸载", "UninstallPackage", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
     }
 
     /// <summary>单包操作公共编排：执行→结果留痕→局部状态更新（避免全量刷新导致状态集体闪变）。</summary>
-    private async Task RunPackageOperationAsync(WingetPackageVm pkg, string action,
+    private async Task RunPackageOperationAsync(WingetPackageVm pkg, string action, string actionKey,
         Func<CancellationToken, Task<WingetRunResult>> run, Action markLocal)
     {
+        // LOG-2：安装/升级/卸载是破坏性+长耗时操作，Action/Result/Duration 一条落齐
+        LogTiming timing = _logger.Time(actionKey);
         pkg.IsBusy = true;
         _opCts = new CancellationTokenSource(); // 审查：单条安装/升级/卸载可取消（CancelOperation 触发）
         bool stateChanged = false;
@@ -250,14 +257,19 @@ public partial class AppManagerViewModel
             AddLog(result.Success
                 ? $"✅ {action}完成：" + pkg.Name
                 : $"❌ {action}失败：{pkg.Name}（退出码 {result.ExitCode}）{WingetExitHint(result.ExitCode, pkg.Model.IsMsStore)}");
+            timing.Complete(
+                result.Success ? LogResult.Success : LogResult.Failed,
+                result.Success ? LogLevel.Info : LogLevel.Warn,
+                $"{action} {(result.Success ? "完成" : $"失败（退出码 {result.ExitCode}）")}：{pkg.Name}（{pkg.Id}）");
         }
         catch (OperationCanceledException)
         {
             AddLog($"{action}已取消：" + pkg.Name);
+            timing.Complete(LogResult.Cancelled, LogLevel.Info, $"{action}已取消：{pkg.Name}");
         }
         catch (Exception ex)
         {
-            _logger.Error($"{action}异常：{pkg.Name}（{pkg.Id}）", ex);
+            timing.Complete(LogResult.Failed, LogLevel.Error, $"{action}异常：{pkg.Name}（{pkg.Id}）", ex);
             AddLog($"{action}异常：{pkg.Name}（{ex.Message}）");
         }
         finally

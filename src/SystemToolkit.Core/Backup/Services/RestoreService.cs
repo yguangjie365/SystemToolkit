@@ -3,6 +3,7 @@ using System.Globalization;
 using SystemToolkit.Core.Backup.Contracts;
 using SystemToolkit.Core.Backup.Models;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Core.Backup.Services;
@@ -49,7 +50,7 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
     /// null 或空集合 = 整快照恢复。空目录只重建选中文件祖先链内的。
     /// </param>
     /// <returns>恢复结果报告（计数汇总与失败/跳过明细）。</returns>
-    public async Task<RestoreReport> RestoreSnapshotAsync(
+    public Task<RestoreReport> RestoreSnapshotAsync(
         SnapshotInfo info,
         string? targetRoot,
         ConflictPolicy policy,
@@ -58,6 +59,41 @@ public sealed class RestoreService : IRestoreService, IRestorePreviewProvider
         CancellationToken ct = default,
         IReadOnlyList<string>? trustedRoots = null,
         IReadOnlyCollection<string>? includeRelativePaths = null)
+    {
+        // LOG-2：操作边界三字段留痕（Action/Result/Duration）；内部各步日志不变
+        LogTiming timing = _logger.Time("RestoreSnapshot");
+        return RunAsync();
+
+        async Task<RestoreReport> RunAsync()
+        {
+            try
+            {
+                RestoreReport report = await RestoreSnapshotCoreAsync(
+                    info, targetRoot, policy, userChoice, reporter, ct, trustedRoots, includeRelativePaths)
+                    .ConfigureAwait(false);
+                timing.Complete(
+                    report.Success ? LogResult.Success : report.Canceled ? LogResult.Cancelled : LogResult.Failed,
+                    report.Success ? LogLevel.Info : LogLevel.Warn,
+                    $"快照「{info.SnapshotId}」恢复结束：{report.Message}");
+                return report;
+            }
+            catch (Exception ex)
+            {
+                timing.Complete(LogResult.Failed, LogLevel.Error, $"快照「{info.SnapshotId}」恢复中止", ex);
+                throw;
+            }
+        }
+    }
+
+    private async Task<RestoreReport> RestoreSnapshotCoreAsync(
+        SnapshotInfo info,
+        string? targetRoot,
+        ConflictPolicy policy,
+        Func<IReadOnlyList<string>, ConflictPolicy>? userChoice,
+        IProgressReporter? reporter,
+        CancellationToken ct,
+        IReadOnlyList<string>? trustedRoots,
+        IReadOnlyCollection<string>? includeRelativePaths)
     {
         Action<string>? log = reporter is null ? null : (Action<string>)reporter.OnLog;
         var report = new RestoreReport { SnapshotId = info.SnapshotId, RuleName = info.RuleName };

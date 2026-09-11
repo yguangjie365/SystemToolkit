@@ -11,6 +11,12 @@ namespace SystemToolkit.Core.Contracts;
 /// </remarks>
 public interface ILogger
 {
+    /// <summary>
+    /// 来源标签（模块 id / 子系统名）。默认 "app"——既有实现与测试假件零破坏，
+    /// BusLogger / FileLogger 覆写为自身真实来源（LOG-2，2026-09-11，供 Time() 助手取用）。
+    /// </summary>
+    string Source => "app";
+
     /// <summary>记录警告（可恢复的异常状态）。</summary>
     void Warn(string message);
 

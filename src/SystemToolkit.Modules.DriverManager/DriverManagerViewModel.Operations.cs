@@ -1,6 +1,7 @@
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Drivers;
+using SystemToolkit.Core.Logging;
 
 namespace SystemToolkit.Modules.DriverManager;
 
@@ -64,9 +65,11 @@ public partial class DriverManagerViewModel
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task RunBackupAsync()
     {
+        LogTiming timing = _logger.Time("DriverBackup");
         (IReadOnlyList<string> Names, string DestDir, bool AllThirdParty)? request = BackupWizardRequest?.Invoke();
         if (request is null)
         {
+            timing.Complete(LogResult.Cancelled, LogLevel.Info, "驱动备份向导取消，未启动");
             return; // 用户取消向导
         }
 
@@ -100,27 +103,30 @@ public partial class DriverManagerViewModel
                 {
                     AddLog($"✅ 导出完成：{names.Count} 个驱动包 → {destDir}");
                     StatusText = $"备份完成：{names.Count} 个驱动包 + 三件套 → {destDir}";
-                    _logger.Info($"驱动备份完成：{names.Count} 个包 → {destDir}");
+                    timing.Complete(LogResult.Success, LogLevel.Info,
+                        $"驱动备份完成：{names.Count} 个包 → {destDir}");
                 }
                 else
                 {
                     AddLog($"⚠ 导出部分失败（退出码 {result.Raw.ExitCode}），已成功导出 {result.Exported.Count}/{names.Count} 个包，三件套按实际内容生成；明细见日志");
                     StatusText = $"备份部分完成：{result.Exported.Count}/{names.Count} 个包 → {destDir}";
-                    _logger.Warn($"驱动备份部分失败：退出码 {result.Raw.ExitCode}，成功 {result.Exported.Count} 包");
+                    timing.Complete(LogResult.Failed, LogLevel.Warn,
+                        $"驱动备份部分失败：退出码 {result.Raw.ExitCode}，成功 {result.Exported.Count} 包");
                 }
             }
             else
             {
                 AddLog($"❌ 导出失败（退出码 {result.Raw.ExitCode}）：\n{result.Raw.Output}");
                 StatusText = $"导出失败（退出码 {result.Raw.ExitCode}），明细见日志";
-                _logger.Warn($"驱动备份失败：退出码 {result.Raw.ExitCode}");
+                timing.Complete(LogResult.Failed, LogLevel.Warn,
+                    $"驱动备份失败：退出码 {result.Raw.ExitCode}");
             }
         }
         catch (Exception ex)
         {
             AddLog($"❌ 备份过程异常：{ex.Message}");
             StatusText = "备份异常，明细见日志";
-            _logger.Error("驱动备份异常", ex);
+            timing.Complete(LogResult.Failed, LogLevel.Error, "驱动备份异常", ex);
         }
         finally
         {
@@ -133,18 +139,21 @@ public partial class DriverManagerViewModel
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task AddDriversAsync(string? mode)
     {
+        LogTiming timing = _logger.Time("DriverAddInf");
         bool install = string.Equals(mode, "install", StringComparison.OrdinalIgnoreCase);
         string actionName = install ? "安装" : "添加";
         string? folder = AddSourceFolderRequest?.Invoke();
         if (folder is null)
         {
             AddLog($"已取消{actionName}。");
+            timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：目录选择取消，未启动");
             return;
         }
 
         if (!Directory.Exists(folder))
         {
             AddLog($"{actionName}未启动：目录不存在——{folder}");
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录不存在 {folder}");
             return;
         }
 
@@ -153,6 +162,7 @@ public partial class DriverManagerViewModel
         if (infs.Count == 0)
         {
             AddLog($"{actionName}未启动：所选目录（含子目录）未找到任何 .inf 文件——{folder}");
+            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录内无 .inf——{folder}");
             return;
         }
 
@@ -163,6 +173,7 @@ public partial class DriverManagerViewModel
                 + "来源不可信的驱动可能危害系统安全，请确认来源可靠。\n确定继续吗？") != true)
         {
             AddLog($"已取消{actionName}。");
+            timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：二次确认取消");
             return;
         }
 
@@ -179,7 +190,8 @@ public partial class DriverManagerViewModel
             {
                 AddLog($"✅ {actionName}完成：{infs.Count} 个 INF 已提交到 Driver Store");
                 StatusText = $"{actionName}完成：{infs.Count} 个 INF";
-                _logger.Info($"驱动{actionName}完成：{infs.Count} 个 INF ← {folder}");
+                timing.Complete(LogResult.Success, LogLevel.Info,
+                    $"驱动{actionName}完成：{infs.Count} 个 INF ← {folder}");
             }
             else
             {
@@ -189,7 +201,8 @@ public partial class DriverManagerViewModel
                     : $"\n{result.Output}";
                 AddLog($"❌ {actionName}失败（退出码 {result.ExitCode}）：{detail}");
                 StatusText = $"{actionName}失败（退出码 {result.ExitCode}），明细见日志";
-                _logger.Warn($"驱动{actionName}失败：退出码 {result.ExitCode}，失败段 {failedSegments.Count} 个");
+                timing.Complete(LogResult.Failed, LogLevel.Warn,
+                    $"驱动{actionName}失败：退出码 {result.ExitCode}，失败段 {failedSegments.Count} 个");
             }
 
             await ScanAsync().ConfigureAwait(true);
@@ -199,7 +212,7 @@ public partial class DriverManagerViewModel
             // 审查 🔴 采纳（2026-09-09）：AddDriverAsync/AddManyAsync/ScanAsync 抛异常时同样被吞
             AddLog($"❌ {actionName}异常：{ex.Message}");
             StatusText = $"{actionName}异常：{ex.Message}";
-            _logger.Error($"驱动{actionName}异常：{ex.Message}", ex);
+            timing.Complete(LogResult.Failed, LogLevel.Error, $"驱动{actionName}异常", ex);
         }
         finally
         {
@@ -210,6 +223,7 @@ public partial class DriverManagerViewModel
     /// <summary>提权批量执行共用通道：单次 UAC 整批执行 → 重扫 Driver Store → 基于新列表复核真实状态。</summary>
     private async Task RunPrivilegedBatchAsync(List<DriverPackageVm> targets, bool force, string actionName)
     {
+        LogTiming timing = _logger.Time(force ? "DriverForceDelete" : "DriverDelete");
         IsOperating = true;
         try
         {
@@ -231,7 +245,8 @@ public partial class DriverManagerViewModel
                 {
                     AddLog($"✅ {actionName}完成：{targets.Count} 个驱动包已从 Driver Store 移除（重扫复核通过）");
                     StatusText = $"{actionName}完成：{targets.Count} 个驱动包";
-                    _logger.Info($"驱动{actionName}完成：{targets.Count} 个包");
+                    timing.Complete(LogResult.Success, LogLevel.Info,
+                        $"驱动{actionName}完成：{targets.Count} 个包");
                 }
                 else
                 {
@@ -239,7 +254,8 @@ public partial class DriverManagerViewModel
                            $"以下包仍存在于 Store（可能被设备重新挂载）：\n{string.Join("\n", remaining.Select(n => "  " + n))}" +
                            (force ? "" : "\n💡 提示：驱动可能正被设备使用。若确认要移除，可尝试「强制删除」（会连设备关联一并卸载）。"));
                     StatusText = $"{actionName}部分完成：{targets.Count - remaining.Count}/{targets.Count}，明细见日志";
-                    _logger.Warn($"驱动{actionName}部分完成：残留 {string.Join(", ", remaining)}");
+                    timing.Complete(LogResult.Failed, LogLevel.Warn,
+                        $"驱动{actionName}部分完成：残留 {string.Join(", ", remaining)}");
                 }
             }
             else
@@ -251,7 +267,8 @@ public partial class DriverManagerViewModel
                     : $"\n{result.Output}";
                 AddLog($"❌ {actionName}失败（退出码 {result.ExitCode}）：{detail}");
                 StatusText = $"{actionName}失败（退出码 {result.ExitCode}），明细见日志";
-                _logger.Warn($"驱动{actionName}失败：退出码 {result.ExitCode}，失败段 {failedSegments.Count} 个");
+                timing.Complete(LogResult.Failed, LogLevel.Warn,
+                    $"驱动{actionName}失败：退出码 {result.ExitCode}，失败段 {failedSegments.Count} 个");
             }
         }
         catch (Exception ex)
@@ -262,7 +279,7 @@ public partial class DriverManagerViewModel
             // 但"异常被吞 + 无提示"成立——修正论据后补 catch。
             AddLog($"❌ {actionName}异常：{ex.Message}");
             StatusText = $"{actionName}异常：{ex.Message}";
-            _logger.Error($"驱动{actionName}异常：{ex.Message}", ex);
+            timing.Complete(LogResult.Failed, LogLevel.Error, $"驱动{actionName}异常", ex);
         }
         finally
         {

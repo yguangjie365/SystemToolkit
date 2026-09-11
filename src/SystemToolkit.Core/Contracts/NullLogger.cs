@@ -10,6 +10,9 @@ public sealed class NullLogger : ILogger
     {
     }
 
+    /// <summary>固定为 "null"（<c>Time()</c> 助手据此整链静默，不绕过 NullLogger 往总线写）。</summary>
+    public string Source => "null";
+
     /// <summary>无操作。</summary>
     public void Warn(string message)
     {

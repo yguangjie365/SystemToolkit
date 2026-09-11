@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using Hardware.Info;
 using Microsoft.Win32;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Overview.Models;
 using SystemToolkit.Core.Utilities;
 
@@ -48,6 +49,8 @@ public sealed partial class OverviewService : IOverviewCollector
     /// <inheritdoc />
     public OverviewData Collect()
     {
+        // LOG-2：WMI 首次初始化可达 20s，属长操作——Action/Result/Duration 必须落
+        LogTiming timing = _logger.Time("CollectOverview");
         var data = new OverviewData();
         // 传感器（CPU/GPU 温度、负载、全量清单）是增强信息：拿不到（非管理员/
         // 驱动被安全软件拦截）返回 null，各统计卡自动回退到无温度形态
@@ -55,6 +58,7 @@ public sealed partial class OverviewService : IOverviewCollector
         data.Sensors = sensors;
         CollectHardware(data, sensors);
         CollectSystem(data);
+        timing.Complete();
         return data;
     }
 

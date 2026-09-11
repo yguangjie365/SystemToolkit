@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using SystemToolkit.Core.Backup.Contracts;
 using SystemToolkit.Core.Backup.Models;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Core.Backup.Services;
@@ -39,9 +40,21 @@ public sealed class BackupService : IBackupService
         CancellationToken ct = default)
     {
         var vssLeases = new List<VssLease>();
+        // LOG-2：操作边界三字段留痕（Action/Result/Duration）；GUI 与 --backup-worker 同走本入口
+        LogTiming timing = _logger.Time("BackupRule");
         try
         {
-            return await BackupRuleCoreAsync(rule, reporter, ct, vssLeases).ConfigureAwait(false);
+            BackupResult result = await BackupRuleCoreAsync(rule, reporter, ct, vssLeases).ConfigureAwait(false);
+            timing.Complete(
+                result.Success ? LogResult.Success : result.Canceled ? LogResult.Cancelled : LogResult.Failed,
+                result.Success ? LogLevel.Info : LogLevel.Warn,
+                $"规则「{rule.RuleName}」备份结束：{result.Message}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            timing.Complete(LogResult.Failed, LogLevel.Error, $"规则「{rule.RuleName}」备份中止", ex);
+            throw;
         }
         finally
         {
