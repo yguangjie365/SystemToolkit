@@ -49,7 +49,8 @@ public partial class App : Application
         }
 
         // ── 日志系统初始化：必须最早，之后任何失败才有地方留痕 ──
-        // 落点：分模块文件 + 汇总（文本 + JSONL），带滚动与保留期（防 736MB 事故重演）
+        // 落点：Serilog 引擎（AppLog 总线 → SerilogSink）：分模块文本 + 汇总文本/JSONL，
+        // 按日 + 10MB 双滚动，14 天保留 + 200MB 总量封顶（防 736MB 事故重演）
         AppLog.UseDefaultFileSinks();
         bool diag = e.Args.Contains("--diag", StringComparer.OrdinalIgnoreCase);
         AppLog.MinimumLevel = diag ? LogLevel.Trace : LogLevel.Info;
@@ -166,6 +167,9 @@ public partial class App : Application
             // 进程本来就要结束，这里的目的只是留痕。
             CrashLog.Write("释放服务容器失败", ex);
         }
+
+        // LOG-1：冲刷 Serilog 缓冲——「=== 退出 ===」与上面的释放留痕必须落盘后再关通道
+        AppLog.Shutdown();
 
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _singleInstanceMutex?.ReleaseMutex();

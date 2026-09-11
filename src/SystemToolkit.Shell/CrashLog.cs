@@ -4,7 +4,8 @@ using SystemToolkit.Core.Logging;
 namespace SystemToolkit.Shell;
 
 /// <summary>
-/// 启动期 / 全局异常落盘。Serilog 接入前的过渡通道（06 分册 §8.3）：
+/// 启动期 / 全局异常兜底通道（06 分册 §8.3）：进程最早期（日志总线尚未装配）与崩溃临界点
+/// 直写磁盘，不经缓冲；总线就绪后同时转发 <see cref="AppLog"/>（Serilog 落盘为 LOG-1 起）。
 /// 禁止静默吞异常——闪退类问题没有日志就只能靠猜。
 /// </summary>
 internal static class CrashLog

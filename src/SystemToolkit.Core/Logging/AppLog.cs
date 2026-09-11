@@ -58,19 +58,19 @@ public static class AppLog
     }
 
     /// <summary>
-    /// 装上默认文件落点：分模块文件 + 汇总（文本 + JSONL），带滚动与保留期。
+    /// 装上默认文件落点：<see cref="SerilogSink"/>（分模块文本 + 汇总文本/JSONL，
+    /// 按日 + 单文件超限双滚动，保留期与 200MB 总量封顶由 <see cref="LogMaintenance"/> 承接）。
     /// 宿主启动时调用一次即可。
     /// </summary>
     /// <param name="directory">覆盖默认目录（测试用）。</param>
     /// <param name="retainDays">保留天数。</param>
-    public static void UseDefaultFileSinks(string? directory = null, int retainDays = RollingFileSink.DefaultRetainDays)
+    /// <param name="maxBytes">单文件上限（06 册 §6：10MB）。</param>
+    public static void UseDefaultFileSinks(
+        string? directory = null,
+        int retainDays = LogMaintenance.DefaultRetainDays,
+        long maxBytes = SerilogSink.DefaultMaxBytes)
     {
-        string dir = directory ?? LogDirectory;
-
-        // ① 分模块：overview-20260906.log 等（沿用既有文件命名，老习惯不丢）
-        AddSink(new RollingFileSink(dir, e => e.Source, writeJsonl: false, retainDays: retainDays));
-        // ② 汇总：app-20260906.log（人读，全部来源按时间归并）+ app-20260906.jsonl（机读）
-        AddSink(new RollingFileSink(dir, _ => "app", writeJsonl: true, retainDays: retainDays));
+        AddSink(new SerilogSink(directory ?? LogDirectory, maxBytes, retainDays));
     }
 
     /// <summary>清空全部落点并把级别复位（测试用，避免用例间互相污染）。</summary>
@@ -80,6 +80,35 @@ public static class AppLog
         {
             Sinks.Clear();
             _minimumLevel = LogLevel.Info;
+        }
+    }
+
+    /// <summary>
+    /// 退出前冲刷并释放可销毁的落点（Serilog 缓冲刷新）。宿主 OnExit 调用，
+    /// 调用后总线回到「无落点」状态，与 <see cref="Reset"/> 的区别是会先 Dispose。
+    /// </summary>
+    public static void Shutdown()
+    {
+        ILogSink[] snapshot;
+        lock (Gate)
+        {
+            snapshot = Sinks.ToArray();
+            Sinks.Clear();
+        }
+
+        foreach (ILogSink sink in snapshot)
+        {
+            if (sink is IDisposable disposable)
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch
+                {
+                    // 关闭通道的失败不再外泄（同 Write 的兜底契约）
+                }
+            }
         }
     }
 

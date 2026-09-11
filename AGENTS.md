@@ -228,7 +228,7 @@ UI.Common（共享控件与设计令牌）
 - 跨平台 TFM 的 Core 内部调用 Windows API → 方法内 `OperatingSystem.IsWindows()` 运行时守卫，**不要**用 `[SupportedOSPlatform]`（会导致 CA1416）
 - ⚠️ `SystemToolkit.Core.*` 下写 `Environment.GetFolderPath` 会解析到自身命名空间，必须全限定为 `System.Environment`
 - 禁止 sync-over-async；异步方法必须带 `CancellationToken` 参数
-- 日志统一走 Serilog，字段：Timestamp / Level / Module / Action / Result / Duration / Exception / **CorrelationId**
+- 日志统一走 `AppLog` 进程内总线（业务侧只面向 `ILogger`/`LogEntry`），落盘引擎为 **Serilog**（LOG-1，2026-09-11）；字段：Timestamp / Level / Module / Action / Result / Duration / Exception / **CorrelationId**（`LogEntry` 承载，JSONL 平铺输出；`Result` 的 C# 属性名为 `Outcome` 以规避源码守卫对 `.Result` 的误报）
 - 长时间操作必须支持取消与进度上报，放后台执行，不阻塞 UI
 
 ---

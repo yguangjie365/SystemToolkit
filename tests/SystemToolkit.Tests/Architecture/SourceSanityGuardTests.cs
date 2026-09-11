@@ -29,7 +29,8 @@ public class SourceSanityGuardTests
         "VssRunner.cs", // ElevatedHelper VSS verb：结果文件与 Program.cs 同语义（写失败无法补救，退出码即结果）
         "OverviewViewModel.Report.cs",
         "HardwareSensorProbe.cs",
-        "RollingFileSink.cs", // 2026-09-06 日志系统：与 CrashLog/FileLogger 同为日志追加，写失败无需补救（已有 try/catch 自保）
+        // 2026-09-11（LOG-1）：RollingFileSink.cs 已删除——日志落盘移交 Serilog（SerilogSink 无直写模式），
+        // LogMaintenance 仅 File.Delete（不在本守卫扫描面内），豁免随之移除。
         // 2026-09-08（正则修正后暴露）：Dispose 路径的 Task.Wait(2s) 有界兜底——
         // IDisposable 无法 await，2s 上界后放弃等待属既定取舍，与 FileTransferService 同语义。
         "DeviceDiscoveryService.cs",

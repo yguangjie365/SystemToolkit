@@ -118,6 +118,7 @@
 | `Hardware.Info` | MIT | 硬件静态信息采集（CPU/内存/主板/磁盘） |
 | `NAudio` | MIT | 音乐播放内核（WASAPI / WaveOut） |
 | `TagLibSharp` | **LGPL-2.1-only** | 音频标签读取（标题/艺术家/专辑/时长/内嵌封面）——见下方 §4.2 的 LGPL 义务说明 |
+| `Serilog` + `Serilog.Sinks.File` + `Serilog.Formatting.Compact` | Apache-2.0 | 日志落盘引擎（按日/按量滚动文本 + Compact JSONL，LOG-1） |
 
 ### 4.1 ⚠️ LibreHardwareMonitorLib（MPL-2.0）义务说明
 

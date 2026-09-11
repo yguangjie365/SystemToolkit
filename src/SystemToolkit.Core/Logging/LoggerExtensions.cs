@@ -26,4 +26,12 @@ public static class LoggerExtensions
     /// </summary>
     public static IDisposable BeginScope(this ILogger logger, string? correlationId = null) =>
         LogScope.Begin(correlationId);
+
+    /// <summary>
+    /// 开启一次耗时测量（06 册 §4）：<c>using var t = logger.Time("backup", "RunRule");</c>，
+    /// 成功路径调 <c>t.Complete()</c>；未显式完成即释放按 <see cref="LogResult.Cancelled"/> 落
+    /// Warn 记录——🔴 取消也要留痕，不许静默返回。
+    /// </summary>
+    public static LogTiming Time(this ILogger logger, string source, string action) =>
+        new(logger, source, action);
 }

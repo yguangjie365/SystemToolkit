@@ -19,6 +19,10 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.1.0" />
+    <!-- LOG-1 日志落盘引擎（2026-09-11）：版本经 NuGet 查询 API 实查，Apache-2.0 经 nuspec 实查 -->
+    <PackageVersion Include="Serilog" Version="4.4.0" />
+    <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="TagLibSharp" Version="2.3.0" />
     <PackageVersion Include="VirtualizingWrapPanel" Version="2.0.11" />
     <PackageVersion Include="WatsonTcp" Version="6.4.0" />
