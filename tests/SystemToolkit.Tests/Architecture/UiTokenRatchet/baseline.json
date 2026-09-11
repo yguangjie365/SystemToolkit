@@ -34,9 +34,9 @@
   "src/SystemToolkit.Shell/MainWindow.xaml": {
     "margin": 9,
     "padding": 1,
-    "width": 4,
-    "height": 3,
-    "border": 1,
+    "width": 7,
+    "height": 7,
+    "border": 3,
     "stroke": 0
   },
   "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml": {

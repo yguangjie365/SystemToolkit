@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Extensions.DependencyInjection;
 using SystemToolkit.Abstractions;
 using SystemToolkit.UI.Common;
 
@@ -144,6 +145,54 @@ public partial class MainWindow : Window
         // 视图由模块 CreateView 产生、VM 为 DI 单例 → 重建只重置 UI 局部状态，业务状态保留。
         ThemeManager.ThemeChanged += OnThemeChanged;
         Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
+
+        // MUSIC-7：底部迷你播放条——数据源由音乐模块桥接注册（GetService 可选解析：
+        // 音乐模块被禁用时缺席，整条永久隐藏）；HasTrack=false（未选曲）时不占位
+        _playbackBar = provider.GetService<IPlaybackBarSource>();
+        if (_playbackBar is not null)
+        {
+            PlaybackBar.DataContext = _playbackBar;
+            _playbackBar.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(IPlaybackBarSource.HasTrack))
+                {
+                    PlaybackBar.Visibility = _playbackBar.HasTrack ? Visibility.Visible : Visibility.Collapsed;
+                }
+            };
+            PlaybackBar.Visibility = _playbackBar.HasTrack ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private readonly IPlaybackBarSource? _playbackBar;
+
+    /// <summary>播放条顶缘定位线：点击比例 → SeekToRatio。</summary>
+    private void PlaybackSeek_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_playbackBar is null || sender is not FrameworkElement line)
+        {
+            return;
+        }
+
+        double ratio = e.GetPosition(line).X / Math.Max(1.0, line.ActualWidth);
+        _playbackBar.SeekToRatio(ratio);
+    }
+
+    /// <summary>播放条左段点击：导航到来源模块页（引用比对 NavigationModule——F-1 红线禁按 Id 字符串分派）。</summary>
+    private void PlaybackMeta_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_playbackBar?.NavigationModule is null || NavList.ItemsSource is not IEnumerable<NavEntry> entries)
+        {
+            return;
+        }
+
+        foreach (NavEntry entry in entries)
+        {
+            if (entry is NavItem nav && ReferenceEquals(nav.Module, _playbackBar.NavigationModule))
+            {
+                NavList.SelectedItem = nav;
+                return;
+            }
+        }
     }
 
     /// <summary>主题切换 → 重新装载当前模块视图（继承主题包样式的控件随之刷新）。</summary>

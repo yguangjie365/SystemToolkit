@@ -75,8 +75,14 @@ public sealed class MusicManagerModule : ModuleBase
             audioProxy: sp.GetService<IAudioProxyService>(),
             catalog: sp.GetService<IOnlineMusicCatalogService>(),
             credentials: sp.GetService<IOnlineCredentialStore>(),
-            searchHistory: sp.GetService<ISearchHistoryStore>()));
+            searchHistory: sp.GetService<ISearchHistoryStore>(),
+            navigationModule: this));
         services.AddSingleton<MusicManagerView>();
+
+        // MUSIC-7：Shell 底部迷你播放条数据源——同一 VM 单例的桥接注册。
+        // 模块禁用（V1-008 落地后）时本注册随 RegisterServices 一并不存在，
+        // Shell GetService 得 null → 播放条整体隐藏。
+        services.AddSingleton<IPlaybackBarSource>(sp => sp.GetRequiredService<MusicManagerViewModel>());
     }
 
     /// <summary>模块私有 JSON 的落盘路径（02 §六统一配置根 <c>%LOCALAPPDATA%\SystemToolkit\</c>）。</summary>

@@ -128,7 +128,8 @@ public partial class MusicManagerViewModel : ObservableObject
         IAudioProxyService? audioProxy = null,
         IOnlineMusicCatalogService? catalog = null,
         IOnlineCredentialStore? credentials = null,
-        ISearchHistoryStore? searchHistory = null)
+        ISearchHistoryStore? searchHistory = null,
+        IModule? navigationModule = null)
     {
         // dispatcher：测试显式传 null 禁编组（无绑定激活的环境直执行安全）；
         // 生产由模块 DI 工厂显式传 UI 线程 Dispatcher（不可回退全局捕获——
@@ -145,6 +146,7 @@ public partial class MusicManagerViewModel : ObservableObject
         _catalog = catalog;
         _credentials = credentials;
         _searchHistoryStore = searchHistory;
+        NavigationModule = navigationModule; // MUSIC-7：播放条跳页导航目标（引用比对）
 
         // 🔴 审查 2026-09-11（🔴-3）：主题切换后重取播放器三刷。
         // 三个 Brush 字段是**初始化即定值**（Player.cs），而本 VM 是 DI 单例、主题切换只重建
@@ -942,6 +944,7 @@ public partial class MusicManagerViewModel : ObservableObject
             }
 
             QueueCurrent = song;
+            OnPropertyChanged(nameof(HasTrack)); // MUSIC-7：播放条显隐联动
         }
         catch (Exception ex)
         {
@@ -1003,6 +1006,7 @@ public partial class MusicManagerViewModel : ObservableObject
             }
 
             QueueCurrent = song;
+            OnPropertyChanged(nameof(HasTrack)); // MUSIC-7：播放条显隐联动
             if (result.Trial)
             {
                 // 试听片段可播但非完整版：显式告知（trial/reason 语义透传 UI，🔴 不静默）
@@ -1089,6 +1093,7 @@ public partial class MusicManagerViewModel : ObservableObject
     private void OnQueueCurrentChanged()
     {
         QueueCurrent = _queue.Current;
+        OnPropertyChanged(nameof(HasTrack)); // MUSIC-7：播放条显隐联动（含清空态）
         if (_queue.Current is not null)
         {
             CurrentTitle = _queue.Current.Name;

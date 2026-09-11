@@ -101,6 +101,37 @@ public class MusicManagerViewModelTests
             }
         }
     }
+
+    // ════════ MUSIC-7：Shell 迷你播放条契约映射（IPlaybackBarSource）════════
+
+    [Fact]
+    public void PlaybackBar_InitialIdleState_MapsContractSurface()
+    {
+        MusicManagerViewModel vm = CreateVm(out string dir);
+        try
+        {
+            var bar = (SystemToolkit.Abstractions.IPlaybackBarSource)vm;
+
+            Assert.False(bar.HasTrack);          // 未选曲 → 播放条不占位
+            Assert.Null(bar.NavigationModule);   // harness 未注入模块实例（生产由模块工厂传 this）
+            Assert.Equal("未在播放", bar.Title);
+            Assert.False(bar.IsPlaying);
+            Assert.Null(bar.Cover);
+            Assert.Equal(0, bar.ProgressPercent);
+            Assert.Same(vm.PlayPauseCommand, bar.TogglePlayCommand); // 命令别名同源，不复制逻辑
+            Assert.Same(vm.NextCommand, bar.NextTrackCommand);
+            Assert.Same(vm.PreviousCommand, bar.PreviousTrackCommand);
+
+            // 引擎缺席（headless/未注册）时 Seek 必须安全静默，不抛
+            bar.SeekToRatio(0.5);
+            bar.SeekToRatio(5);   // 越界钳制
+            bar.SeekToRatio(-1);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }
 
 /// <summary>
@@ -146,4 +177,5 @@ public class MusicManagerCancelScanTests
             }
         }
     }
+
 }
