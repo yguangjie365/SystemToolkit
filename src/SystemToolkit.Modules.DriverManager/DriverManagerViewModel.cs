@@ -254,9 +254,50 @@ public partial class DriverManagerViewModel : ObservableObject
 
     /// <summary>取消正在进行的扫描（审查：长操作取消，命中 CancellationToken 抛 OperationCanceledException）。</summary>
     [RelayCommand(CanExecute = nameof(CanCancelScan))]
-    private void CancelScan() => _scanCts?.Cancel();
+    private void CancelScan()
+    {
+        _scanCts?.Cancel();
+        _backupCts?.Cancel(); // v5 O-1：同一取消按钮承载备份取消
+    }
 
-    private bool CanCancelScan => IsScanning;
+    private bool CanCancelScan => IsCancelVisible; // v5 O-1：备份中同样可取消
+
+    /// <summary>取消入口可见条件（v6 O-1b 收窄）：扫描中或**备份**进行中。
+    /// 不再用 IsOperating——删除/添加/安装也置 IsOperating，但它们不可取消，
+    /// 罩上去只会出现"取消备份"空转按钮（v6 报告 O-1b）。</summary>
+    public bool IsCancelVisible => IsScanning || IsBackupRunning;
+
+    /// <summary>备份导出进行中（v6 O-1b：与泛化的 IsOperating 解耦，专用于可取消的备份）。
+    /// 审查 v7（A-1）：必须显式通知命令——CanCancelScan 是表达式属性，8.4.2 无 CommandManager 兜底，
+    /// 缺此特性则备份开始时按钮停在初始 disabled 态（与 _isScanning 同款约定）。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelScanCommand))]
+    private bool _isBackupRunning;
+
+    /// <summary>取消按钮文案随对象切换（扫描 / 备份）。</summary>
+    public string CancelButtonText => IsScanning ? "取消扫描" : "取消备份";
+
+    /// <summary>长操作遮罩文案：扫描固定语；备份透传 StatusText 的实时进度。</summary>
+    public string CancelOverlayText => IsScanning ? "正在扫描 Driver Store..." : StatusText;
+
+    /// <summary>驱动备份的取消令牌源（v5 O-1：整批导出单包写超时可达 20 分钟，必须可取消）。</summary>
+    private CancellationTokenSource? _backupCts;
+
+    partial void OnIsBackupRunningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsCancelVisible));
+        OnPropertyChanged(nameof(CancelButtonText));
+        OnPropertyChanged(nameof(CancelOverlayText));
+    }
+
+    partial void OnIsScanningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsCancelVisible));
+        OnPropertyChanged(nameof(CancelButtonText));
+        OnPropertyChanged(nameof(CancelOverlayText));
+    }
+
+    partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(CancelOverlayText));
 
     /// <summary>是否已有提权操作进行中（删除/导出互斥；扫描可并行，互不影响）。</summary>
     [ObservableProperty]

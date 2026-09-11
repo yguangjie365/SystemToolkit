@@ -212,14 +212,15 @@ Background="{DynamicResource Brush_Background}">
                     </ListView.View>
                 </ListView>
                     
-                <!-- 扫描中遮罩 -->
+                <!-- 长操作遮罩（审查 v5 O-1：扫描中 / 提权长操作（当前=备份）进行中，含取消入口；
+                     文案随对象切换——扫描显示固定语，备份显示 StatusText 的进度文案） -->
                 <Border Background="{DynamicResource Brush_SurfaceAlt}" Opacity="0.7"
-                        Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding IsCancelVisible, Converter={StaticResource BoolToVis}}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
-                        <TextBlock Text="正在扫描 Driver Store..." Margin="0,8,0,0" 
+                        <TextBlock Text="{Binding CancelOverlayText, Mode=OneWay}" Margin="0,8,0,0"
                                    Foreground="{DynamicResource Brush_TextSecondary}"/>
-                        <Button Content="取消扫描" Command="{Binding CancelScanCommand}" Margin="{DynamicResource Space_MD}" HorizontalAlignment="Center" Style="{DynamicResource CardButton}"/>
+                        <Button Content="{Binding CancelButtonText, Mode=OneWay}" Command="{Binding CancelScanCommand}" Margin="{DynamicResource Space_MD}" HorizontalAlignment="Center" Style="{DynamicResource CardButton}"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -247,15 +248,15 @@ Background="{DynamicResource Brush_Background}">
                         </StackPanel.Style>
                         <TextBlock Text="操作" FontSize="{DynamicResource Font_SizeCaption}" Foreground="{DynamicResource Brush_TextMuted}"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="刷新(R)"
-                                Command="{Binding ScanCommand}" ToolTip="重新枚举 Driver Store"/>
+                                Command="{Binding ScanCommand}" ToolTipService.ShowOnDisabled="True" ToolTip="重新枚举 Driver Store"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="添加驱动(A)…"
                                 Command="{Binding AddDriversCommand}" CommandParameter="add"
-                                ToolTip="pnputil /add-driver：选目录递归找 *.inf 加入 Driver Store（经提权通道）"/>
+                                ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /add-driver：选目录递归找 *.inf 加入 Driver Store（经提权通道）"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="安装驱动(I)"
                                 Command="{Binding AddDriversCommand}" CommandParameter="install"
-                                ToolTip="pnputil /add-driver /install：加入 Driver Store 并安装到匹配设备（经提权通道）"/>
+                                ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /add-driver /install：加入 Driver Store 并安装到匹配设备（经提权通道）"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="备份向导…"
-                                Command="{Binding RunBackupCommand}" ToolTip="pnputil /export-driver + manifest/devices/checksum"/>
+                                Command="{Binding RunBackupCommand}" ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /export-driver + manifest/devices/checksum"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="恢复向导…" IsEnabled="False"
                                 ToolTip="V0.3-C：HardwareId + 机器指纹匹配恢复"/>
                         <TextBlock Text="提示：点击任意行可查看该驱动包详情"
@@ -352,7 +353,7 @@ Background="{DynamicResource Brush_Background}">
 
                         <!-- 包级操作：仅保留单包备份（批量删除已移至底部状态栏） -->
                         <Button Style="{DynamicResource CompactActionButton}" Content="备份向导…"
-                                Command="{Binding RunBackupCommand}" ToolTip="pnputil /export-driver + manifest/devices/checksum"/>
+                                Command="{Binding RunBackupCommand}" ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /export-driver + manifest/devices/checksum"/>
                         <TextBlock Text="点其他行切换详情；勾选 CheckBox 后可在底部状态栏批量删除"
                                    FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
                                    TextWrapping="Wrap"/>

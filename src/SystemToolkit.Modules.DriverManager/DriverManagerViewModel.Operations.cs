@@ -76,11 +76,15 @@ public partial class DriverManagerViewModel
         (IReadOnlyList<string> names, string destDir, bool allThirdParty) = request.Value;
         DriverBackupScope scope = allThirdParty ? DriverBackupScope.ThirdPartyOnly : DriverBackupScope.All;
         IsOperating = true;
+        IsBackupRunning = true; // v6 O-1b：遮罩/取消按钮只跟随可取消的备份
+        _backupCts = new CancellationTokenSource();
         try
         {
             Progress<string> progress = new(t => StatusText = t);
+            // 审查 v5（O-1）：BackupAsync 带 20 分钟级写超时的整批导出，必须传 ct（服务层 4 处已消费）
             DriverBackupResult result = await _backup.BackupAsync(
-                names, Packages.Select(p => p.Model).ToList(), destDir, scope, progress).ConfigureAwait(true);
+                names, Packages.Select(p => p.Model).ToList(), destDir, scope, progress,
+                _backupCts.Token).ConfigureAwait(true);
 
             if (result.Missing.Count > 0)
             {
@@ -122,6 +126,13 @@ public partial class DriverManagerViewModel
                     $"驱动备份失败：退出码 {result.Raw.ExitCode}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            // 审查 v5（O-1）：用户取消不伪装为业务失败（口径对齐 B1）
+            AddLog("⚠ 驱动备份已取消——已导出的包保留在目标目录，可重新发起备份续做。");
+            StatusText = "备份已取消";
+            timing.Complete(LogResult.Cancelled, LogLevel.Info, "驱动备份用户取消");
+        }
         catch (Exception ex)
         {
             AddLog($"❌ 备份过程异常：{ex.Message}");
@@ -131,6 +142,9 @@ public partial class DriverManagerViewModel
         finally
         {
             IsOperating = false;
+            IsBackupRunning = false; // v6 O-1b
+            _backupCts?.Dispose();
+            _backupCts = null;
         }
     }
 
