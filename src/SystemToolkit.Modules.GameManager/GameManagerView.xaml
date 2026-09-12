@@ -589,32 +589,32 @@
                                         <!-- 最近游玩日期单独一行（参考稿 .card-last-played） -->
                                         <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding LastPlayedText}" Margin="0,5,0,0"/>
 
-                                        <!-- 操作行（参考稿：顶部分隔线 + 商店/启动两键均分等宽） -->
+                                        <!-- 操作行（参考稿：顶部分隔线 + 两键均分等宽）。
+                                             两列在**两种状态下都有键**——未安装：安装（主）+ 商店；已安装：商店 + 启动。
+                                             故批次 3 那个「未安装时 ColumnSpan 铺满」的 hack 已不需要（2026-09-13 批次 4）。 -->
                                         <Border BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,10,0,0">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <!-- 未安装卡片没有「启动」可点 → 本键铺满整行，不留半格空位
-                                                     （Grid.ColumnSpan 在 Setter 里用附加属性语法） -->
                                                 <Button Content="商店页面"
                                                         Command="{Binding DataContext.OpenStoreCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource CardActionButton}">
                                                             <Setter Property="Margin" Value="0,0,4,0"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsInstalled}" Value="False">
-                                                                    <Setter Property="Margin" Value="0"/>
-                                                                    <Setter Property="Grid.ColumnSpan" Value="2"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
                                                         </Style>
                                                     </Button.Style>
                                                 </Button>
-                                                <!-- 未安装时隐藏：对未安装的游戏，"启动/打开目录/卸载"全不适用
-                                                     （可交互 ≠ 有语义；安装引导属批次 4） -->
+                                                <!-- 安装引导（批次 4 · B3）：未安装游戏的唯一闭环动作。
+                                                     点击调 steam://install/<appid>，交给 Steam 弹安装向导（本程序不下载）。 -->
+                                                <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="安装" Margin="4,0,0,0"
+                                                        Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}"
+                                                        AutomationProperties.Name="安装此游戏"
+                                                        Command="{Binding DataContext.InstallGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <!-- 已安装：启动（打开目录/卸载收纳进 ⋯ 菜单） -->
                                                 <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="启动" Margin="4,0,0,0"
                                                         Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
                                                         Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -851,12 +851,17 @@
                                     </Grid>
                                 </StackPanel>
 
-                                <!-- 操作区：一主三次（主人裁定）。四个命令全是页面既有命令，参数 = SelectedGame，
-                                     未新增任何命令与 Core 能力 -->
+                                <!-- 操作区：一主 + 三次（主人裁定）。五个命令全是页面既有命令，参数 = SelectedGame，
+                                     批次 4 只新增了 InstallGame —— 与卡片同口径 -->
                                 <Border Style="{StaticResource DetailDivider}" Margin="{DynamicResource Space_MD}"/>
                                 <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
                                         Content="启动" Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                         Command="{Binding LaunchGameCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                <!-- 安装引导（B3）：未安装游戏的唯一闭环动作（安装在主键位、与已安装态的「启动」同位） -->
+                                <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
+                                        Content="安装" Visibility="{Binding SelectedGame.IsNotInstalled, Converter={StaticResource BoolToVis}}"
+                                        AutomationProperties.Name="安装此游戏"
+                                        Command="{Binding InstallGameCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 <Grid Margin="{DynamicResource Space_SM}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>

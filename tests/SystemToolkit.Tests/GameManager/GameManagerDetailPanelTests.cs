@@ -231,4 +231,33 @@ public class GameManagerDetailPanelTests
             Assert.False(notInstalled.ShowProgressBadge);
         });
     }
+
+    // ==================== 安装引导（批次 4 · B3） ====================
+
+    /// <summary>
+    /// Core 守卫：AppId=0 必须直接拒绝，**不能去开协议**。
+    /// ⚠️ 本用例只用 0 —— 非 0 会经 ShellOpen 真拉起 Steam 客户端（测试里绝不能做）。
+    /// </summary>
+    [Fact]
+    public void Core_InstallGame_RejectsZeroAppId()
+    {
+        var service = new SteamService();
+
+        Assert.False(service.InstallGame(0));
+    }
+
+    /// <summary>命令拿到 null 目标时必须是静默 no-op（不能抛、也不能写出误导性状态文案）。</summary>
+    [Fact]
+    public void InstallGameCommand_NullTarget_IsNoOp()
+    {
+        RunOnSta(() =>
+        {
+            var vm = new GameManagerViewModel(new SteamService());
+            string before = vm.StatusText;
+
+            vm.InstallGameCommand.Execute(null);
+
+            Assert.Equal(before, vm.StatusText);
+        });
+    }
 }

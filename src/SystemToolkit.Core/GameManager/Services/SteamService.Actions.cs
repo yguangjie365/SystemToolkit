@@ -66,6 +66,22 @@ public sealed partial class SteamService
         return ShellOpen($"steam://uninstall/{appId}");
     }
 
+    // =============== S18 安装引导（批次 4 · B3，与 S13 同构） ===============
+    /// <summary>
+    /// 安装引导：<c>steam://install</c> 协议拉起 Steam 客户端的安装向导。
+    /// <para>
+    /// 用于库存里「有游玩记录但本机未安装」的游戏——那是「库存视图」唯一能给出的闭环动作。
+    /// 本程序**不下载任何内容**：目标盘、语言、是否开始全部交给 Steam 自己的流程，用户在那里再确认。
+    /// </para>
+    /// </summary>
+    /// <returns>协议调用是否成功发起（false = AppId 为 0 或 Shell 调用异常）。</returns>
+    public bool InstallGame(uint appId)
+    {
+        if (appId == 0)
+            return false;
+        return ShellOpen($"steam://install/{appId}");
+    }
+
     // =============== S15 打开库（Shell 协议 steam://open/games，用户侧栏操作触发） ===============
     /// <summary>打开 Steam 库页（steam://open/games）。</summary>
     public bool OpenLibrary()

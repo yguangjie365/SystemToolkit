@@ -1117,6 +1117,30 @@ public partial class GameManagerViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// 安装引导（批次 4 · B3）：<c>steam://install</c> 协议拉起 Steam 安装向导。
+    /// <para>
+    /// 与 <see cref="UninstallGame"/> 同构。**不加本程序的确认门**——安装非破坏性，
+    /// 而 Steam 自己的向导里还要选盘、选语言、再确认一次；在这里再弹一次纯属重复打断。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private void InstallGame(GameCardVm? vm)
+    {
+        if (vm is null)
+        {
+            return;
+        }
+
+        Guard($"安装《{vm.Name}》", () =>
+        {
+            bool ok = _steam.InstallGame(vm.AppId);
+            StatusText = ok ? $"已提交安装请求：{vm.Name}（请在 Steam 窗口中确认）" : $"安装请求失败：{vm.Name}";
+            StatusLevel = ok ? 1 : 2;
+            _logger.Info($"安装游戏 {vm.Name}：{ok}");
+        });
+    }
+
     [RelayCommand]
     private void LaunchClient()
     {
