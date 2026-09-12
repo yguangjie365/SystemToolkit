@@ -113,44 +113,37 @@ public sealed partial class SteamService
             }
         }
 
-        // ---- ③ 补名：appinfo.vdf（本地唯一的"未安装条目"名称来源） ----
-        int missingNames = 0;
+        // ---- ③ 读 appinfo.vdf：既供补名（本地唯一的"未安装条目"名称来源），也供**类型过滤** ----
+        // 🔴 必须**无条件**读——类型过滤依赖它。此前只在"缺名"时读，于是 type=Config 的
+        // Steam 自带条目（appid 7 / 760 / 241100 / 2371090）混进列表，被显示成"未安装的游戏"
+        // （2026-09-13 实机反馈：Steam Client / Steam Screenshots / Steam Input Configs / Steam Game Notes）。
+        string appInfoPath = Path.Combine(installPath, "appcache", "appinfo.vdf");
+        IReadOnlyDictionary<uint, SteamAppInfoEntry> appInfo = AppInfoVdfParser.Parse(appInfoPath);
+        int appInfoCount = appInfo.Count;
         int namedFromAppInfo = 0;
-        int appInfoCount = 0;
-        foreach (SteamInventoryGame g in merged.Values)
+        int missingNames = 0;
+
+        foreach (uint appId in merged.Keys.ToArray())
         {
-            if (g.Name.Length == 0)
+            SteamInventoryGame g = merged[appId];
+            if (g.Name.Length > 0)
             {
-                missingNames++;
+                continue;
+            }
+
+            missingNames++;
+            if (appInfo.TryGetValue(appId, out SteamAppInfoEntry? entry) && entry.Name.Length > 0)
+            {
+                merged[appId] = g with { Name = entry.Name };
+                namedFromAppInfo++;
             }
         }
 
-        if (missingNames > 0)
+        if (appInfoCount == 0)
         {
-            string appInfoPath = Path.Combine(installPath, "appcache", "appinfo.vdf");
-            IReadOnlyDictionary<uint, SteamAppInfoEntry> appInfo = AppInfoVdfParser.Parse(appInfoPath);
-            appInfoCount = appInfo.Count;
-
-            foreach (uint appId in merged.Keys.ToArray())
-            {
-                SteamInventoryGame g = merged[appId];
-                if (g.Name.Length > 0)
-                {
-                    continue;
-                }
-
-                if (appInfo.TryGetValue(appId, out SteamAppInfoEntry? entry) && entry.Name.Length > 0)
-                {
-                    merged[appId] = g with { Name = entry.Name };
-                    namedFromAppInfo++;
-                }
-            }
-
-            if (appInfoCount == 0)
-            {
-                _logger.Warn(
-                    $"库存扫描：appinfo.vdf 解析为空（{appInfoPath}）——未安装条目名称将退化为 App {{id}}");
-            }
+            _logger.Warn(
+                $"库存扫描：appinfo.vdf 解析为空（{appInfoPath}）——未安装条目名称将退化为 App {{id}}，"
+                + "且无法按类型剔除 Steam 自带条目");
         }
 
         // 仍未命中的一律兜底为 App {id}（条目保留，不丢数据）
@@ -162,9 +155,9 @@ public sealed partial class SteamService
             }
         }
 
-        // ---- ④ 过滤非游戏（与 ScanInstalledGames 同口径） + 排序 + 统计 ----
+        // ---- ④ 过滤非游戏（**含按 appinfo 类型**） + 排序 + 统计 ----
         var games = merged.Values
-            .Where(g => !IsNonGame(g.AppId, g.Name))
+            .Where(g => !IsNonGame(g.AppId, g.Name, GetAppType(appInfo, g.AppId)))
             .OrderByDescending(g => g.LastPlayed)
             .ThenBy(g => g.AppId)
             .ToList();
@@ -201,6 +194,12 @@ public sealed partial class SteamService
             Error = errors.Count == 0 ? null : string.Join("；", errors),
         };
     }
+
+    /// <summary>
+    /// 取 appinfo 里该 AppId 的类型；表中没有该条目返回空串（= **类型未知**）。
+    /// </summary>
+    private static string GetAppType(IReadOnlyDictionary<uint, SteamAppInfoEntry> appInfo, uint appId)
+        => appInfo.TryGetValue(appId, out SteamAppInfoEntry? entry) ? entry.Type : string.Empty;
 
     /// <summary>
     /// 解析 <c>userdata/*/config/localconfig.vdf</c> 的游玩记录（appId → 时长/最近游玩）。

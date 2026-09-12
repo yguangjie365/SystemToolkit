@@ -166,11 +166,6 @@
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="MinHeight" Value="30"/>
         </Style>
-        <Style x:Key="DetailDangerButton" TargetType="Button" BasedOn="{StaticResource DetailActionButton}">
-            <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
-            <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
-        </Style>
         <!-- ============ B2 未安装显示（2026-09-13） ============
              尺寸一律走 Style Setter / 具名 Thickness：本文件 Width / BorderThickness / StrokeThickness
              裸值已顶满 UiTokenRatchet 基线，内联数字字面量会直接变红。 -->
@@ -547,38 +542,13 @@
                                         </Grid>
                                     </Border>
                                     <StackPanel Margin="14,12,14,14">
-                                        <!-- 名称行 + ⋯ 菜单（目录 / 卸载收纳进菜单，主行只留 启动 + 商店） -->
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                                                       Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"
-                                                       MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"/>
-                                            <Button Grid.Column="1" Style="{StaticResource CardActionButton}" Content="⋯"
-                                                    Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" AutomationProperties.Name="更多操作" ToolTip="更多操作"
-                                                    MinWidth="28" MinHeight="24"
-                                                    Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
-                                                    Click="OnCardMenuClick"
-                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
-                                                <Button.ContextMenu>
-                                                    <!-- ContextMenu 属独立可视树：DataContext 走 PlacementTarget.Tag（页级 VM），
-                                                         CommandParameter 走 PlacementTarget.DataContext（单卡 GameCardVm）。
-                                                         M-UI-2：主题化三件套（ToolkitContextMenu/MenuItem），告别系统原生观感 -->
-                                                    <ContextMenu Style="{DynamicResource ToolkitContextMenu}"
-                                                                 DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
-                                                        <MenuItem Header="打开安装目录" Style="{DynamicResource ToolkitMenuItem}"
-                                                                  Command="{Binding OpenFolderCommand}"
-                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                                        <Separator Style="{DynamicResource ToolkitMenuSeparator}"/>
-                                                        <MenuItem Header="⚠ 卸载此游戏" Style="{DynamicResource ToolkitMenuItemDanger}"
-                                                                  Command="{Binding UninstallGameCommand}"
-                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                                    </ContextMenu>
-                                                </Button.ContextMenu>
-                                            </Button>
-                                        </Grid>
+                                        <!-- 名称行：单击进入详情面板（2026-09-13 主人裁定——详情面板已提供
+                                             「打开安装目录」，且卸载一律交给 Steam 客户端处理，
+                                             故卡片上的 ⋯ 菜单连同其两个菜单项整体移除）。
+                                             不再需要 ⋯ 的占位列，故去掉外层 Grid，只留这一个 TextBlock。 -->
+                                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
+                                                   Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"
+                                                   MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"/>
 
                                         <!-- 元数据行（参考稿：占用 · 时长 单行 mono，圆点分隔） -->
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -866,9 +836,10 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <!-- 未安装时只留「商店页面」并铺满整行：另外三键对未安装的游戏都没有真实语义 -->
+                                    <!-- 未安装时只留「商店页面」并铺满整行（它对面那格是「打开目录」，对未安装项无意义）。
+                                         2026-09-13 主人裁定：卸载一律交给 Steam 客户端，本软件不再提供卸载入口，
+                                         故原来三列里的「⚠ 卸载」已移除、列数从 3 收到 2。 -->
                                     <Button Content="商店页面"
                                             Command="{Binding OpenStoreCommand}" CommandParameter="{Binding SelectedGame}">
                                         <Button.Style>
@@ -876,7 +847,7 @@
                                                 <Setter Property="Margin" Value="{DynamicResource Space_XXS}"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding SelectedGame.IsInstalled}" Value="False">
-                                                        <Setter Property="Grid.ColumnSpan" Value="3"/>
+                                                        <Setter Property="Grid.ColumnSpan" Value="2"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -885,9 +856,6 @@
                                     <Button Grid.Column="1" Style="{StaticResource DetailActionButton}" Content="打开目录" Margin="{DynamicResource Space_XXS}"
                                             Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                             Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedGame}"/>
-                                    <Button Grid.Column="2" Style="{StaticResource DetailDangerButton}" Content="⚠ 卸载" Margin="{DynamicResource Space_XXS}"
-                                            Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
-                                            Command="{Binding UninstallGameCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 </Grid>
                             </StackPanel>
                         </StackPanel>

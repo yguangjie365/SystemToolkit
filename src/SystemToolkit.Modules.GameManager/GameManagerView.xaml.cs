@@ -34,22 +34,6 @@ public partial class GameManagerView : UserControl
     }
 
     /// <summary>
-    /// 卡片「⋯」按钮 → 左键弹出 ContextMenu（M-UI-3 落地 2026-09-05）。
-    /// WPF 的 ContextMenu 默认只响应右键；左键呼出须手动置 IsOpen 并指定 PlacementTarget。
-    /// 菜单项的命令/参数绑定见 XAML 内注释（走 PlacementTarget.Tag / .DataContext 桥接）。
-    /// </summary>
-    private void OnCardMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button || button.ContextMenu is null)
-        {
-            return;
-        }
-
-        button.ContextMenu.PlacementTarget = button;
-        button.ContextMenu.IsOpen = true;
-    }
-
-    /// <summary>
     /// 账户区按钮 → 左键弹出账户下拉（A1，2026-09-13）。与卡片 ⋯ 菜单同款手法：
     /// WPF 的 ContextMenu 默认只响应右键，左键呼出须手动置 <c>PlacementTarget</c> 并 <c>IsOpen</c>。
     /// 菜单的 DataContext 经 <c>PlacementTarget.Tag</c> 桥接（XAML 内注释），

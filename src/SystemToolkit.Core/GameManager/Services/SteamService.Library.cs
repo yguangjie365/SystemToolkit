@@ -228,9 +228,36 @@ public sealed partial class SteamService
     /// 非游戏条目判定（Steam 公共运行库等）。已安装扫描与库存扫描**共用同一口径**，
     /// 避免两处过滤条件不同导致"同一款游戏在卡片网格里消失、在库存里又出现"。
     /// </summary>
-    private static bool IsNonGame(uint appId, string name) =>
-        appId == 228983
-        || name.Equals("Steamworks Common Redistributables", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// 非游戏条目过滤（命中任一即排除）：
+    /// <list type="number">
+    /// <item>appinfo 里的类型**存在且不是 <c>Game</c>**——本地唯一的类型来源。实测本机 4 条冒牌货
+    /// 都是 <c>type=Config</c>（appid 7 Steam Client / 760 Steam Screenshots /
+    /// 241100 Steam Input Configs / 2371090 Steam Game Notes），它们经 localconfig 进了库存、
+    /// 又被显示成「未安装的游戏」（2026-09-13 实机反馈）。</item>
+    /// <item><c>appId == 228983</c>（Steamworks 相关）。</item>
+    /// <item>名称为 <c>Steamworks Common Redistributables</c>。</item>
+    /// </list>
+    /// 🔴 <b>类型未知（空串）时判为「是游戏」</b>：appinfo 读不到时不能把整库判成非游戏——
+    /// 宁可多留一条可疑项，也不丢真实游戏。
+    /// </summary>
+    /// <param name="appId">AppId。</param>
+    /// <param name="name">显示名。</param>
+    /// <param name="type">appinfo 里的类型（可空/可空串 = 未知）。默认空 = 只走后两条判据。</param>
+    /// <remarks>
+    /// <c>internal</c> 而非 private：让测试**直接钉这份实现**。此前测试因判据私有而只能"按同一规则复述"，
+    /// 结果是改实现不会让测试变红——那种测试锁不住任何东西（2026-09-13 发现并改）。
+    /// </remarks>
+    internal static bool IsNonGame(uint appId, string name, string type = "")
+    {
+        if (type.Length > 0 && !type.Equals("Game", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return appId == 228983
+            || name.Equals("Steamworks Common Redistributables", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsNonGameEntry(SteamGame g) => IsNonGame(g.AppId, g.Name);
 

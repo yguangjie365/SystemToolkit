@@ -1090,32 +1090,10 @@ public partial class GameManagerViewModel : ObservableObject
         });
     }
 
-    /// <summary>卸载引导：steam://uninstall 协议拉起 Steam 自身卸载流程（不直接删文件，设计 §6）。</summary>
-    [RelayCommand]
-    private void UninstallGame(GameCardVm? vm)
-    {
-        if (vm is null)
-        {
-            return;
-        }
-
-        if (ConfirmRequest?.Invoke(
-                "卸载游戏",
-                $"将通过 Steam 卸载：{vm.Name}\n（占用 {vm.SizeOnDiskText}）\n\n"
-                + "会拉起 Steam 官方卸载流程，需要在该流程中再次确认。\n确定继续吗？") != true)
-        {
-            _logger.Info($"已取消卸载：{vm.Name}");
-            return;
-        }
-
-        Guard($"卸载《{vm.Name}》", () =>
-        {
-            bool ok = _steam.UninstallGame(vm.AppId);
-            StatusText = ok ? $"已提交卸载请求：{vm.Name}（请在 Steam 窗口中确认）" : $"卸载请求失败：{vm.Name}";
-            StatusLevel = ok ? 1 : 2;
-            _logger.Info($"卸载游戏 {vm.Name}：{ok}");
-        });
-    }
+    // 🔴 卸载入口已整体移除（2026-09-13 主人裁定）：卸载一律交给 Steam 客户端自己做，
+    //    本软件不再提供卸载按钮/菜单项，故 UninstallGameCommand 与其确认门一并删除。
+    //    Core 的 SteamService.UninstallGame（steam://uninstall 协议封装）**保留**——它本身就是
+    //    「交给 Steam 客户端」的机制、且设计 §6 记载该能力；当前无 UI 调用点。
 
     /// <summary>
     /// 安装引导（批次 4 · B3）：<c>steam://install</c> 协议拉起 Steam 安装向导。
