@@ -1,5 +1,7 @@
 # AGENTS.md — SystemToolkit 开发硬约束
 
+> 🆕 **新接入 Agent 请先读 [`Docs/PROJECT-OVERVIEW.md`](Docs/PROJECT-OVERVIEW.md)**（技术栈 / 目录 / 模块 / 流程 / 环境 / 契约 / 规范，8 章带溯源路径，约 8KB）。本文件是**硬约束速览**（27KB），建议按需查阅而非通读。文档全仓清单与时效评估见 [`Docs/DOCS-INVENTORY.md`](Docs/DOCS-INVENTORY.md)。
+
 > 📌 **本文件是速览。** 详细规范以 **[`Docs/09-开发规范/`](Docs/09-开发规范/README.md) 为唯一权威来源**（总纲 + 6 分册 + 任务板）。两者冲突时以 `Docs/09-开发规范/` 为准。
 > 🔴 动手前必须先读 [`Docs/09-开发规范/README.md`](Docs/09-开发规范/README.md) 与 [`05-多Agent协作与提交规范.md`](Docs/09-开发规范/05-多Agent协作与提交规范.md)。
 
