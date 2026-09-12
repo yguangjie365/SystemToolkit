@@ -83,6 +83,18 @@
                            style="display:none" aria-hidden="true" />
                 </div>
 
+                <!-- 待续传（2026-09-13）：下拉刷新/重载后列出未完成任务；空则整块隐藏。
+                     续传必须由用户重选文件——浏览器不允许页面自行恢复 File 句柄。 -->
+                <div class="pending-resume" id="pendingResume" hidden>
+                    <div class="pending-resume__head">
+                        <span class="pending-resume__title" id="pendingResumeTitle"></span>
+                        <button type="button" class="toolbar-btn" id="pendingClearAllBtn">全部清除</button>
+                    </div>
+                    <div class="pending-resume__list" id="pendingResumeList"></div>
+                    <p class="pending-resume__hint">续传需同名 + 同大小 + 同修改时间；不匹配时直接点上方「选择文件」即按新文件上传。</p>
+                </div>
+                <input type="file" id="resumeInput" style="display:none" aria-hidden="true" />
+
                 <!-- 上传记录汇总 + 清除（2026-09-11 主人反馈：记录只增不减，需要能清掉） -->
                 <div class="upload-summary" id="uploadSummary" hidden>
                     <span class="upload-summary__text" id="uploadSummaryText"></span>

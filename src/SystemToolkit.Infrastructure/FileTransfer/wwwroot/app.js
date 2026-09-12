@@ -24,6 +24,12 @@
     const UPLOAD_CHUNK_ENDPOINT = "/api/files/upload-chunk";
     // 分块大小：与服务端 ChunkSizeBytes 一致（8MB）
     const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+    // 同时上传的文件数上限（2026-09-13 主人要求）：超出**排队等待**，不拒绝。
+    // 只闸「文件级」并发——每个文件内部仍逐块串行（见 postChunkWithRetry）。
+    const UPLOAD_CONCURRENCY = 3;
+    // 未完成上传的持久化键：下拉刷新/重载后仍能列出「待续传」。
+    // 用 sessionStorage（关标签页即清）——长期残留无意义，服务端 .part 另有清理策略。
+    const PENDING_STORAGE_KEY = "stk_pending_uploads";
     // WebSocket 地址：ws(s)://当前主机/ws（带令牌）。
     // 必须是函数而非常量——配对是异步的，TOKEN 在页面初始化时才会拿到（扫码前为空）。
     const wsUrl = () => (window.location.protocol === "https:" ? "wss://" : "ws://")
@@ -59,6 +65,11 @@
         multiCount: $("multiCount"),
         multiZipBtn: $("multiZipBtn"),
         multiExitBtn: $("multiExitBtn"),
+        pendingResume: $("pendingResume"),
+        pendingResumeTitle: $("pendingResumeTitle"),
+        pendingResumeList: $("pendingResumeList"),
+        pendingClearAllBtn: $("pendingClearAllBtn"),
+        resumeInput: $("resumeInput"),
         deviceList: $("deviceList"),
         deviceCount: $("deviceCount"),
         toast: $("toast"),
@@ -95,6 +106,14 @@
         deviceTimer: null,
         // 当前激活的标签
         activeTab: "browse",
+        // 正在上传（持有并发槽）的任务数
+        uploadActive: 0,
+        // 排队等待的任务（FIFO）
+        uploadQueue: [],
+        // 本会话正在上传的 uploadKey 集合：用于把「待续传」区块里已在跑的任务滤掉，避免一处任务两处显示
+        activeKeys: new Set(),
+        // 点「重新选择」时挂起的待续传条目（选中文件后回到 handleResumePick 校验）
+        resumeTarget: null,
     };
 
     /* ============================================================
@@ -548,6 +567,201 @@
     }
 
     /* ============================================================
+       待续传记录（sessionStorage）
+       ============================================================ */
+
+    /**
+     * 上传任务的客户端键。
+     * 与服务端 ComputeUploadId 的**同一组三要素**对齐（相对名 + 大小 + 修改时间），
+     * 这样刷新后重选同一文件，服务端能认成同一任务并从 .part 的断点继续。
+     */
+    function uploadKey(relName, size, mtime) {
+        return relName + "\u0000" + size + "\u0000" + mtime;
+    }
+
+    function loadPending() {
+        try {
+            const raw = sessionStorage.getItem(PENDING_STORAGE_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr.filter((x) => x && x.key) : [];
+        } catch (e) {
+            return []; // 隐私模式 / 配额异常 → 退化为「不持久化」，不影响上传本身
+        }
+    }
+
+    function savePending(list) {
+        try {
+            sessionStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(list));
+        } catch (e) { /* 同上：静默退化 */ }
+    }
+
+    function upsertPending(entry) {
+        const list = loadPending();
+        const i = list.findIndex((x) => x.key === entry.key);
+        if (i >= 0) { list[i] = entry; } else { list.push(entry); }
+        savePending(list);
+    }
+
+    function removePending(key) {
+        savePending(loadPending().filter((x) => x.key !== key));
+    }
+
+    /* ============================================================
+       上传调度（并发上限 UPLOAD_CONCURRENCY，超出排队）
+       ============================================================ */
+
+    /**
+     * 入队。**先建任务行再排队**——这样排队的文件也有可见的「排队中 · 第 N/M 位」，
+     * 而不是选完一片安静（原实现是 forEach 直接全放，选 20 个就同时开 20 条 XHR，
+     * 手机端带宽被打满、每个都慢，也难以判断到底在传哪个）。
+     */
+    function enqueueUploads(files) {
+        const arr = Array.from(files || []);
+        if (arr.length === 0) return;
+        arr.forEach((file) => {
+            const taskId = "up-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+            const el = createUploadTaskElement(taskId, file);
+            // 🔴 入队即落待续传记录：**排队中的文件同样要记**——
+            // persist() 只在 uploadFile 内调用，而排队项还没进 uploadFile，
+            // 不在这里落盘的话，刷新时排在后面的文件会**静默消失**。
+            const mtime = file.lastModified || 0;
+            const relName = file.webkitRelativePath || file.name;
+            const key = uploadKey(relName, file.size, mtime);
+            el.dataset.uploadKey = key;
+            state.activeKeys.add(key); // 本会话在跑（含排队）→ 从「待续传」区块里滤掉，避免一处任务两处显示
+            upsertPending({
+                key: key, name: file.name, relName: relName, size: file.size,
+                mtime: mtime, received: 0, fromDir: !!file.webkitRelativePath, updatedAt: Date.now(),
+            });
+            dom.uploadList.appendChild(el);
+            state.uploadQueue.push({ file: file, taskId: taskId, el: el });
+        });
+        pumpUploadQueue();
+        refreshUploadSummary();
+    }
+
+    /** 调度器：放行队首任务直到达到并发上限 */
+    function pumpUploadQueue() {
+        while (state.uploadActive < UPLOAD_CONCURRENCY && state.uploadQueue.length > 0) {
+            const job = state.uploadQueue.shift();
+            state.uploadActive++;
+            runUploadJob(job);
+        }
+        updateQueuePositions();
+    }
+
+    /** 排队中的任务显示「排队中 · 第 N/M 位」 */
+    function updateQueuePositions() {
+        const total = state.uploadQueue.length + state.uploadActive;
+        state.uploadQueue.forEach((job, idx) => {
+            const st = job.el.querySelector(".upload-task__status");
+            if (!st || st.classList.contains("is-done") || st.classList.contains("is-fail")) return;
+            st.className = "upload-task__status is-queued";
+            st.textContent = "排队中 · 第 " + (state.uploadActive + idx + 1) + "/" + total + " 位";
+        });
+    }
+
+    /**
+     * 跑一个任务。**并发槽必须在最外层归还**——无论成功、失败还是异常，
+     * 少归还一次队列就永久卡住（这是「限制并发」类实现最容易出的问题）。
+     */
+    function runUploadJob(job) {
+        const st = job.el.querySelector(".upload-task__status");
+        if (st && st.classList.contains("is-queued")) {
+            st.className = "upload-task__status";
+            st.textContent = "等待中";
+        }
+        uploadFile(job.file, job.el)
+            .catch((e) => {
+                showToast((job.file.name || "文件") + "：上传中断（"
+                    + ((e && e.message) ? e.message : String(e)) + "）", "error");
+            })
+            // 用 finally 而不是 then：万一 catch 回调自己抛异常，槽位仍然要归还——
+            // 漏还一次队列就永久卡在并发上限以下，再也起不了新任务
+            .finally(() => {
+                state.uploadActive--;
+                pumpUploadQueue();
+                refreshUploadSummary();
+            });
+    }
+
+    /* ============================================================
+       待续传区块（下拉刷新 / 重载后出现）
+       ============================================================ */
+
+    /** 渲染待续传区块；已在本次会话上传中的条目过滤掉，避免一处任务两处显示 */
+    function renderPendingResume() {
+        if (!dom.pendingResume) return;
+        const list = loadPending().filter((x) => !state.activeKeys.has(x.key));
+        if (list.length === 0) {
+            dom.pendingResume.hidden = true;
+            dom.pendingResumeList.innerHTML = "";
+            return;
+        }
+        dom.pendingResume.hidden = false;
+        dom.pendingResumeTitle.textContent = "有 " + list.length + " 个上传未完成";
+        dom.pendingResumeList.innerHTML = list.map((e, idx) => {
+            const pct = e.size > 0 ? Math.round((e.received / e.size) * 100) : 0;
+            const hint = e.received > 0
+                ? formatFileSize(e.received) + " / " + formatFileSize(e.size) + "（" + pct + "%）"
+                : "0 / " + formatFileSize(e.size) + "（未开始）";
+            const label = e.fromDir ? "重新选择所在文件夹" : "重新选择此文件";
+            return '<div class="pending-item">'
+                + '<div class="pending-item__line">'
+                + '<span class="pending-item__name" title="' + escapeHtml(e.relName) + '">' + escapeHtml(e.relName) + '</span>'
+                + '<span class="pending-item__hint">' + hint + '</span>'
+                + '</div>'
+                + '<div class="pending-item__actions">'
+                + '<button type="button" class="pending-item__btn" data-resume="' + idx + '">' + label + '</button>'
+                + '<button type="button" class="pending-item__btn pending-item__btn--ghost" data-drop="' + idx + '">清除</button>'
+                + '</div></div>';
+        }).join("");
+    }
+
+    /** 待续传区块的按钮：续传（打开选择器）或清除 */
+    function onPendingAction(e) {
+        const btn = e.target.closest("[data-resume],[data-drop]");
+        if (!btn) return;
+        const idx = parseInt(btn.dataset.resume !== undefined ? btn.dataset.resume : btn.dataset.drop, 10);
+        const list = loadPending().filter((x) => !state.activeKeys.has(x.key));
+        const entry = list[idx];
+        if (!entry) { renderPendingResume(); return; }
+
+        if (btn.dataset.drop !== undefined) {
+            removePending(entry.key);
+            renderPendingResume();
+            showToast("已清除待续传项：" + entry.relName, "info");
+            return;
+        }
+        // 续传：必须由用户重选文件——浏览器安全模型不允许页面自行恢复 File 句柄
+        state.resumeTarget = entry;
+        if (entry.fromDir) { dom.dirInput.click(); } else { dom.resumeInput.click(); }
+    }
+
+    /**
+     * 用户在「续传」流程里重选了文件/文件夹：按三要素校验，匹配上才续传。
+     * 校验不通过时**不自动改按新文件上传**——那会在用户以为续传时白传一遍。
+     */
+    function handleResumePick(files) {
+        const entry = state.resumeTarget;
+        state.resumeTarget = null;
+        const picked = Array.from(files || []);
+        if (!entry) { enqueueUploads(picked); return; }
+        if (picked.length === 0) { renderPendingResume(); return; }
+
+        const match = picked.find((f) => (f.webkitRelativePath || f.name) === entry.relName
+            && f.size === entry.size && (f.lastModified || 0) === entry.mtime);
+        if (!match) {
+            showToast("与待续传项不匹配：需同名 + 同大小 + 同修改时间。"
+                + "若要当作新文件上传，请直接点「选择文件」。", "error");
+            renderPendingResume();
+            return;
+        }
+        showToast("匹配成功，从已传位置继续：" + entry.relName, "info");
+        enqueueUploads([match]);
+    }
+
+    /* ============================================================
        上传
        ============================================================ */
 
@@ -559,19 +773,23 @@
      * 已传的部分不会重来。用 XHR 而非 fetch 是为了拿 upload progress 事件。
      *
      * @param {File} file
+     * @param {HTMLElement} taskEl 调度器预先建好的任务行（「排队中」状态需要有地方显示）
      */
-    async function uploadFile(file) {
+    async function uploadFile(file, taskEl) {
         // 客户端预检：与服务端上限对齐，避免大文件白传一趟
         if (file.size > UPLOAD_MAX_BYTES) {
             showToast(file.name + "：超过 " + formatFileSize(UPLOAD_MAX_BYTES) + " 上传上限", "error");
+            const st0 = taskEl && taskEl.querySelector(".upload-task__status");
+            if (st0) { st0.className = "upload-task__status is-fail"; st0.textContent = "超限"; }
+            // 入队时已落了一条待续传记录，但这条永远传不上去 → 清掉，不留幽灵
+            const badKey = uploadKey(file.webkitRelativePath || file.name, file.size, file.lastModified || 0);
+            state.activeKeys.delete(badKey);
+            removePending(badKey);
+            renderPendingResume();
             return;
         }
 
-        const taskId = "up-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-        const taskEl = createUploadTaskElement(taskId, file);
-        dom.uploadList.appendChild(taskEl);
-        refreshUploadSummary(); // 新任务入列 → 汇总条出现
-
+        // 任务行由调度器（enqueueUploads）预先建好并传入——这样「排队中」才有地方显示
         const statusEl = taskEl.querySelector(".upload-task__status");
         const barEl = taskEl.querySelector(".progress__bar");
         const mtime = file.lastModified || 0;
@@ -579,18 +797,47 @@
         const relName = file.webkitRelativePath || file.name;
         const meta = { name: relName, size: file.size, mtime: mtime };
 
+        // ── 待续传持久化（2026-09-13）──
+        // 键与「服务端 uploadId 三要素」对齐：刷新后重选同一文件可续传（不重传已传部分）
+        const pendingKey = uploadKey(relName, file.size, mtime);
+        const fromDir = !!file.webkitRelativePath;
+        let lastOffset = 0;
+        let lastPersist = 0;
+        taskEl.dataset.uploadKey = pendingKey;
+        state.activeKeys.add(pendingKey);
+        const persist = (received) => {
+            upsertPending({
+                key: pendingKey, name: file.name, relName: relName, size: file.size,
+                mtime: mtime, received: received, fromDir: fromDir, updatedAt: Date.now(),
+            });
+        };
+        const settle = () => {
+            state.activeKeys.delete(pendingKey);
+            renderPendingResume();
+        };
+        persist(0); // 一入列就落一条：哪怕马上刷新也能列出
+
         const setProgress = (loaded) => {
             const pct = file.size > 0 ? Math.round((loaded / file.size) * 100) : 100;
             barEl.style.width = pct + "%";
             statusEl.textContent = pct + "%";
             barEl.classList.toggle("is-active", pct < 100);
+            // 进度落盘要节流：刷新后需显示「已传多少」，但每次 progress 事件都写 sessionStorage 会卡
+            const now = Date.now();
+            if (now - lastPersist > 500) {
+                lastPersist = now;
+                persist(loaded);
+            }
         };
         const fail = (msg) => {
             barEl.classList.remove("is-active");
             statusEl.textContent = "失败";
             statusEl.className = "upload-task__status is-fail";
             showToast(file.name + "：" + msg, "error");
-            refreshUploadSummary(); // 状态落定 → 汇总条「N 个已完成」+1
+            // 失败正是最需要续传的场景：保留记录（含已传偏移），刷新后仍能列出并接着传
+            persist(lastOffset);
+            settle();
+            refreshUploadSummary();
         };
 
         try {
@@ -601,6 +848,8 @@
                 if (resp.ok) {
                     const st = await resp.json();
                     offset = Math.min(st.received || 0, file.size);
+                    lastOffset = offset;
+                    persist(offset);
                     if (offset > 0) {
                         setProgress(offset);
                         showToast(file.name + "：从 " + formatFileSize(offset) + " 处继续上传", "info");
@@ -622,6 +871,7 @@
                 if (!ok) return;
 
                 offset = end;
+                lastOffset = offset;
             }
 
             // ③ 完成
@@ -629,12 +879,15 @@
             barEl.style.width = "100%";
             statusEl.textContent = "完成";
             statusEl.className = "upload-task__status is-done";
-            refreshUploadSummary(); // 状态落定 → 汇总条「N 个已完成」+1
+            removePending(pendingKey); // 定稿成功 → 待续传记录出清
+            settle();
+            refreshUploadSummary();
             if (state.activeTab === "browse") {
                 fetchFiles(state.currentPath);
             }
         } catch (e) {
-            // 兜底：作为 forEach 回调时返回的 Promise 无人接管，异常必须自己吃掉
+            // 兜底：上传 Promise 已由调度器接管，但异常仍必须自己吃掉——
+            // 否则这条任务会永远停在「进行中」，且并发槽不归还会让队列卡死
             fail("上传异常：" + ((e && e.message) ? e.message : String(e)));
         }
     }
@@ -743,8 +996,7 @@
      * 处理文件选择
      */
     function handleFiles(files) {
-        if (!files || files.length === 0) return;
-        Array.from(files).forEach(uploadFile);
+        enqueueUploads(files);
     }
 
     /**
@@ -754,13 +1006,24 @@
     function refreshUploadSummary() {
         if (!dom.uploadSummary) return;
         const tasks = Array.from(dom.uploadList.querySelectorAll(".upload-task"));
-        const settled = tasks.filter((el) =>
-            el.querySelector(".upload-task__status.is-done, .upload-task__status.is-fail")).length;
+        if (tasks.length === 0) {
+            dom.uploadSummary.hidden = true;
+            return;
+        }
+        // 加了并发排队后，「N 个已完成」会盖掉「几个在传、几个在排队」——分状态计数更诚实
+        const done = tasks.filter((el) => el.querySelector(".upload-task__status.is-done")).length;
+        const failed = tasks.filter((el) => el.querySelector(".upload-task__status.is-fail")).length;
+        const queued = tasks.filter((el) => el.querySelector(".upload-task__status.is-queued")).length;
+        const running = tasks.length - done - failed - queued;
 
-        dom.uploadSummary.hidden = tasks.length === 0;
-        dom.uploadSummaryText.textContent = settled > 0
-            ? settled + " 个已完成"
-            : tasks.length + " 个进行中";
+        const parts = ["共 " + tasks.length + " 项"];
+        if (running > 0) parts.push(running + " 进行中");
+        if (queued > 0) parts.push(queued + " 排队");
+        if (done > 0) parts.push(done + " 已完成");
+        if (failed > 0) parts.push(failed + " 失败");
+
+        dom.uploadSummary.hidden = false;
+        dom.uploadSummaryText.textContent = parts.join(" · ");
     }
 
     /**
@@ -771,11 +1034,14 @@
         let removed = 0;
         dom.uploadList.querySelectorAll(".upload-task").forEach((el) => {
             if (el.querySelector(".upload-task__status.is-done, .upload-task__status.is-fail")) {
+                // 用户显式清掉的失败项，不该再出现在「待续传」里
+                if (el.dataset.uploadKey) removePending(el.dataset.uploadKey);
                 el.remove();
                 removed++;
             }
         });
 
+        renderPendingResume();
         refreshUploadSummary();
         showToast(removed > 0 ? "已清除 " + removed + " 条上传记录" : "没有可清除的记录", "info");
     }
@@ -793,12 +1059,27 @@
             dom.fileInput.click();
         });
         dom.fileInput.addEventListener("change", (e) => {
-            handleFiles(e.target.files);
+            // 若这次选择来自「待续传」按钮，走指纹校验而非当作新文件
+            if (state.resumeTarget) { handleResumePick(e.target.files); }
+            else { handleFiles(e.target.files); }
             e.target.value = ""; // 允许重复选择同一文件
+        });
+        dom.resumeInput.addEventListener("change", (e) => {
+            handleResumePick(e.target.files);
+            e.target.value = "";
         });
 
         // 清除已完成/失败的上传记录（进行中的保留）
         dom.clearUploadsBtn.addEventListener("click", clearSettledUploads);
+
+        // 待续传区块：续传 / 清除 / 全部清除
+        dom.pendingResumeList.addEventListener("click", onPendingAction);
+        dom.pendingClearAllBtn.addEventListener("click", () => {
+            const n = loadPending().length;
+            savePending([]);
+            renderPendingResume();
+            showToast(n > 0 ? "已清除 " + n + " 条待续传" : "没有待续传记录", "info");
+        });
 
         // 多选打包下载
         dom.multiToggleBtn.addEventListener("click", () => {
@@ -814,7 +1095,9 @@
             dom.dirInput.click();
         });
         dom.dirInput.addEventListener("change", (e) => {
-            handleFiles(e.target.files);
+            // 目录来源的待续传项：选中整个文件夹后按三要素匹配，只续传匹配上的那一个
+            if (state.resumeTarget) { handleResumePick(e.target.files); }
+            else { handleFiles(e.target.files); }
             e.target.value = "";
         });
 
@@ -1236,6 +1519,9 @@
 
         // 加载初始文件列表
         fetchFiles("");
+
+        // 上次会话（或刷新前）未完成的上传 → 列成「待续传」
+        renderPendingResume();
 
         // 启动设备轮询
         startDeviceRefresh();

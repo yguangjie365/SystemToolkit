@@ -77,15 +77,18 @@
 
         <!-- ============ Tab 行 ============ -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,14">
+            <!-- 2026-09-13 主人要求：「手机通道」（手机 → 电脑）提到前面并作为默认页。
+                 注意 Tag 语义不变（0 = 电脑互传面板 / 1 = 手机通道面板），
+                 OnTabChecked 与两个面板的默认 Visibility 必须与之保持一致。 -->
             <RadioButton Style="{DynamicResource SectionTab}" GroupName="FtTabs" IsChecked="True"
-                         Content="电脑互传" Tag="0" Checked="OnTabChecked"/>
-            <RadioButton Style="{DynamicResource SectionTab}" GroupName="FtTabs"
                          Content="手机通道" Tag="1" Checked="OnTabChecked"/>
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="FtTabs"
+                         Content="电脑互传" Tag="0" Checked="OnTabChecked"/>
         </StackPanel>
 
         <Grid Grid.Row="2" x:Name="TabContent">
-            <!-- ============ ① 电脑互传 ============ -->
-            <ScrollViewer x:Name="DesktopPanel" VerticalScrollBarVisibility="Auto">
+            <!-- ============ 电脑互传面板（默认折叠：Tab 默认停在手机通道） ============ -->
+            <ScrollViewer x:Name="DesktopPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- 本机状态与服务 -->
                     <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
@@ -430,8 +433,8 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- ============ ② 手机通道（批次二） ============ -->
-            <ScrollViewer x:Name="MobilePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+            <!-- ============ 手机通道面板（批次二；默认展开） ============ -->
+            <ScrollViewer x:Name="MobilePanel" Visibility="Visible" VerticalScrollBarVisibility="Auto">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="320"/>

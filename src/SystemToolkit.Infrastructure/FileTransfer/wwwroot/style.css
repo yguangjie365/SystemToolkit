@@ -627,6 +627,95 @@ a {
 
 .upload-task__status.is-done { color: var(--success); }
 .upload-task__status.is-fail { color: var(--danger); }
+.upload-task__status.is-queued { color: var(--warning); }
+
+/* ============ 待续传区块（2026-09-13） ============
+   下拉刷新/重载后列出未完成的上传；续传需用户重选同一文件。
+   用 --warning 描边而非新造令牌——深浅两套主题都已定义该变量。 */
+.pending-resume {
+    margin-top: var(--sp-lg);
+    padding: var(--sp-lg);
+    background: var(--bg-surface);
+    border: 1px solid var(--warning);
+    border-radius: var(--r-lg);
+}
+
+/* ⚠️ 必须显式声明：区块内用了 flex，否则 [hidden] 的 display:none 会被覆盖 */
+.pending-resume[hidden] {
+    display: none;
+}
+
+.pending-resume__head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-md);
+}
+
+.pending-resume__title {
+    margin-right: auto;
+    font-size: var(--fs-caption);
+    font-weight: 500;
+    color: var(--warning);
+}
+
+.pending-resume__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-md);
+    margin-top: var(--sp-md);
+}
+
+.pending-item__line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-md);
+}
+
+.pending-item__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-caption);
+    color: var(--text-primary);
+}
+
+.pending-item__hint {
+    flex: 0 0 auto;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.pending-item__actions {
+    display: flex;
+    gap: var(--sp-md);
+    margin-top: var(--sp-xs);
+}
+
+.pending-item__btn {
+    font-size: var(--fs-caption);
+    min-height: 32px;
+    padding: var(--sp-xs) var(--sp-lg);
+    border-radius: var(--r-sm);
+    border: 1px solid var(--warning);
+    background: none;
+    color: var(--warning);
+    cursor: pointer;
+}
+
+.pending-item__btn--ghost {
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.pending-resume__hint {
+    margin: var(--sp-md) 0 0;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+    line-height: 1.6;
+}
 
 /* 进度条 */
 .progress {

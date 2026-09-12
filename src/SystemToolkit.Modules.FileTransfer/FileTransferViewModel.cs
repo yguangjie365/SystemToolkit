@@ -9,8 +9,8 @@ using SystemToolkit.UI.Common;
 namespace SystemToolkit.Modules.FileTransfer;
 
 /// <summary>
-/// 文件互传页组合根 VM：两个 Tab（电脑互传 / 手机通道占位）+ 模块级共享操作日志。
-/// 批次一交付电脑互传全链路；手机通道（Kestrel + HTTPS + 配对码）为批次二。
+/// 文件互传页组合根 VM：两个 Tab（**手机通道**默认在前 / 电脑互传）+ 模块级共享操作日志。
+/// 批次一交付电脑互传全链路；批次二交付手机通道（Kestrel + HTTPS + 配对码）。
 /// </summary>
 public partial class FileTransferViewModel : ObservableObject
 {
@@ -22,8 +22,9 @@ public partial class FileTransferViewModel : ObservableObject
     /// <summary>手机通道（批次二）：Kestrel + 二维码 + 一次性配对码。</summary>
     public FileTransferMobileViewModel Mobile { get; }
 
+    /// <summary>当前 Tab：0 = 电脑互传，1 = 手机通道。默认 1——与 XAML 的 IsChecked 初始态保持一致。</summary>
     [ObservableProperty]
-    private int _selectedTabIndex;
+    private int _selectedTabIndex = 1;
 
     public ObservableCollection<LogLine> LogLines { get; } = new();
 
