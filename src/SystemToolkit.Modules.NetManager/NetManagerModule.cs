@@ -9,7 +9,7 @@ namespace SystemToolkit.Modules.NetManager;
 /// <summary>
 /// 网络管理 模块（核心模块，不可禁用）。
 /// 设置（网卡/IP/DNS/代理）+ 诊断（诊断链/定向排查）+ 修复 + 优化（TCP 调优/跃点数）+
-/// 全量配置快照回滚；所有修改类操作走「快照 → 修改 → 验证 → 回滚」纪律（设计 04 §5）。
+/// 局域网扫描（NET-6：ARP 扫段/基线 diff/IP 冲突监控，免提权）+ 全量配置快照回滚；所有修改类操作走「快照 → 修改 → 验证 → 回滚」纪律（设计 04 §5）。
 /// <para>
 /// 提权模型：netsh/ipconfig/arp 写命令经 <see cref="ElevatingCommandRunner"/> 白名单装饰器
 /// 按需 UAC（用户拒绝 → 退出码 1223 安全终止，无副作用）；HKLM 节流注册表经 Helper
