@@ -117,20 +117,20 @@ public sealed partial class SteamService
         //    实测 2026-09-06：两种命名在不同游戏上并存，如 Sekiro=header.jpg、GoT=library_header.jpg），
         //    与卡片横版容器比例匹配，UniformToFill 只裁极少量；
         //    library_600x900*（竖版）与 portrait/hero 仅作缺失时的兜底。
+        //  🔴 2026-09-13 补「语言后缀」变体（见 CoverAssetStems / CoverAssetLanguages 注释）：
+        //    新版 Steam 会按**客户端界面语言**另存一份本地封面（如 library_header_schinese.jpg），
+        //    而**无后缀的英文版可能根本不存在**——黑神话：悟空（2358720）本机目录里只有
+        //    library_header_schinese.jpg + library_600x900_schinese.jpg，旧候选表因此全部落空，
+        //    一路跌到序末的 library_hero.jpg（1920×620 的超宽库页背景图）；同一张 3.1:1 超宽图被
+        //    卡片容器（≈1.6:1）与详情容器（1.94:1）各裁一套构图 → 实机反馈「详情页与卡片封面不一样」。
         string mainCache = Path.Combine(steamInstallPath, "appcache", "librarycache", id);
-        candidates.Add(Path.Combine(mainCache, "header.jpg"));
-        candidates.Add(Path.Combine(mainCache, "library_header.jpg"));
-        candidates.Add(Path.Combine(mainCache, "library_600x900_2x.jpg"));
-        candidates.Add(Path.Combine(mainCache, "library_600x900.jpg"));
+        AddCoverCandidates(candidates, mainCache);
         candidates.Add(Path.Combine(mainCache, "portrait.png"));
         candidates.Add(Path.Combine(mainCache, "library_hero.jpg"));
 
         // ② 旧版 / 每库存一份：库目录 steamapps\librarycache\{appid}\ 与平铺旧命名
         string libCache = Path.Combine(libraryPath, "steamapps", "librarycache", id);
-        candidates.Add(Path.Combine(libCache, "header.jpg"));
-        candidates.Add(Path.Combine(libCache, "library_header.jpg"));
-        candidates.Add(Path.Combine(libCache, "library_600x900_2x.jpg"));
-        candidates.Add(Path.Combine(libCache, "library_600x900.jpg"));
+        AddCoverCandidates(candidates, libCache);
         string flat = Path.Combine(libraryPath, "steamapps", "librarycache");
         candidates.Add(Path.Combine(flat, appId + "_header.jpg"));
         candidates.Add(Path.Combine(flat, appId + "_library_600x900.jpg"));
@@ -157,6 +157,37 @@ public sealed partial class SteamService
     /// <summary>封面最小像素（低于此值视为图标，不用作封面）。</summary>
     private const int MinCoverWidth = 200;
     private const int MinCoverHeight = 100;
+
+    /// <summary>
+    /// 本地封面**文件名族**（顺序即质量序）。横版的 <c>header</c> / <c>library_header</c> 与卡片横版容器
+    /// 比例接近；<c>library_600x900*</c> 是竖版（2:3），仅作兜底——竖图填横容器只会露出中间一条横带。
+    /// </summary>
+    private static readonly string[] CoverAssetStems =
+        new[] { "header", "library_header", "library_600x900_2x", "library_600x900" };
+
+    /// <summary>
+    /// 本地封面的**语言后缀**（顺序即优先序，中文用户优先）。新版 Steam 按客户端界面语言另存一份
+    /// 本地封面，命名是 <c>{族}_{语言}.jpg</c>（如 <c>library_header_schinese.jpg</c>），
+    /// 且**可能没有无后缀的英文版**——只按无后缀名探测会整族落空（详见 <see cref="FindCoverArt"/> 注释）。
+    /// </summary>
+    private static readonly string[] CoverAssetLanguages =
+        new[] { "schinese", "tchinese", "english", "japanese", "koreana" };
+
+    /// <summary>
+    /// 往候选表追加某个缓存目录下的全部封面候选：每个「族」先探无后缀名，再依次探各语言后缀变体。
+    /// 族与语言的嵌套顺序即优先级，命中即返回（由 <see cref="FindCoverArt"/> 短路口径执行）。
+    /// </summary>
+    private static void AddCoverCandidates(List<string> candidates, string cacheDir)
+    {
+        foreach (string stem in CoverAssetStems)
+        {
+            candidates.Add(Path.Combine(cacheDir, stem + ".jpg"));
+            foreach (string lang in CoverAssetLanguages)
+            {
+                candidates.Add(Path.Combine(cacheDir, stem + "_" + lang + ".jpg"));
+            }
+        }
+    }
 
     // =============== CDN 封面兜底 ===============
 
@@ -265,7 +296,7 @@ public sealed partial class SteamService
     /// 都是 <c>type=Config</c>（appid 7 Steam Client / 760 Steam Screenshots /
     /// 241100 Steam Input Configs / 2371090 Steam Game Notes），它们经 localconfig 进了库存、
     /// 又被显示成「未安装的游戏」（2026-09-13 实机反馈）。</item>
-    /// <item><c>appId == 228983</c>（Steamworks 相关）。</item>
+    /// <item>AppID 命中黑名单 <see cref="NonGameAppIds"/>——类型判据**抓不到的** Valve 自带条目。</item>
     /// <item>名称为 <c>Steamworks Common Redistributables</c>。</item>
     /// </list>
     /// 🔴 <b>类型未知（空串）时判为「是游戏」</b>：appinfo 读不到时不能把整库判成非游戏——
@@ -285,9 +316,22 @@ public sealed partial class SteamService
             return true;
         }
 
-        return appId == 228983
+        return NonGameAppIds.Contains(appId)
             || name.Equals("Steamworks Common Redistributables", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Steam 自带、但 <c>appinfo</c> 里**类型就是 <c>Game</c>** 的条目——类型判据抓不到，只能白纸黑字列出来。
+    /// <list type="bullet">
+    /// <item><c>480</c> <c>Spacewar</c>：Valve 给 Steamworks 开发者用的示例 / 联机测试程序
+    /// （可执行文件 <c>SteamWorksExample.exe</c>）。本机实测（2026-09-13）其 appinfo 为
+    /// <c>common.type=Game</c>、发布者 Valve / Telltale Games，所以<b>必须</b>按 AppID 单列
+    /// （2026-09-13 实机反馈要求屏蔽）。</item>
+    /// <item><c>228983</c>：Steamworks 相关条目（沿用原有判据，防止类型来源缺失时漏放）。</item>
+    /// </list>
+    /// ⚠️ 新增条目**必须同时补测试**（<c>SteamLibraryPolicyTests</c>），否则删掉这条判据不会有任何用例变红。
+    /// </summary>
+    private static readonly HashSet<uint> NonGameAppIds = new() { 480, 228983 };
 
     private static bool IsNonGameEntry(SteamGame g) => IsNonGame(g.AppId, g.Name);
 

@@ -115,6 +115,48 @@ public class SteamCoverAndAvatarTests : IDisposable
         Assert.EndsWith("library_600x900_2x.jpg", hit!);
     }
 
+    /// <summary>
+    /// 🔴 2026-09-13 实机反馈（黑神话：悟空，AppID 2358720「详情页封面与卡片封面不一样」）：
+    /// 新版 Steam 会按**客户端界面语言**另存一份本地封面（<c>{族}_{语言}.jpg</c>），
+    /// 而**无后缀的英文版可能根本不存在**——本机该目录里只有
+    /// <c>library_header_schinese.jpg</c>(460×215) 与 <c>library_600x900_schinese.jpg</c>(300×450)。
+    /// 旧候选表只探无后缀名 → 整表落空 → 一路跌到序末的 <c>library_hero.jpg</c>(1920×620 超宽背景图)，
+    /// 同一张 3.1:1 图被卡片容器（≈1.6:1）与详情容器（1.94:1）各裁一套构图。
+    /// 本用例钉住「带语言后缀的横版 header 必须胜过 library_hero」。
+    /// </summary>
+    [Fact]
+    public void FindCoverArt_LocalizedHeaderWinsOverLibraryHero()
+    {
+        string steam = Path.Combine(_root, "steam");
+        string lib = Path.Combine(_root, "lib");
+        string app = Path.Combine(steam, "appcache", "librarycache", "2358720");
+        Directory.CreateDirectory(app);
+        File.WriteAllBytes(Path.Combine(app, "library_header_schinese.jpg"), MakeJpeg(460, 215));
+        File.WriteAllBytes(Path.Combine(app, "library_600x900_schinese.jpg"), MakeJpeg(300, 450));
+        File.WriteAllBytes(Path.Combine(app, "library_hero.jpg"), MakeJpeg(1920, 620));
+
+        string? hit = SteamService.FindCoverArt(steam, lib, 2358720);
+
+        Assert.NotNull(hit);
+        Assert.EndsWith("library_header_schinese.jpg", hit!);
+    }
+
+    /// <summary>无后缀名始终优先于语言后缀——老命名不能因为新规则被降级（绝大多数游戏走这条）。</summary>
+    [Fact]
+    public void FindCoverArt_SuffixlessWinsOverLocalized()
+    {
+        string steam = Path.Combine(_root, "steam");
+        string lib = Path.Combine(_root, "lib");
+        string app = Path.Combine(steam, "appcache", "librarycache", "1234");
+        Directory.CreateDirectory(app);
+        File.WriteAllBytes(Path.Combine(app, "header.jpg"), MakeJpeg(460, 215));
+        File.WriteAllBytes(Path.Combine(app, "header_schinese.jpg"), MakeJpeg(460, 215));
+
+        string? hit = SteamService.FindCoverArt(steam, lib, 1234);
+
+        Assert.Equal(Path.Combine(app, "header.jpg"), hit);
+    }
+
     [Fact]
     public void FindCoverArt_OnlyIconSizedImage_ReturnsNull()
     {

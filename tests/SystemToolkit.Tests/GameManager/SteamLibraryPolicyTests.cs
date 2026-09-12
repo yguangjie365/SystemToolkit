@@ -57,6 +57,22 @@ public class SteamLibraryPolicyTests : IDisposable
         Assert.True(SteamService.IsNonGame(1, "Steamworks Common Redistributables")); // 名称判据单独成立
     }
 
+    /// <summary>
+    /// 🔴 Spacewar（AppID <c>480</c>）：Valve 给 Steamworks 开发者用的示例 / 联机测试程序
+    /// （可执行文件 <c>SteamWorksExample.exe</c>），**不是游戏**。
+    /// <para>
+    /// 本机实测（2026-09-13）它的 appinfo 就是 <c>common.type=Game</c>——**类型判据拦不住它**，
+    /// 所以只能靠 AppID 黑名单（实机反馈：「Spacewar 既然是 Steam 的测试程序而不是游戏，给它屏蔽掉」）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Spacewar_IsNotAGame()
+    {
+        Assert.True(SteamService.IsNonGame(480, "Spacewar", "Game"));
+        // 名称缺失（退化为 App 480）时同样成立：判据只看 AppID，不依赖 appinfo 是否读到名称
+        Assert.True(SteamService.IsNonGame(480, "App 480"));
+    }
+
     [Fact]
     public void NormalGame_IsKept()
     {
