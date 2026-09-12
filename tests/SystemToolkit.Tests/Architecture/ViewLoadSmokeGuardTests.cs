@@ -413,10 +413,15 @@ public class ViewLoadSmokeGuardTests
                 var vm = new GameManagerViewModel(null!, null!);
                 var view = new GameManagerView(vm);
 
-                stage = "fill three card states";
+                stage = "fill four card states";
+                // 🔴 顺序有意：先置「显示未安装」再灌数据 —— 勾选变化会触发 CDN 封面补全，
+                //    此刻集合还是空的 → 本守卫**不会发起任何网络请求**（测试不得依赖外网/代理）
+                vm.ShowNotInstalled = true;
                 vm.Games.Add(new GameCardVm(MakeGame(814380, "Sekiro", stateFlags: 4), "C:\\cover-a.jpg", false, vm));
                 vm.Games.Add(new GameCardVm(MakeGame(1245620, "ELDEN RING", stateFlags: 4), string.Empty, false, vm));
                 vm.Games.Add(new GameCardVm(MakeGame(2215430, "Torchlight", stateFlags: 6), string.Empty, false, vm));
+                // 第 4 态（B2）：未安装 —— 覆盖「未安装」徽章模板、只留「商店页面」的操作行、占用显示「—」
+                vm.Games.Add(new GameCardVm(MakeGame(570, "Dota 2", stateFlags: 0, installed: false), string.Empty, false, vm));
                 vm.GamesView.Refresh();
 
                 stage = "measure + arrange";
@@ -450,13 +455,14 @@ public class ViewLoadSmokeGuardTests
             $"游戏管理 View 加载抛异常（阶段：{stage}）：\n{captured}");
     }
 
-    private static SteamGame MakeGame(uint appId, string name, uint stateFlags) => new()
+    private static SteamInventoryGame MakeGame(uint appId, string name, uint stateFlags, bool installed = true) => new()
     {
         AppId = appId,
         Name = name,
-        InstallDir = name,
-        LibraryPath = "D:\\SteamLibrary",
-        SizeOnDisk = 25_400_000_000,
+        Installed = installed,
+        InstallDir = installed ? name : string.Empty,
+        LibraryPath = installed ? "D:\\SteamLibrary" : string.Empty,
+        SizeOnDisk = installed ? 25_400_000_000UL : 0UL,
         StateFlags = stateFlags,
         PlaytimeMinutes = 5120,
         LastPlayed = 1_757_068_800,

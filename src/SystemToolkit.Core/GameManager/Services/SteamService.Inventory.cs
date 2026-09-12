@@ -31,8 +31,15 @@ public sealed partial class SteamService
     /// </summary>
     /// <param name="steamInstallPath">Steam 安装目录（来自 <see cref="SteamRegistry.GetInstallPath"/>）。</param>
     /// <param name="libraries">已解析的库列表（<see cref="ParseLibraryFolders"/> 的结果）。</param>
+    /// <param name="installedGames">
+    /// 已扫描的已安装清单；<c>null</c> = 本方法自行调用 <see cref="ScanInstalledGames"/>。
+    /// 调用方若手上已有（如 <see cref="GetAllData"/>），传进来可**省掉一次全库扫描**。
+    /// </param>
     [SupportedOSPlatform("windows")]
-    public SteamInventorySnapshot ScanInventoryLocal(string? steamInstallPath, IReadOnlyList<SteamLibrary>? libraries)
+    public SteamInventorySnapshot ScanInventoryLocal(
+        string? steamInstallPath,
+        IReadOnlyList<SteamLibrary>? libraries,
+        IReadOnlyList<SteamGame>? installedGames = null)
     {
         if (string.IsNullOrWhiteSpace(steamInstallPath) || !Directory.Exists(steamInstallPath))
         {
@@ -43,22 +50,30 @@ public sealed partial class SteamService
         var errors = new List<string>();
 
         // ---- ① 已安装（.acf）：库存的基础 ----
-        SteamGame[] installed = Array.Empty<SteamGame>();
-        try
+        IReadOnlyList<SteamGame> installed;
+        if (installedGames is not null)
         {
-            installed = ScanInstalledGames(installPath, libraries ?? Array.Empty<SteamLibrary>());
+            installed = installedGames;
         }
-        catch (Exception e)
+        else
         {
-            errors.Add("已安装扫描: " + e.Message);
-            _logger.Error("库存扫描：已安装清单扫描失败", e);
+            try
+            {
+                installed = ScanInstalledGames(installPath, libraries ?? Array.Empty<SteamLibrary>());
+            }
+            catch (Exception e)
+            {
+                installed = Array.Empty<SteamGame>();
+                errors.Add("已安装扫描: " + e.Message);
+                _logger.Error("库存扫描：已安装清单扫描失败", e);
+            }
         }
 
         // ---- ② 游玩记录（localconfig）：补时长 + 带出"玩过但已卸载"的条目 ----
         Dictionary<uint, (ulong Minutes, long LastPlayed)> playtimes =
             ParseLocalConfigPlaytimes(installPath, errors);
 
-        var merged = new Dictionary<uint, SteamInventoryGame>(installed.Length + playtimes.Count);
+        var merged = new Dictionary<uint, SteamInventoryGame>(installed.Count + playtimes.Count);
         foreach (SteamGame g in installed)
         {
             merged[g.AppId] = new SteamInventoryGame
@@ -69,6 +84,7 @@ public sealed partial class SteamService
                 PlaytimeMinutes = g.PlaytimeMinutes,
                 LastPlayed = g.LastPlayed,
                 SizeOnDisk = g.SizeOnDisk,
+                StateFlags = g.StateFlags,
                 InstallDir = g.InstallDir,
                 LibraryPath = g.LibraryPath,
             };

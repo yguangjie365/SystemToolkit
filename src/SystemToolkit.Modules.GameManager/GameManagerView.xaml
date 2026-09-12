@@ -171,6 +171,21 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
         </Style>
+        <!-- ============ B2 未安装显示（2026-09-13） ============
+             尺寸一律走 Style Setter / 具名 Thickness：本文件 Width / BorderThickness / StrokeThickness
+             裸值已顶满 UiTokenRatchet 基线，内联数字字面量会直接变红。 -->
+        <!-- 徽章外边距：与卡片既有两个徽章完全等值（12,8,12,8）。用具名 Thickness 而非 Space_*
+             —— 后者四边同值，会改变垂直间距、把徽章顶偏 -->
+        <Thickness x:Key="BadgeGap">12,8,12,8</Thickness>
+        <!-- 工具行勾选前的横向间隙：只加左侧，不给整行凭空加高度 -->
+        <Thickness x:Key="ToolRowGap">16,0,0,0</Thickness>
+        <Style x:Key="CardStateBadge" TargetType="Border">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="{StaticResource BadgeGap}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XS}"/>
+            <Setter Property="Padding" Value="7,2"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -334,6 +349,14 @@
                 <RadioButton Content="名称" GroupName="GameSort" Margin="4,0,0,0"
                              Style="{DynamicResource SegmentedRadioItem}"
                              Command="{Binding SetSortCommand}" CommandParameter="3"/>
+                <!-- B2（2026-09-13）：显示未安装的游戏。默认关——避免一进页面就多出上百张卡；
+                     用 ThemedCheckBox（有完整模板，16×16 方框 + Accent 勾）而不是 ThemedToggleButton：
+                     后者**没有 ControlTemplate**，套上去是个看不见状态的开关（状态不可见 = 红线） -->
+                <CheckBox Content="显示未安装" Style="{DynamicResource ThemedCheckBox}" VerticalAlignment="Center"
+                          Margin="{StaticResource ToolRowGap}"
+                          IsChecked="{Binding ShowNotInstalled}"
+                          ToolTip="勾选后一并列出「玩过但已卸载」的游戏。数据来自本地（Steam 的应用缓存与游玩记录），不联网"
+                          AutomationProperties.Name="显示未安装的游戏"/>
             </StackPanel>
             <Button Grid.Column="2" Style="{DynamicResource SecondaryButton}" Height="30" Padding="12,0" Margin="12,0,0,0"
                     Content="启动 Steam" Command="{Binding LaunchClientCommand}"/>
@@ -504,6 +527,20 @@
                                                                FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_DangerText}"/>
                                                 </Border>
                                             </StackPanel>
+                                            <!-- 未安装（B2，2026-09-13）：中性灰 —— 不借绿(已安装)/琥珀(下载中)/红(库离线)任一语义色，
+                                                 否则会被读成"可安装/推荐"。与上面两个徽章互斥（判据见 GameCardVm.StateKind） -->
+                                            <StackPanel VerticalAlignment="Bottom"
+                                                        Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}">
+                                                <StackPanel.Background>
+                                                    <StaticResource ResourceKey="Brush_CoverOverlay"/>
+                                                </StackPanel.Background>
+                                                <Border Style="{StaticResource CardStateBadge}"
+                                                        Background="{DynamicResource Brush_SurfaceAlt}"
+                                                        BorderBrush="{DynamicResource Brush_Border}">
+                                                    <TextBlock Text="未安装" FontFamily="{DynamicResource Font_Mono}"
+                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                     <StackPanel Margin="14,12,14,14">
@@ -519,6 +556,7 @@
                                             <Button Grid.Column="1" Style="{StaticResource CardActionButton}" Content="⋯"
                                                     Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" AutomationProperties.Name="更多操作" ToolTip="更多操作"
                                                     MinWidth="28" MinHeight="24"
+                                                    Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
                                                     Click="OnCardMenuClick"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
                                                 <Button.ContextMenu>
@@ -555,10 +593,27 @@
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <Button Style="{StaticResource CardActionButton}" Content="商店页面" Margin="0,0,4,0"
+                                                <!-- 未安装卡片没有「启动」可点 → 本键铺满整行，不留半格空位
+                                                     （Grid.ColumnSpan 在 Setter 里用附加属性语法） -->
+                                                <Button Content="商店页面"
                                                         Command="{Binding DataContext.OpenStoreCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"/>
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource CardActionButton}">
+                                                            <Setter Property="Margin" Value="0,0,4,0"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                                    <Setter Property="Margin" Value="0"/>
+                                                                    <Setter Property="Grid.ColumnSpan" Value="2"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <!-- 未安装时隐藏：对未安装的游戏，"启动/打开目录/卸载"全不适用
+                                                     （可交互 ≠ 有语义；安装引导属批次 4） -->
                                                 <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="启动" Margin="4,0,0,0"
+                                                        Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
                                                         Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
                                             </Grid>
@@ -570,16 +625,17 @@
                     </ItemsControl.ItemTemplate>
             </vwp:VirtualizingItemsControl>
 
-            <!-- 态：搜索无结果（过滤后空 + 有游戏数据；参考稿「未找到匹配的游戏」） -->
+            <!-- 态：过滤后为空（B2 起有两种成因：搜索没匹配 / 未安装被开关隐藏）——
+                 标题与说明都由 VM 给，**必须说清是被什么挡住的**，否则用户会以为游戏丢了 -->
             <Border Background="{DynamicResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding ShowNoResultEmpty, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
                                Foreground="{DynamicResource Brush_TextMuted}"/>
-                    <TextBlock Text="未找到匹配的游戏" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
+                    <TextBlock Text="{Binding FilteredEmptyTitle, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Brush_TextPrimary}"/>
-                    <TextBlock Text="换个关键词试试，或清空搜索查看全部。" FontSize="{DynamicResource Font_SizeBody}"
-                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}"/>
+                    <TextBlock Text="{Binding FilteredEmptyHint, Mode=OneWay}" FontSize="{DynamicResource Font_SizeBody}"
+                               HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 
@@ -589,9 +645,10 @@
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="&#xE719;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeTitleLg}" HorizontalAlignment="Center"
                                Foreground="{DynamicResource Brush_TextMuted}"/>
-                    <TextBlock Text="未发现已安装的游戏" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
+                    <TextBlock Text="未发现任何游戏记录" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Brush_TextPrimary}"/>
-                    <TextBlock Text="Steam 已就绪；安装游戏后点击「刷新」重新扫描。" FontSize="{DynamicResource Font_SizeBody}"
+                    <TextBlock Text="本机既没有已安装的游戏，也没有游玩记录；安装游戏后点击「刷新」重新扫描。"
+                               FontSize="{DynamicResource Font_SizeBody}" TextWrapping="Wrap"
                                HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="{DynamicResource Brush_TextMuted}"/>
                 </StackPanel>
             </Border>
@@ -698,6 +755,12 @@
                                                     <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
                                                     <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
                                                 </DataTrigger>
+                                                <!-- 未安装优先级最高（放最后）：未安装条目 StateFlags=0，
+                                                     若被上面 IsFullyInstalled=False 抢到就会显示成「下载/更新中」 -->
+                                                <DataTrigger Binding="{Binding SelectedGame.IsNotInstalled}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
@@ -714,6 +777,10 @@
                                                     <DataTrigger Binding="{Binding SelectedGame.IsLibraryOffline}" Value="True">
                                                         <Setter Property="Text" Value="库离线"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding SelectedGame.IsNotInstalled}" Value="True">
+                                                        <Setter Property="Text" Value="未安装"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -779,18 +846,33 @@
                                      未新增任何命令与 Core 能力 -->
                                 <Border Style="{StaticResource DetailDivider}" Margin="{DynamicResource Space_MD}"/>
                                 <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
-                                        Content="启动" Command="{Binding LaunchGameCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                        Content="启动" Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding LaunchGameCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 <Grid Margin="{DynamicResource Space_SM}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Style="{StaticResource DetailActionButton}" Content="商店页面" Margin="{DynamicResource Space_XXS}"
-                                            Command="{Binding OpenStoreCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                    <!-- 未安装时只留「商店页面」并铺满整行：另外三键对未安装的游戏都没有真实语义 -->
+                                    <Button Content="商店页面"
+                                            Command="{Binding OpenStoreCommand}" CommandParameter="{Binding SelectedGame}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource DetailActionButton}">
+                                                <Setter Property="Margin" Value="{DynamicResource Space_XXS}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedGame.IsInstalled}" Value="False">
+                                                        <Setter Property="Grid.ColumnSpan" Value="3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                     <Button Grid.Column="1" Style="{StaticResource DetailActionButton}" Content="打开目录" Margin="{DynamicResource Space_XXS}"
+                                            Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                             Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedGame}"/>
                                     <Button Grid.Column="2" Style="{StaticResource DetailDangerButton}" Content="⚠ 卸载" Margin="{DynamicResource Space_XXS}"
+                                            Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                             Command="{Binding UninstallGameCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 </Grid>
                             </StackPanel>

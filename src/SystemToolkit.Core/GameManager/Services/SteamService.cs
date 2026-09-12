@@ -38,6 +38,8 @@ public sealed partial class SteamService
         SteamUser[] users = Array.Empty<SteamUser>();
         SteamLibrary[] libs = Array.Empty<SteamLibrary>();
         SteamGame[] games = Array.Empty<SteamGame>();
+        bool gamesScanned = false;
+        SteamInventorySnapshot inventory = new();
         if (install.Installed && install.InstallPath is not null)
         {
             try
@@ -47,8 +49,16 @@ public sealed partial class SteamService
             { libs = ParseLibraryFolders(install.InstallPath); }
             catch (Exception e) { _logger.Error("ParseLibraryFolders 失败", e); }
             try
-            { games = ScanInstalledGames(install.InstallPath, libs); }
+            {
+                games = ScanInstalledGames(install.InstallPath, libs);
+                gamesScanned = true;
+            }
             catch (Exception e) { _logger.Error("ScanInstalledGames 失败", e); }
+            // B2 库存（2026-09-13）：复用上面扫好的 games → 不给库存再来一次全库扫描；
+            // 扫描失败时传 null 让库存自行重试（宁可多花一次扫描，也不要漏掉"已安装"这一半）
+            try
+            { inventory = ScanInventoryLocal(install.InstallPath, libs, gamesScanned ? games : null); }
+            catch (Exception e) { _logger.Error("ScanInventoryLocal 失败", e); }
         }
         return new SteamAllData
         {
@@ -56,6 +66,7 @@ public sealed partial class SteamService
             Users = users,
             Libraries = libs,
             Games = games,
+            Inventory = inventory,
         };
     }
 

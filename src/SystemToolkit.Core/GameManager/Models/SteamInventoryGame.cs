@@ -32,6 +32,15 @@ public sealed record SteamInventoryGame
     /// <summary>磁盘占用（字节；未安装恒为 0）。</summary>
     public ulong SizeOnDisk { get; init; }
 
+    /// <summary>
+    /// 安装状态位（<c>.acf</c> 的 <c>StateFlags</c>；未安装恒为 0）。
+    /// <para>
+    /// 卡片需要它区分「已安装完全」与「下载/更新中」——只靠 <see cref="Installed"/> 不够
+    /// （正在下载的游戏也是 installed）。
+    /// </para>
+    /// </summary>
+    public uint StateFlags { get; init; }
+
     /// <summary>安装子目录名（未安装为空串）。</summary>
     public string InstallDir { get; init; } = string.Empty;
 

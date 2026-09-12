@@ -14,4 +14,10 @@ public sealed record SteamAllData
 
     /// <summary>已安装游戏列表（按名称升序去重，AppID 唯一）。</summary>
     public IReadOnlyList<SteamGame> Games { get; init; } = Array.Empty<SteamGame>();
+
+    /// <summary>
+    /// 库存快照（B2，2026-09-13）：<b>已安装 ∪ 有游玩记录</b>，是 <see cref="Games"/> 的超集。
+    /// 未安装 Steam 时为默认值（<see cref="SteamInventorySource.None"/>）。
+    /// </summary>
+    public SteamInventorySnapshot Inventory { get; init; } = new();
 }

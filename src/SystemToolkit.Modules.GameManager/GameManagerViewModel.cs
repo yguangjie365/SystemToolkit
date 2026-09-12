@@ -10,13 +10,35 @@ using SystemToolkit.Core.GameManager.Services;
 
 namespace SystemToolkit.Modules.GameManager;
 
+/// <summary>
+/// 卡片状态（四态互斥；<b>判据优先序即声明序</b>：未安装 &gt; 库离线 &gt; 下载/更新中 &gt; 已安装）。
+/// </summary>
+public enum GameCardState
+{
+    /// <summary>安装完整且库可用。</summary>
+    Installed,
+
+    /// <summary>正在下载/更新（<c>.acf</c> 的 StateFlags bit2 未置位）。</summary>
+    Downloading,
+
+    /// <summary>库目录不可用（离线盘 / 网络盘）。</summary>
+    LibraryOffline,
+
+    /// <summary>本地未安装（有游玩记录但 <c>.acf</c> 不存在；B2 库存条目）。</summary>
+    NotInstalled,
+}
+
 /// <summary>单张游戏卡 VM：展示投影 + 操作命令回调宿主。</summary>
 public partial class GameCardVm : ObservableObject
 {
-    public SteamGame Model { get; }
+    /// <summary>
+    /// 库存条目（B2 起为 <see cref="SteamInventoryGame"/>：它是 <c>.acf</c> 已安装清单的**超集**，
+    /// 额外带 <c>Installed</c> 标记，卡片才能表达「玩过但已卸载」）。
+    /// </summary>
+    public SteamInventoryGame Model { get; }
 
     /// <remarks>封面路径与库离线态均由调用方在后台预计算后传入（性能审查 R3：每回收重算 Directory.Exists 会阻塞 UI 线程）。</remarks>
-    public GameCardVm(SteamGame model, string coverPath, bool libraryOffline, GameManagerViewModel owner)
+    public GameCardVm(SteamInventoryGame model, string coverPath, bool libraryOffline, GameManagerViewModel owner)
     {
         Model = model;
         Owner = owner;
@@ -42,8 +64,8 @@ public partial class GameCardVm : ObservableObject
     /// <summary>CDN 补下成功后由后台线程调用（ObservableProperty 已跨线程封送）。</summary>
     public void SetCover(string path) => CoverPath = path;
 
-    /// <summary>磁盘占用（人类可读，如 "12.3 GB"）。</summary>
-    public string SizeText => OverviewSizeText(Model.SizeOnDisk);
+    /// <summary>磁盘占用（人类可读，如 "12.3 GB"）。未安装返回 <see cref="NotInstalledPlaceholder"/>。</summary>
+    public string SizeText => Model.Installed ? OverviewSizeText(Model.SizeOnDisk) : NotInstalledPlaceholder;
 
     /// <summary>游玩时长（分钟 → "X 小时 Y 分" / "X 分钟"）。</summary>
     public string PlaytimeText => Model.PlaytimeMinutes switch
@@ -58,9 +80,49 @@ public partial class GameCardVm : ObservableObject
         ? "—"
         : DateTimeOffset.FromUnixTimeSeconds(Model.LastPlayed).LocalDateTime.ToString("yyyy/MM/dd");
 
-    /// <summary>安装状态：bit2（FullyInstalled）置位 = 已安装，否则下载/更新中。</summary>
+    /// <summary>本地已安装（来自库存条目的 <c>Installed</c> 标记）。</summary>
+    public bool IsInstalled => Model.Installed;
+
+    /// <summary>未安装（View 据此显示「未安装」徽章、并隐藏对未安装项无意义的操作）。</summary>
+    public bool IsNotInstalled => !Model.Installed;
+
+    /// <summary>安装状态：bit2（FullyInstalled）置位 = 安装完整，否则下载/更新中。</summary>
     public bool IsFullyInstalled => (Model.StateFlags & 4) != 0;
-    public string StateText => IsFullyInstalled ? "已安装" : "下载/更新中";
+
+    /// <summary>
+    /// 四态判据（互斥）。
+    /// 🔴 <b>未安装必须最先判</b>：未安装条目的 <c>StateFlags=0</c>，若先判 bit2 会落到
+    /// 「下载/更新中」——那是**错误文案**（告诉用户一个没发生的事实）。
+    /// </summary>
+    public GameCardState StateKind
+    {
+        get
+        {
+            if (!Model.Installed)
+            {
+                return GameCardState.NotInstalled;
+            }
+
+            if (IsLibraryOffline)
+            {
+                return GameCardState.LibraryOffline;
+            }
+
+            return IsFullyInstalled ? GameCardState.Installed : GameCardState.Downloading;
+        }
+    }
+
+    /// <summary>状态文案（与 <see cref="StateKind"/> 一一对应——文案不许在别处再写一份）。</summary>
+    public string StateText => StateKind switch
+    {
+        GameCardState.NotInstalled => "未安装",
+        GameCardState.LibraryOffline => "库离线",
+        GameCardState.Downloading => "下载/更新中",
+        _ => "已安装",
+    };
+
+    /// <summary>未安装条目的数值占位符（不显示 <c>0 KB</c>——那会把"没装"说成"装了但极小"）。</summary>
+    internal const string NotInstalledPlaceholder = "—";
 
     /// <summary>库不可用（库目录不存在，如离线盘）时为 true。审查 R3：载入期按库路径预计算一次，避免每次容器回收重发 Directory.Exists。</summary>
     private readonly bool _isLibraryOffline;
@@ -71,7 +133,7 @@ public partial class GameCardVm : ObservableObject
     public long SortPlaytime => -(long)Model.PlaytimeMinutes;
     public long SortSize => -(long)Model.SizeOnDisk;
 
-    public string SizeOnDiskText => OverviewSizeText(Model.SizeOnDisk);
+    public string SizeOnDiskText => Model.Installed ? OverviewSizeText(Model.SizeOnDisk) : NotInstalledPlaceholder;
 
     // ================= A2 详情面板投影（2026-09-13） =================
 
@@ -313,9 +375,9 @@ public partial class GameManagerViewModel : ObservableObject
     /// <summary>有库容量可展示。</summary>
     public bool HasLibraryCapacity => LibraryCapacityText.Length > 0;
 
-    /// <summary>页头副标题（HTML 参考稿口径：「N 款游戏 · M 个库」）。</summary>
+    /// <summary>页头副标题（HTML 参考稿口径：「N 款游戏 · M 个库」）。N = **当前可见**数量，与网格所见一致。</summary>
     public string HeaderSubtitle => SteamInstalled
-        ? $"{Games.Count} 款游戏 · {LibraryCount} 个库"
+        ? $"{VisibleGameCount} 款游戏 · {LibraryCount} 个库"
         : "未检测到 Steam 客户端";
 
     /// <summary>内容区上方状态栏（HTML 参考稿口径：「N 款已安装 · 共占用 X GB」）。</summary>
@@ -339,26 +401,28 @@ public partial class GameManagerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Games 集合或其派生统计变化后调用（刷新页头副标题与状态栏投影）。</summary>
+    /// <summary>Games 集合或其派生统计变化后调用（刷新页头副标题、状态栏与空态投影）。</summary>
     private void NotifySummary()
     {
         OnPropertyChanged(nameof(HeaderSubtitle));
         OnPropertyChanged(nameof(InstalledSummary));
         OnPropertyChanged(nameof(ShowNoResultEmpty));
         OnPropertyChanged(nameof(ShowEmptyLibrary));
+        OnPropertyChanged(nameof(FilteredEmptyTitle));
+        OnPropertyChanged(nameof(FilteredEmptyHint));
     }
 
-    /// <summary>搜索无结果（有游戏数据但过滤后为空）——空态层可见性投影。</summary>
-    public bool ShowNoResultEmpty => SteamInstalled && !IsLoading && Games.Count > 0 && GamesView.IsEmpty;
+    /// <summary>
+    /// 过滤后为空（有数据、但可见集为 0）——空态层可见性投影。
+    /// 判据用 <b>可见数</b>而非 <c>GamesView.IsEmpty</c>：隐藏未安装后可能整页为空，
+    /// 那时必须给空态，否则用户看到的是**一片空白且没有任何解释**。
+    /// </summary>
+    public bool ShowNoResultEmpty => SteamInstalled && !IsLoading && Games.Count > 0 && VisibleGameCount == 0;
 
-    /// <summary>库为空（Steam 已安装但零游戏）——空态层可见性投影。</summary>
+    /// <summary>库为空（Steam 已安装但**连未安装记录都没有**）——空态层可见性投影。</summary>
     public bool ShowEmptyLibrary => SteamInstalled && !IsLoading && Games.Count == 0;
 
-    partial void OnSearchQueryChanged(string value)
-    {
-        GamesView.Refresh();
-        NotifySummary(); // 搜索无结果空态依赖过滤结果
-    }
+    partial void OnSearchQueryChanged(string value) => ApplyFilter(); // 空态文案也依赖过滤结果
 
     partial void OnSortModeChanged(int value) => ApplySort();
 
@@ -383,8 +447,89 @@ public partial class GameManagerViewModel : ObservableObject
             return false;
         }
 
+        // B2（2026-09-13）：未安装的游戏默认隐藏。与搜索词是「与」的关系——
+        // 先判开关，再判关键词（两个条件互不掩盖，空态文案才能说清是哪一个挡住的）。
+        if (!ShowNotInstalled && !vm.IsInstalled)
+        {
+            return false;
+        }
+
         string q = SearchQuery.Trim();
         return q.Length == 0 || vm.Name.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ================= B2 库存显示（2026-09-13） =================
+
+    /// <summary>
+    /// 是否显示未安装的游戏（默认 <c>false</c>：保持"只看已安装"的原有心智，避免一进页面就多出几百张卡）。
+    /// </summary>
+    [ObservableProperty]
+    private bool _showNotInstalled;
+
+    partial void OnShowNotInstalledChanged(bool value)
+    {
+        // 勾选变化必须重算可见集并刷新派生投影（集合本身没变，通知不会自己发）
+        ApplyFilter();
+        // 刚显示出来的未安装卡片此前未补过封面 → 这时才为它们发外呼
+        StartCoverFetch();
+    }
+
+    /// <summary>被开关隐藏的未安装条目数（空态据此说清"为什么看不到"，而不是简单说"没有匹配"）。</summary>
+    internal int HiddenNotInstalledCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (GameCardVm g in Games)
+            {
+                if (!g.IsInstalled)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+
+    /// <summary>当前可见（过滤后）条目数。</summary>
+    internal int VisibleGameCount => GamesView is CollectionView view ? view.Count : Games.Count;
+
+    /// <summary>重算过滤并刷新所有派生投影（搜索词 / 「显示未安装」变化后调用）。</summary>
+    internal void ApplyFilter()
+    {
+        GamesView.Refresh();
+        NotifySummary();
+    }
+
+    /// <summary>是否因为「显示未安装」开关而看不到东西（用于空态给准确原因）。</summary>
+    private bool HiddenByNotInstalledToggle =>
+        !ShowNotInstalled && Games.Count > 0 && Games.Count == HiddenNotInstalledCount;
+
+    /// <summary>筛选后为空态的标题（区分「搜索没匹配」与「未安装被隐藏」两种情况）。</summary>
+    internal string FilteredEmptyTitle =>
+        HiddenByNotInstalledToggle ? "未找到可显示的游戏" : "未找到匹配的游戏";
+
+    /// <summary>
+    /// 筛选后为空态的说明文案。
+    /// 🔴 不许只说"换个关键词"——用户需要知道**究竟被什么挡住了**（搜索词 or 显示开关），
+    /// 否则会以为游戏丢了。
+    /// </summary>
+    internal string FilteredEmptyHint
+    {
+        get
+        {
+            int hidden = HiddenNotInstalledCount;
+            bool searching = SearchQuery.Trim().Length > 0;
+            if (hidden == 0)
+            {
+                return "换个关键词试试，或清空搜索查看全部。";
+            }
+
+            return searching
+                ? $"已隐藏 {hidden} 款未安装的游戏 —— 换个关键词，或勾选「显示未安装」查看"
+                : $"已隐藏 {hidden} 款未安装的游戏 —— 勾选「显示未安装」后可查看";
+        }
     }
 
     private void ApplySort()
@@ -426,11 +571,16 @@ public partial class GameManagerViewModel : ObservableObject
 
                 // 封面探测并行预计算（性能审查 P1-5）：每卡最多 9 次候选路径探测 × N 卡，
                 // 原实现在 UI 线程逐卡同步探测，200 卡 = 上千次同步文件打开阻塞首屏
+                // B2：建卡源 = 库存（已安装 ∪ 有游玩记录）。库存为空但已安装清单非空 → 退化为只有已安装
+                IReadOnlyList<SteamInventoryGame> cardSource = ResolveCardSource(data);
+                var installedOnly = cardSource.Where(g => g.Installed).ToList();
+
                 string installPath = SteamInstallPath ?? string.Empty;
                 (System.Collections.Concurrent.ConcurrentDictionary<uint, string> coverPaths, HashSet<string> offlineLibs) = await Task.Run(() =>
                 {
                     var map = new System.Collections.Concurrent.ConcurrentDictionary<uint, string>();
-                    Parallel.ForEach(data.Games, new ParallelOptions { MaxDegreeOfParallelism = 4 }, g =>
+                    // 封面与库离线态只对「已安装」项有意义：未安装条目没有库路径，本地也不会有封面
+                    Parallel.ForEach(installedOnly, new ParallelOptions { MaxDegreeOfParallelism = 4 }, g =>
                     {
                         // 审查 🔴-4：单张封面探测失败不得炸掉整个加载（AggregateException → 全量失败）
                         try
@@ -449,7 +599,7 @@ public partial class GameManagerViewModel : ObservableObject
 
                     // 审查 R3：按库路径（数量极少）各一次 Directory.Exists，离线/网络盘判定离 UI 线程预计算
                     var offline = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (string lib in data.Games.Select(g => g.LibraryPath).Distinct(StringComparer.OrdinalIgnoreCase))
+                    foreach (string lib in installedOnly.Select(g => g.LibraryPath).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         try
                         {
@@ -467,10 +617,12 @@ public partial class GameManagerViewModel : ObservableObject
                     return (map, offline);
                 }).ConfigureAwait(true);
 
-                foreach (SteamGame g in data.Games)
+                foreach (SteamInventoryGame g in cardSource)
                 {
                     string cover = coverPaths.TryGetValue(g.AppId, out string? cp) ? cp : string.Empty;
-                    var vm = new GameCardVm(g, cover, offlineLibs.Contains(g.LibraryPath), this);
+                    // 未安装条目强制非离线：它的 LibraryPath 是空串，判定只会得出无意义的"离线"
+                    bool offlineLib = g.Installed && offlineLibs.Contains(g.LibraryPath);
+                    var vm = new GameCardVm(g, cover, offlineLib, this);
                     HookFilterRefresh(vm);
                     Games.Add(vm);
                 }
@@ -498,57 +650,21 @@ public partial class GameManagerViewModel : ObservableObject
             ApplySort();
             NotifySummary(); // 页头副标题 + 状态栏统计依赖 Games/LibraryCount，集合填充后统一刷新
 
-            // CDN 封面兜底：本地缺失的卡片后台逐个补下（10s 超时/张，失败静默占位），下载成功渐进刷新
-            var coverless = Games.Where(g => !g.HasCover).ToList();
-            if (coverless.Count > 0)
-            {
-                string cacheDir = Path.Combine(
-                    System.Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "SystemToolkit", "cache", "steam-covers");
-                // REVIEW-3 A-2：串行逐张（每张 10s 超时）在缺封面多时补全过慢（50 张 ≈ 8 分钟），
-                // 改限并发 3——对 Steam CDN 保持礼貌，同时把最坏等待压到 ~1/3
-                _ = Task.Run(async () =>
-                {
-                    var gate = new System.Threading.SemaphoreSlim(3);
-                    // 审查 🟠-6 采纳：单张静默改为计数 + 收尾汇总一条日志——
-                    // 逐张记日志会在断网时刷出上百条，汇总既留痕又不淹没日志
-                    int failed = 0;
-                    await Task.WhenAll(coverless.Select(async vm =>
-                    {
-                        try
-                        {
-                            await gate.WaitAsync().ConfigureAwait(false);
-                            try
-                            {
-                                string? path = await SteamService.EnsureCoverFromCdnAsync(cacheDir, vm.AppId)
-                                    .ConfigureAwait(false);
-                                if (path is not null)
-                                    RunOnUi(() => vm.SetCover(path)); // 审查 🔴-2：后台线程 PropertyChanged 统一编组
-                            }
-                            finally
-                            {
-                                gate.Release();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Threading.Interlocked.Increment(ref failed);
-                            System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
-                        }
-                    })).ConfigureAwait(false);
-
-                    if (failed > 0)
-                    {
-                        _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
-                    }
-                });
-            }
+            // CDN 封面兜底：只为**当前可见**且缺封面的卡片补（见 StartCoverFetch 注释）
+            StartCoverFetch();
             GamesView.Refresh();
             StatusLevel = 0;
+            SteamInventoryStats stats = data.Inventory.Stats;
             StatusText = SteamInstalled
-                ? $"找到 {Games.Count} 款游戏 · 库 {data.Libraries.Count} 个 · Steam {(SteamRunning ? "运行中" : "未运行")}"
+                ? BuildInventoryStatusText(stats, data.Libraries.Count)
                 : "未检测到 Steam 客户端";
-            _logger.Info($"游戏库加载完成：{Games.Count} 款（SteamInstalled={SteamInstalled}）");
+            _logger.Info(
+                $"游戏库加载完成：库存 {stats.Total} 款（已安装 {stats.Installed} / 未安装 {stats.NotInstalled}）"
+                + $"，当前展示 {VisibleGameCount} 款，SteamInstalled={SteamInstalled}");
+            if (data.Inventory.Error is not null)
+            {
+                _logger.Warn($"库存扫描存在错误：{data.Inventory.Error}");
+            }
         }
         catch (Exception ex)
         {
@@ -563,6 +679,121 @@ public partial class GameManagerViewModel : ObservableObject
     }
 
     private bool CanLoad => !IsLoading;
+
+    /// <summary>
+    /// 取用于建卡的库存条目。
+    /// <para>
+    /// 🔴 降级不丢数据：库存为空但已安装清单非空（库存扫描失败）时**退化为"只有已安装"**，
+    /// 而不是让整页变空——少一个数据源，不等于该把已经装好的东西也藏起来。
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<SteamInventoryGame> ResolveCardSource(SteamAllData data)
+    {
+        if (data.Inventory.Games.Count > 0)
+        {
+            return data.Inventory.Games;
+        }
+
+        if (data.Games.Count > 0)
+        {
+            _logger.Warn("库存为空 —— 退化为主显已安装清单（本轮未安装的游戏不可见）");
+        }
+
+        return data.Games.Select(g => new SteamInventoryGame
+        {
+            AppId = g.AppId,
+            Name = g.Name,
+            Installed = true,
+            PlaytimeMinutes = g.PlaytimeMinutes,
+            LastPlayed = g.LastPlayed,
+            SizeOnDisk = g.SizeOnDisk,
+            StateFlags = g.StateFlags,
+            InstallDir = g.InstallDir,
+            LibraryPath = g.LibraryPath,
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 状态栏文案：**如实交代还有多少未安装的游戏**。
+    /// 只报「找到 N 款」会让用户以为库里就这些——那是最容易被忽略的状态欺骗。
+    /// </summary>
+    private static string BuildInventoryStatusText(SteamInventoryStats stats, int libraryCount)
+    {
+        string head = stats.NotInstalled > 0
+            ? $"库存 {stats.Total} 款：已安装 {stats.Installed} · 另有 {stats.NotInstalled} 款未安装（勾选「显示未安装」查看）"
+            : $"库存 {stats.Total} 款（全部已安装）";
+        return $"{head} · 库 {libraryCount} 个";
+    }
+
+    /// <summary>
+    /// 为「当前可见且缺封面」的卡片后台补封面（限并发 3、10s/张、失败静默保留占位）。
+    /// <para>
+    /// 🔴 待补清单**必须在本方法（调用线程 = UI 线程）物化**再交给线程池：把 UI 绑定的
+    /// <c>ObservableCollection</c> 的枚举整体挪进后台线程 = 把"UI 冻结"换成"跨线程竞态"。
+    /// </para>
+    /// <para>
+    /// 只取**可见**项：勾选关闭时不为几十上百款不显示的未安装游戏发外呼；
+    /// 用户勾选「显示未安装」时由 <see cref="OnShowNotInstalledChanged"/> 再触发一次。
+    /// </para>
+    /// </summary>
+    private void StartCoverFetch()
+    {
+        var coverless = Games
+            .Where(g => !g.HasCover && (g.IsInstalled || ShowNotInstalled))
+            .ToList();
+        if (coverless.Count == 0)
+        {
+            return;
+        }
+
+        string cacheDir = Path.Combine(
+            System.Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SystemToolkit", "cache", "steam-covers");
+        // REVIEW-3 A-2：串行逐张（每张 10s 超时）在缺封面多时补全过慢（50 张 ≈ 8 分钟），改限并发 3
+        _ = Task.Run(async () =>
+        {
+            var gate = new System.Threading.SemaphoreSlim(3);
+            // 审查 🟠-6 采纳：单张静默改为计数 + 收尾汇总一条日志（逐张记会在断网时刷上百条）
+            int failed = 0;
+            try
+            {
+                await Task.WhenAll(coverless.Select(async vm =>
+                {
+                    try
+                    {
+                        await gate.WaitAsync().ConfigureAwait(false);
+                        try
+                        {
+                            string? path = await SteamService.EnsureCoverFromCdnAsync(cacheDir, vm.AppId)
+                                .ConfigureAwait(false);
+                            if (path is not null)
+                            {
+                                RunOnUi(() => vm.SetCover(path)); // 审查 🔴-2：后台线程 PropertyChanged 统一编组
+                            }
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Threading.Interlocked.Increment(ref failed);
+                        System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
+                    }
+                })).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Dispose();
+            }
+
+            if (failed > 0)
+            {
+                _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
+            }
+        });
+    }
 
     private void HookFilterRefresh(GameCardVm vm)
     {

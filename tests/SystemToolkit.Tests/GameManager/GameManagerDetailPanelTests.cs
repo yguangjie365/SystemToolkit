@@ -19,7 +19,7 @@ namespace SystemToolkit.Tests.GameManager;
 /// </summary>
 public class GameManagerDetailPanelTests
 {
-    private static SteamGame Game(
+    private static SteamInventoryGame Game(
         uint appId,
         string name = "SomeGame",
         string installDir = "SomeGame",
@@ -31,6 +31,7 @@ public class GameManagerDetailPanelTests
         {
             AppId = appId,
             Name = name,
+            Installed = true,
             InstallDir = installDir,
             LibraryPath = libraryPath,
             SizeOnDisk = sizeOnDisk,
