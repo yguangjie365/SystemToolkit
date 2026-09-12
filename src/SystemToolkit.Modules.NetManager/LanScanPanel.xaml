@@ -97,6 +97,11 @@
                               ToolTip="默认关：开启后每 5 分钟后台复扫一轮（自动监控）"/>
                 <TextBlock Text="自动监控（5 分钟）" VerticalAlignment="Center" Margin="6,0,0,0"
                            FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                <ToggleButton Style="{DynamicResource ThemedToggleButton}" IsChecked="{Binding IsPreciseOs}"
+                              VerticalAlignment="Center" Margin="14,0,0,0"
+                              ToolTip="对 TTL 判定为 Windows 的设备批量远程 WMI 读真实系统名与版本号——每轮扫描弹一次 UAC；当前账号无目标机权限时保留 TTL 推断值"/>
+                <TextBlock Text="精确 OS（提权）" VerticalAlignment="Center" Margin="6,0,0,0"
+                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
             </StackPanel>
             <Grid Grid.Column="10" Width="220">
                 <TextBox Style="{DynamicResource FieldInput}"

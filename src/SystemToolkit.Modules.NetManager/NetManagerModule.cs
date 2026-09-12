@@ -77,11 +77,14 @@ public sealed class NetManagerModule : ModuleBase
         services.AddSingleton<ILanNeighborProbe, LanNeighborProbe>();
         services.AddSingleton<LanBaselineStore>();
         services.AddSingleton<ILanPeerProbe, LanPeerProbe>();
+        // NET-6 精确 OS：批量远程 WMI 经 ElevatedHelper osver 窄动词（一轮一次 UAC；拒绝安全降级）
+        services.AddSingleton<ILanOsVersionQuerier, LanOsElevatedQuerier>();
         services.AddSingleton(sp => new LanScanService(
             sp.GetRequiredService<ILanNeighborProbe>(),
             sp.GetRequiredService<LanBaselineStore>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager"),
-            peerProbe: sp.GetRequiredService<ILanPeerProbe>()));
+            peerProbe: sp.GetRequiredService<ILanPeerProbe>(),
+            osQuerier: sp.GetRequiredService<ILanOsVersionQuerier>()));
 
         // VM 组合根 + 视图
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）

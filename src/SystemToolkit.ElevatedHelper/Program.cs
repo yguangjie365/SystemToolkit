@@ -69,6 +69,12 @@ public static class Program
             return RunThrottling(args[3..], outFile);
         }
 
+        // 子命令分派：osver = 批量远程 WMI 读 OS 名+版本号（NET-6 精确识别；只读、双端同源 IPv4 白名单）
+        if (args.Length >= 3 && args[2].Equals("osver", StringComparison.OrdinalIgnoreCase))
+        {
+            return await OsVerRunner.RunAsync(args[3..], outFile).ConfigureAwait(false);
+        }
+
         // 子命令分派：vss = 卷影快照创建/删除（AlphaVSS，备份用途；删除幂等，快照生命周期归调用方）
         if (args.Length >= 3 && args[2].Equals("vss", StringComparison.OrdinalIgnoreCase))
         {

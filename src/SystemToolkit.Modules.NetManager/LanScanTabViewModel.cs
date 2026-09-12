@@ -147,6 +147,11 @@ public partial class LanScanTabViewModel : ObservableObject
     [ObservableProperty]
     private bool _isMonitorOn;
 
+    /// <summary>精确 OS 识别开关（NET-6 增强）：开启后每轮扫描对 Windows 候选发起一次批量
+    /// 远程 WMI（经 ElevatedHelper，一轮一次 UAC）；关闭/拒绝时保留 TTL 推断值。</summary>
+    [ObservableProperty]
+    private bool _isPreciseOs;
+
     // ══════════════ 命令 ══════════════
 
     /// <summary>页面首载：拉适配器（复用设置页同源数据），默认选中第一块可用 IPv4 物理网卡。</summary>
@@ -222,7 +227,7 @@ public partial class LanScanTabViewModel : ObservableObject
         try
         {
             DateTimeOffset startedAt = DateTimeOffset.Now;
-            LanScanResult result = await _scan.ScanAsync(plan, progress, runCts.Token)
+            LanScanResult result = await _scan.ScanAsync(plan, progress, runCts.Token, preciseOs: IsPreciseOs)
                 .ConfigureAwait(true);
             if (result.WasCancelled)
             {
@@ -306,7 +311,8 @@ public partial class LanScanTabViewModel : ObservableObject
                 IsBusy = true;
                 try
                 {
-                    LanScanResult result = await _scan.ScanAsync(plan, null, ct).ConfigureAwait(true);
+                    LanScanResult result = await _scan.ScanAsync(plan, null, ct, preciseOs: IsPreciseOs)
+                        .ConfigureAwait(true);
                     if (!result.WasCancelled)
                     {
                         ApplyResult(result, silent: true);

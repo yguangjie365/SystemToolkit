@@ -586,6 +586,125 @@ public class LanScanTests
         }
     }
 
+    // ═══════════════ 精确 OS 提权链（LanOsVerRules / PreciseOsAsync） ═══════════════
+
+    [Theory]
+    [InlineData("192.168.1.1", true)]
+    [InlineData("10.0.0.9", true)]
+    [InlineData("192.168.1.1/24", false)]
+    [InlineData("192.168.1.1:135", false)]
+    [InlineData(" 192.168.1.1", false)]
+    [InlineData("fe80::1", false)]
+    [InlineData("", false)]
+    public void OsVerRules_Ipv4Gate(string token, bool valid) =>
+        Assert.Equal(valid, LanOsVerRules.IsValidTargetIp(token));
+
+    [Fact]
+    public void OsVerRules_Parse_MapsLines_SkipsDegrade_AndIgnoresGarbage()
+    {
+        string outText = string.Join("\r\n",
+            "192.168.1.1=Microsoft Windows 10 专业版|10.0.19045",
+            "192.168.1.9=",          // 无权限/非 Windows：空值降级
+            "脏行没有等号",
+            "999.1.1.1=Hax|1.0") + "\r\n"; // 非法 IP：防御式丢弃
+        Dictionary<string, LanOsRemoteInfo> map = LanOsVerRules.ParseOutput(outText);
+        Assert.Single(map);
+        Assert.Equal("Microsoft Windows 10 专业版 · 10.0.19045", map["192.168.1.1"].Display);
+    }
+
+    private sealed class FakeOsQuerier : ILanOsVersionQuerier
+    {
+        public LanOsQueryOutcome Outcome { get; init; } = new(LanOsQueryStatus.Ok,
+            new Dictionary<string, LanOsRemoteInfo> { ["192.168.9.10"] = new("Windows 11 Pro", "10.0.22631") });
+
+        public IReadOnlyList<string>? LastTargets { get; private set; }
+
+        public Task<LanOsQueryOutcome> QueryAsync(IReadOnlyList<string> ipv4s, CancellationToken ct = default)
+        {
+            LastTargets = ipv4s;
+            return Task.FromResult(Outcome);
+        }
+    }
+
+    private static LanDevice WinInferredDevice(string ip = "192.168.9.10") =>
+        new(ip, "00:0C:29:00:00:10", null, null, T0, T0, "Windows (推断)");
+
+    [Fact]
+    public async Task PreciseOs_WhenOk_ReplacesInferredWithRealVersion()
+    {
+        string path = TempPath();
+        try
+        {
+            FakeProbe probe = new FakeProbe().Alive("192.168.9.10", "00:0C:29:00:00:10");
+            var querier = new FakeOsQuerier();
+            var service = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null),
+                peerProbe: new FakePeerProbe { Info = new LanPeerInfo(128, null) }, // TTL 128 → Windows 推断
+                osQuerier: querier);
+            LanScanResult r = await service.ScanAsync(TestPlan(), preciseOs: true);
+            Assert.Equal("Windows 11 Pro · 10.0.22631", r.Devices.Single().Os);
+            Assert.Contains("192.168.9.10", querier.LastTargets!);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task PreciseOs_Denied_KeepsTtlInference()
+    {
+        string path = TempPath();
+        try
+        {
+            FakeProbe probe = new FakeProbe().Alive("192.168.9.10", "00:0C:29:00:00:10");
+            var service = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null),
+                peerProbe: new FakePeerProbe { Info = new LanPeerInfo(128, null) },
+                osQuerier: new FakeOsQuerier { Outcome = new LanOsQueryOutcome(LanOsQueryStatus.Denied, new Dictionary<string, LanOsRemoteInfo>()) });
+            LanScanResult r = await service.ScanAsync(TestPlan(), preciseOs: true);
+            Assert.Equal("Windows (推断)", r.Devices.Single().Os); // 被拒不改动，保留推断值
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task PreciseOs_SkippedForNonWindowsAndWhenFlagOff()
+    {
+        string path = TempPath();
+        try
+        {
+            FakeProbe probe = new FakeProbe().Alive("192.168.9.10", "00:0C:29:00:00:10");
+            var querier = new FakeOsQuerier();
+            var service = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null),
+                peerProbe: new FakePeerProbe { Info = new LanPeerInfo(64, null) }, // Linux 推断，不该进 WMI 候选
+                osQuerier: querier);
+
+            await service.ScanAsync(TestPlan(), preciseOs: true);
+            Assert.Null(querier.LastTargets);               // 非 Windows 推断 → 零发起（不白弹 UAC）
+
+            var q2 = new FakeOsQuerier();
+            var service2 = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null),
+                peerProbe: new FakePeerProbe { Info = new LanPeerInfo(128, null) },
+                osQuerier: q2);
+            await service2.ScanAsync(TestPlan(), preciseOs: false);
+            Assert.Null(q2.LastTargets);                    // 关 flag 完全不发起
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static LanBaseline Baseline(params (string Ip, string Mac)[] pairs) =>
         new(LanBaselineStore.FormatVersion, T0,
             pairs.Select(p => new LanBaselineEntry(p.Ip, p.Mac, null, null, T0, T0)).ToList(), []);

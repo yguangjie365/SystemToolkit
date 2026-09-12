@@ -27,6 +27,7 @@ public class SourceSanityGuardTests
         "CrashLog.cs",
         "Program.cs", // ElevatedHelper
         "VssRunner.cs", // ElevatedHelper VSS verb：结果文件与 Program.cs 同语义（写失败无法补救，退出码即结果）
+        "OsVerRunner.cs", // ElevatedHelper osver verb：一次性 %TEMP% 结果文件，同上语义（调用方读后即删）
         "OverviewViewModel.Report.cs",
         "HardwareSensorProbe.cs",
         // 2026-09-11（LOG-1）：RollingFileSink.cs 已删除——日志落盘移交 Serilog（SerilogSink 无直写模式），

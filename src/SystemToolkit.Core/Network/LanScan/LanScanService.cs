@@ -35,6 +35,7 @@ public sealed class LanScanService
     private readonly ILogger _log;
     private readonly Func<string, Task<string?>> _resolveHost;
     private readonly ILanPeerProbe? _peer;
+    private readonly ILanOsVersionQuerier? _osQuerier;
 
     /// <summary>上一轮观测（网段标签 → IP↔MAC）：跨轮冲突判定的内存态，不落盘。</summary>
     private readonly Dictionary<string, Dictionary<string, string>> _previousRounds = new(StringComparer.Ordinal);
@@ -45,13 +46,15 @@ public sealed class LanScanService
         LanBaselineStore store,
         ILogger? logger = null,
         Func<string, Task<string?>>? hostnameResolver = null,
-        ILanPeerProbe? peerProbe = null)
+        ILanPeerProbe? peerProbe = null,
+        ILanOsVersionQuerier? osQuerier = null)
     {
         _probe = probe;
         _store = store;
         _log = logger ?? NullLogger.Instance;
         _resolveHost = hostnameResolver ?? ResolveHostnameAsync;
         _peer = peerProbe;
+        _osQuerier = osQuerier;
     }
 
     /// <summary>
@@ -71,7 +74,8 @@ public sealed class LanScanService
     public async Task<LanScanResult> ScanAsync(
         LanSubnetPlan plan,
         IProgress<LanScanProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool preciseOs = false)
     {
         using LogTiming timing = _log.Time(ScanAction);
         DateTimeOffset now = DateTimeOffset.Now;
@@ -156,6 +160,13 @@ public sealed class LanScanService
             if (_peer is not null && devices.Count <= PeerEnrichLimit)
             {
                 devices = await EnrichAsync(devices, ct).ConfigureAwait(false);
+            }
+
+            // ③b 精确 OS（用户批准的提权路线）：对 TTL 判定为 Windows 的设备批量远程 WMI——
+            //     一轮一次 UAC；拒绝 → 保留推断值并留痕；无权限/非 Windows 目标逐台自然降级
+            if (preciseOs && _osQuerier is not null)
+            {
+                devices = await PreciseOsAsync(devices, ct).ConfigureAwait(false);
             }
 
             // ④ 基线比对 + 首轮候选即时双探复核 → 事件/冲突/新基线（空 MAC 行不参与绑定比对）
@@ -261,6 +272,43 @@ public sealed class LanScanService
 
         ct.ThrowIfCancellationRequested();
         return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 精确 OS 富化：仅对「TTL 推断 = Windows」的设备发起（限制在真实候选上，别拿 WMI 扫打印机）。
+    /// Denied/Unavailable 不抛不改数据——UI 保留「Windows (推断)」并落日志。
+    /// </summary>
+    private async Task<List<LanDevice>> PreciseOsAsync(List<LanDevice> devices, CancellationToken ct)
+    {
+        var windowsLike = devices
+            .Where(static d => d.Os is not null && d.Os.Contains("Windows", StringComparison.Ordinal))
+            .Take(LanOsVerRules.MaxTargets)
+            .ToList();
+        if (windowsLike.Count == 0)
+        {
+            return devices;
+        }
+
+        LanOsQueryOutcome outcome = await _osQuerier!.QueryAsync(
+            windowsLike.Select(static d => d.Ip).ToList(), ct).ConfigureAwait(false);
+        switch (outcome.State)
+        {
+            case LanOsQueryStatus.Denied:
+                _log.Warn("LanScanOs 提权被拒：用户拒绝了 UAC，OS 列保留 TTL 推断值（无副作用）");
+                return devices;
+            case LanOsQueryStatus.Unavailable:
+                _log.Warn("LanScanOs 不可用：提权辅助进程缺失或整批失败，OS 列保留推断值");
+                return devices;
+        }
+
+        if (outcome.Results.Count == 0)
+        {
+            return devices;
+        }
+
+        return devices.Select(d =>
+            outcome.Results.TryGetValue(d.Ip, out LanOsRemoteInfo? info) ? d with { Os = info.Display } : d)
+            .ToList();
     }
 
     /// <summary>邻居表 → IP↔MAC（仅保留完整以太网绑定；重复键先到先得）。</summary>
