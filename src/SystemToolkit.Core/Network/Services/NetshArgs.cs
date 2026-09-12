@@ -1,3 +1,5 @@
+using SystemToolkit.Core.Network.SplitRoute;
+
 namespace SystemToolkit.Core.Network.Services;
 
 /// <summary>
@@ -63,6 +65,19 @@ public static class NetshArgs
     /// <summary>启用 / 禁用适配器（软开关，等价设备管理器停用）。</summary>
     public static string SetAdapterEnabled(string adapter, bool enabled)
         => $"interface set interface {Name(adapter)} admin={(enabled ? "enable" : "disable")}";
+
+    // ── 分流路由命令（NET-7）：netsh 官方语法顺序 prefix → interface → nexthop ──
+
+    /// <summary>接口名参数（route 命令用 <c>interface="…"</c>，与 set address 的 <c>name=</c> 不同）。</summary>
+    private static string Interface(string adapter) => $"interface=\"{ValidateAdapterName(adapter)}\"";
+
+    /// <summary>新增 IPv4 路由（store=persistent 落持久表；metric 为路由级跃点）。</summary>
+    public static string AddRoute(string adapter, string prefixCidr, string nexthop, bool persistent, int metric)
+        => $"interface ipv4 add route prefix={SplitCidr.Normalize(prefixCidr)} {Interface(adapter)} nexthop={nexthop} store={(persistent ? "persistent" : "active")} metric={metric}";
+
+    /// <summary>删除 IPv4 路由（按 目标+接口+网关 三要素精确匹配——只删自己创建的）。</summary>
+    public static string DeleteRoute(string adapter, string prefixCidr, string nexthop)
+        => $"interface ipv4 delete route prefix={SplitCidr.Normalize(prefixCidr)} {Interface(adapter)} nexthop={nexthop}";
 
     // ── 修复类命令（M3）：两条 ipconfig 走 ipconfig.exe，其余走 netsh ──
 

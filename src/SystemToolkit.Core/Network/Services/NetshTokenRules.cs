@@ -43,6 +43,13 @@ public static partial class NetshTokenRules
     [GeneratedRegex(@"^interface tcp set global (autotuninglevel=(disabled|highlyrestricted|restricted|normal|experimental)|rss=(disabled|enabled|default)|ecncapability=(disabled|enabled|default))$")]
     private static partial Regex TcpSetGlobal();
 
+    // NET-7 分流：route 增删（netsh 官方顺序 prefix → interface → nexthop；值域二次严格校验见 MatchNetsh）
+    [GeneratedRegex(@"^interface ipv4 add route prefix=(" + IpPattern + @")/(\d{1,2}) interface=""[^""]+"" nexthop=(" + IpPattern + @") store=(persistent|active)( metric=(\d{1,4}))?$")]
+    private static partial Regex AddRoute();
+
+    [GeneratedRegex(@"^interface ipv4 delete route prefix=(" + IpPattern + @")/(\d{1,2}) interface=""[^""]+"" nexthop=(" + IpPattern + @")$")]
+    private static partial Regex DeleteRoute();
+
     [GeneratedRegex(@"^winsock reset$")]
     private static partial Regex WinsockReset();
 
@@ -119,8 +126,28 @@ public static partial class NetshTokenRules
             return int.TryParse(m.Groups[1].Value, out int metric) && metric is >= 1 and <= 9999;
         }
 
+        m = AddRoute().Match(arguments);
+        if (m.Success)
+        {
+            // 组序：1=目标IP 2=前缀长度 3=nexthop 4=store 5/6=metric（metric 数字组=6）
+            return ValidRoute(m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value)
+                && (!m.Groups[6].Success || int.TryParse(m.Groups[6].Value, out int rm) && rm is >= 1 and <= 9999);
+        }
+
+        m = DeleteRoute().Match(arguments);
+        if (m.Success)
+        {
+            return ValidRoute(m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value);
+        }
+
         return false;
     }
+
+    /// <summary>route 三值联合校验：目标 IP / 前缀长度 0..32 / 网关 IP 全严格才放行。</summary>
+    private static bool ValidRoute(string prefixIp, string prefixLen, string nexthop) =>
+        IpValidation.IsIPv4(prefixIp)
+        && int.TryParse(prefixLen, out int len) && len is >= 0 and <= 32
+        && IpValidation.IsIPv4(nexthop);
 
     /// <summary>归一化可执行名："C:\Windows\System32\netsh.exe" → "netsh"。无法识别返回空串。</summary>
     private static string Normalize(string fileName)
