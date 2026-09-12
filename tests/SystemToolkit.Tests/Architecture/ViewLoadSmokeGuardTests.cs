@@ -7,6 +7,7 @@ using SystemToolkit.Core.Drivers;
 using SystemToolkit.Core.FileTransfer.Services;
 using SystemToolkit.Core.GameManager.Models;
 using SystemToolkit.Core.Network.LanScan;
+using SystemToolkit.Core.Network.SplitRoute;
 using SystemToolkit.Core.Network.Services;
 using SystemToolkit.Infrastructure.FileTransfer;
 using SystemToolkit.Modules.DriverManager;
@@ -237,12 +238,12 @@ public class ViewLoadSmokeGuardTests
     }
 
     /// <summary>
-    /// 网络管理视图全页加载冒烟（2026-09-06 V0.4 交付随附；2026-09-12 NET-6 扩为 5 Tab）：
-    /// 5 Tab 布局 + Run 绑定 + 组合根 VM 构造。与驱动用例同类串行执行——Application 全 AppDomain 单实例，
+    /// 网络管理视图全页加载冒烟（2026-09-06 V0.4 交付随附；09-12 NET-6 扩 5 Tab、NET-7 扩 6 Tab）：
+    /// 6 Tab 布局 + Run 绑定 + 组合根 VM 构造。与驱动用例同类串行执行——Application 全 AppDomain 单实例，
     /// 必须经 EnsureApplication 复用（ Driver 用例先行创建）。
     /// </summary>
     [Fact]
-    public void NetManagerView_LoadsWithFiveTabs_WithoutException()
+    public void NetManagerView_LoadsWithSixTabs_WithoutException()
     {
         Exception? captured = null;
         string stage = "init";
@@ -262,6 +263,9 @@ public class ViewLoadSmokeGuardTests
                 var tuning = new TcpTuningService(runner);
                 // NET-6：真探针构造零系统调用；基线重定向 temp 文件（冒烟不触发 Loaded/Scan，双保险）
                 var lanScan = new LanScanService(new LanNeighborProbe(), new LanBaselineStore(baselinePath));
+                var splitRoute = new SplitRouteService(runner, new WindowsNetProbe(),
+                    new SplitLedgerStore(Path.Combine(snapshotDir, "split-ledger.json")),
+                    new NetworkSnapshotService(info, tuning, new NetConfigService(runner), snapshotDir));
                 var vm = new NetManagerViewModel(
                     info,
                     new NetConfigService(runner),
@@ -272,7 +276,8 @@ public class ViewLoadSmokeGuardTests
                     new NetRepairService(runner, info),
                     tuning,
                     new WindowsElevationProvider(),
-                    lanScan);
+                    lanScan,
+                    splitRoute);
                 var view = new NetManagerView(vm);
 
                 stage = "measure + arrange";

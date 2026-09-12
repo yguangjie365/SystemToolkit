@@ -4,7 +4,7 @@ using System.Windows.Controls;
 namespace SystemToolkit.Modules.NetManager;
 
 /// <summary>
-/// 网络管理视图：5 Tab（设置/诊断/修复/优化/局域网扫描）+ 底部共享日志面板。
+/// 网络管理视图：6 Tab（设置/诊断/修复/优化/局域网扫描/分流路由）+ 底部共享日志面板。
 /// Loaded 完成组合根接线（确认回调 + 首屏数据，幂等）；Tab 切换由 code-behind 控制面板可见性
 /// （AppManager 同款机制——不改布局结构，无响应式重排）。
 /// </summary>
@@ -24,6 +24,7 @@ public partial class NetManagerView : UserControl
         {
             (DataContext as NetManagerViewModel)?.Diagnostics.CancelPing();
             (DataContext as NetManagerViewModel)?.Lan.CancelMonitor();
+            (DataContext as NetManagerViewModel)?.Split.CancelGuard();
         };
     }
 
@@ -44,6 +45,7 @@ public partial class NetManagerView : UserControl
             Settings.ConfirmRequest = Vm.ConfirmRequest;
             Repair.ConfirmRequest = Vm.ConfirmRequest;
             Optimize.ConfirmRequest = Vm.ConfirmRequest;
+            Split.ConfirmRequest = Vm.ConfirmRequest;
             await Vm.LoadAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -58,6 +60,8 @@ public partial class NetManagerView : UserControl
     private NetRepairTabViewModel Repair => Vm.Repair;
 
     private NetOptimizeTabViewModel Optimize => Vm.Optimize;
+
+    private SplitRouteTabViewModel Split => Vm.Split;
 
     private void OnTabChecked(object sender, RoutedEventArgs e)
     {
@@ -90,5 +94,6 @@ public partial class NetManagerView : UserControl
         RepairPanel.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         OptimizePanel.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
         LanPanel.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+        SplitPanel.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
     }
 }

@@ -136,6 +136,17 @@ public sealed partial class SplitRouteService
             .ToList();
     }
 
+    /// <summary>接口清单（索引/名称/当前跃点）——UI 组网卡候选卡的数据源。</summary>
+    public async Task<IReadOnlyList<RouteTableParser.InterfaceRow>> ReadInterfacesAsync(CancellationToken ct = default)
+    {
+        List<string> lines = [];
+        await _runner.RunAsync("netsh", "interface ipv4 show interfaces", lines.Add, ct).ConfigureAwait(false);
+        return RouteTableParser.ParseInterfaces(lines);
+    }
+
+    /// <summary>窥视当前台账（null=未应用态）；UI 回显选卡与台账表。</summary>
+    public SplitLedger? PeekLedger() => _ledgerStore.Load().Ledger;
+
     private async Task<int> ReadLanInterfaceMetricAsync(string lanName, CancellationToken ct)
     {
         List<string> lines = [];

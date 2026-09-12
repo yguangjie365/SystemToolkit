@@ -26,6 +26,38 @@ public static partial class RouteTableParser
     [GeneratedRegex(@"^\s*\*?\s+(\d+)(?:\s+(\d+))?\s+(" + Ip + @")/(\d{1,2})\s+(" + Ip + @")(?=\s|$)")]
     private static partial Regex RowRegex();
 
+    /// <summary><c>netsh interface ipv4 show interfaces</c> 行：接口索引 + 名称 + 当前跃点。</summary>
+    public sealed record InterfaceRow(int IfIndex, string Name, int Metric);
+
+    /// <summary>接口表解析（真机样本形态同 InterfaceTableParser：Idx Met MTU 状态 名称，无 Type 列）。</summary>
+    public static IReadOnlyList<InterfaceRow> ParseInterfaces(IEnumerable<string> lines)
+    {
+        List<InterfaceRow> rows = [];
+        foreach (string raw in lines)
+        {
+            Match m = IfaceRegex().Match(raw.TrimEnd());
+            if (!m.Success
+                || !int.TryParse(m.Groups[1].Value, out int idx)
+                || !int.TryParse(m.Groups[2].Value, out int metric))
+            {
+                continue;
+            }
+
+            string name = m.Groups[3].Value.Trim();
+            if (name.Contains("Loopback", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            rows.Add(new InterfaceRow(idx, name, metric));
+        }
+
+        return rows;
+    }
+
+    [GeneratedRegex(@"^\s*(\d+)\s+(\d+)\s+\d+\s+\S+\s+(.+\S)\s*$")]
+    private static partial Regex IfaceRegex();
+
     /// <summary>逐行解析：locale 无关数字 token 驱动；表头/分隔线/越界前缀静默跳过。</summary>
     public static IReadOnlyList<RouteRow> Parse(IEnumerable<string> lines)
     {

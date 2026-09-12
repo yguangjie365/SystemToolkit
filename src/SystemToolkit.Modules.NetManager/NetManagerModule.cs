@@ -3,6 +3,7 @@ using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Network.LanScan;
 using SystemToolkit.Core.Network.Services;
+using SystemToolkit.Core.Network.SplitRoute;
 
 namespace SystemToolkit.Modules.NetManager;
 
@@ -86,6 +87,16 @@ public sealed class NetManagerModule : ModuleBase
             peerProbe: sp.GetRequiredService<ILanPeerProbe>(),
             osQuerier: sp.GetRequiredService<ILanOsVersionQuerier>()));
 
+        // NET-7 分流路由：台账/编排服务（写命令经 ElevatingCommandRunner 白名单按需 UAC；
+        // DI 铁律同 LanScan——工厂显式喂键控日志器，动作名 SplitApply/SplitRestore/SplitGuard）
+        services.AddSingleton<SplitLedgerStore>();
+        services.AddSingleton(sp => new SplitRouteService(
+            sp.GetRequiredService<ICommandRunner>(),
+            sp.GetRequiredService<INetProbe>(),
+            sp.GetRequiredService<SplitLedgerStore>(),
+            sp.GetRequiredService<INetworkSnapshotService>(),
+            sp.GetRequiredKeyedService<ILogger>("netmanager")));
+
         // VM 组合根 + 视图
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）
         services.AddSingleton(sp => new NetManagerViewModel(
@@ -99,6 +110,7 @@ public sealed class NetManagerModule : ModuleBase
             sp.GetRequiredService<ITcpTuningService>(),
             sp.GetRequiredService<IElevationProvider>(),
             sp.GetRequiredService<LanScanService>(),
+            sp.GetRequiredService<SplitRouteService>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager")));
         services.AddSingleton<NetManagerView>();
     }

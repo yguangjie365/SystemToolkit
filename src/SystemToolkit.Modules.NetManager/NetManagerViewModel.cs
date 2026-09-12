@@ -5,12 +5,13 @@ using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Network.LanScan;
 using SystemToolkit.Core.Network.Services;
+using SystemToolkit.Core.Network.SplitRoute;
 using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.NetManager;
 
 /// <summary>
-/// 网络管理页组合根 VM：五个 Tab（设置 / 诊断 / 修复 / 优化 / 局域网扫描）+ 模块级共享操作日志。
+/// 网络管理页组合根 VM：六个 Tab（设置 / 诊断 / 修复 / 优化 / 局域网扫描 / 分流路由）+ 模块级共享操作日志。
 /// 子页业务在各自 ViewModel；本类负责依赖编排与跨页联动（修复后自动复诊断、局域网行 Ping 跳诊断页）。
 /// </summary>
 public partial class NetManagerViewModel : ObservableObject
@@ -28,9 +29,11 @@ public partial class NetManagerViewModel : ObservableObject
 
     public LanScanTabViewModel Lan { get; }
 
+    public SplitRouteTabViewModel Split { get; }
+
     public ObservableCollection<LogLine> LogLines { get; } = new();
 
-    /// <summary>当前 Tab（0=设置 1=诊断 2=修复 3=优化 4=局域网扫描）。</summary>
+    /// <summary>当前 Tab（0=设置 1=诊断 2=修复 3=优化 4=局域网扫描 5=分流路由）。</summary>
     [ObservableProperty]
     private int _selectedTabIndex;
 
@@ -45,6 +48,7 @@ public partial class NetManagerViewModel : ObservableObject
         ITcpTuningService tuningService,
         IElevationProvider elevation,
         LanScanService lanScan,
+        SplitRouteService splitRoute,
         ILogger? logger = null)
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
@@ -55,6 +59,7 @@ public partial class NetManagerViewModel : ObservableObject
         Repair = new NetRepairTabViewModel(repairService, diagnosticService, Log);
         Optimize = new NetOptimizeTabViewModel(tuningService, Log);
         Lan = new LanScanTabViewModel(infoService, lanScan, Log);
+        Split = new SplitRouteTabViewModel(infoService, splitRoute, Log);
 
         // 跨页联动：一键安全修复成功后自动复诊断（老 UI 行为，用户已习惯）
         Repair.SafeSequenceCompleted += () =>
@@ -77,5 +82,6 @@ public partial class NetManagerViewModel : ObservableObject
         await Settings.LoadAsync().ConfigureAwait(true);
         await Optimize.LoadAsync().ConfigureAwait(true);
         await Lan.LoadAsync().ConfigureAwait(true);
+        await Split.LoadAsync().ConfigureAwait(true);
     }
 }

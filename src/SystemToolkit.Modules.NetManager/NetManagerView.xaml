@@ -50,6 +50,9 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
             <RadioButton Style="{DynamicResource SectionTab}" GroupName="NetTabs"
                          Content="局域网扫描" Tag="4" Checked="OnTabChecked"
                          ToolTip="NET-6：主动 ARP 扫段 + 基线 diff，新设备/绑定变更/IP 冲突监控（免管理员）"/>
+            <RadioButton Style="{DynamicResource SectionTab}" GroupName="NetTabs"
+                         Content="分流路由" Tag="5" Checked="OnTabChecked"
+                         ToolTip="NET-7：网卡A管外网、网卡B走内网段（唯一默认路由+逐段指路+守护防回潮，写操作按需 UAC）"/>
         </StackPanel>
 
         <!-- ============ Tab 内容 ============ -->
@@ -643,6 +646,9 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
 
             <!-- ============ ⑤ 局域网扫描（NET-6，2026-09-12 示意图批准；三态在面板内部） ============ -->
             <local:LanScanPanel x:Name="LanPanel" Visibility="Collapsed" DataContext="{Binding Lan}"/>
+
+            <!-- ============ ⑥ 分流路由（NET-7，2026-09-12 示意图批准） ============ -->
+            <local:SplitRoutePanel x:Name="SplitPanel" Visibility="Collapsed" DataContext="{Binding Split}"/>
         </Grid>
 
         <!-- ============ 底部操作日志（等宽深色容器，可折叠） ============ -->
