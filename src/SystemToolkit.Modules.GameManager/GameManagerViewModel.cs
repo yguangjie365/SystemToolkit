@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
-using System.Text.Json;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -166,7 +165,7 @@ public partial class SteamAccountVm : ObservableObject
 }
 
 /// <summary>
-/// 游戏管理页 VM：Steam 本地库只读展示 + 启动/商店/目录/卸载引导 + 账户切换（A1）+ 诊断导出（A4）。
+/// 游戏管理页 VM：Steam 本地库只读展示 + 启动/商店/目录/卸载引导 + 账户切换（A1）。
 /// 数据全部来自本地 VDF/ACF（设计 §3 第一阶段策略）；加载在后台线程，一次进入页面加载一次。
 /// </summary>
 public partial class GameManagerViewModel : ObservableObject
@@ -719,41 +718,9 @@ public partial class GameManagerViewModel : ObservableObject
         LibraryCapacityText = $"· 库 {libraries.Count} 个 · 剩余 {GameVmFormat.SizeText(free)}";
     }
 
-    // ================= A4 诊断导出 =================
-
-    /// <summary>
-    /// 导出 Steam 解析诊断包到 <c>%LOCALAPPDATA%\SystemToolkit\logs\</c>（A4）。
-    /// 用途：VDF/ACF 解析异常时把「各文件路径 + 原文 + 计数 + 错误明细」一次性带走排障。
-    /// ⚠️ 包内**含 loginusers.vdf / libraryfolders.vdf 原文**（含账户名与 SteamID64）→ 仅落本地，
-    /// 状态栏文案只给路径、不打印内容。
-    /// </summary>
-    [RelayCommand]
-    private async Task ExportDiagnosticsAsync()
-    {
-        try
-        {
-            SteamDebugInfo dump = await Task.Run(_steam.GetDebugDump).ConfigureAwait(true);
-            string dir = Path.Combine(
-                System.Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SystemToolkit",
-                "logs");
-            Directory.CreateDirectory(dir);
-            string file = Path.Combine(
-                dir,
-                "steam-debug-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".json");
-            string json = JsonSerializer.Serialize(dump, new JsonSerializerOptions { WriteIndented = true });
-            SystemToolkit.Core.Utilities.AtomicFile.WriteAllText(file, json);
-            StatusText = $"诊断已导出：{file}";
-            StatusLevel = 1;
-            _logger.Info($"Steam 诊断已导出：{file}");
-        }
-        catch (Exception ex)
-        {
-            StatusText = "导出诊断失败：" + ex.Message;
-            StatusLevel = 2;
-            _logger.Error("导出 Steam 诊断失败", ex);
-        }
-    }
+    // ================= A4 诊断导出：❌ 已撤下 =================
+    // 2026-09-13 主人反馈：页头放「导出诊断」按钮不合适，删除该功能（VM 命令 + View 按钮一并移除）。
+    // 未实现的迁移方案（如将来需要）：挂到设置模块或菜单里，而不是占页头主操作位。
 
     /// <summary>
     /// 同步命令统一兜底（审查 🔴 采纳，2026-09-09）：steam:// 协议调用 / 进程启动会因协议未注册、

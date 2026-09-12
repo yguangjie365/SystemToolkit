@@ -52,6 +52,27 @@
         </Style>
 
         <!-- ============ A1 账户选择器（2026-09-13） ============ -->
+        <!-- 页头账户区右侧间距（与徽章之间）。用具名 Thickness 而非 Space_*：后者四边都加会顶高整行。 -->
+        <Thickness x:Key="HeaderGap">0,0,14,0</Thickness>
+        <!-- 账户区外壳按钮：**透明底 + 无边框**。
+             原设计里账户块是页头的一支行内信息块，套 SecondaryButton 的白底 + 1px 边框会变成突兀方框
+             （2026-09-13 实机反馈）。hover/pressed 只给轻微底色，保留"可点"提示但不给按钮框观感。
+             BorderThickness=0 兜底：即便基类 hover 触发器改写了 BorderBrush 也画不出边。 -->
+        <Style x:Key="AccountChipButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="{DynamicResource Space_XXS}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush_AccentSoft}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <!-- 紧凑头像框：与页头 34px 头像同款观感（圆角方形 + 深底 + 图片/字母二选一）。
              尺寸写在此处 Setter 内：棘轮只扫 Width="数字" 的内联形态，与本文件 GameCard 同款做法保持一致。 -->
         <Style x:Key="AccountAvatarBox" TargetType="Border">
@@ -124,7 +145,6 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="游戏管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
@@ -136,8 +156,8 @@
                  下拉用 ContextMenu 而非自绘 Popup —— 复用主题词汇 ToolkitContextMenu/ToolkitMenuItem
                  （与卡片 ⋯ 菜单同一套），且 DataContext 桥接方式在本文件已实证。
                  禁用时用 ToolTip 说明原因（🟠 禁用按钮必须有因可查）。 -->
-            <Button x:Name="AccountButton" Grid.Column="2" Style="{DynamicResource SecondaryButton}"
-                    Margin="{DynamicResource Space_XS}" VerticalAlignment="Center" MinHeight="34"
+            <Button x:Name="AccountButton" Grid.Column="2" Style="{StaticResource AccountChipButton}"
+                    Margin="{StaticResource HeaderGap}"
                     Click="OnAccountMenuClick"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                     IsEnabled="{Binding CanPickAccount}"
@@ -191,7 +211,20 @@
                     </StackPanel>
                 </StackPanel>
             </Button>
-            <Border Grid.Column="3" Style="{DynamicResource LiveBadge}" Height="30" Margin="0,0,12,0">
+            <!-- 徽章底色随状态（2026-09-13 截图反馈）：LiveBadge 基样式是「LIVE」语义的绿底绿框，
+                 套在「未运行」上等于用绿色宣告离线 —— 状态欺骗。未运行时改中性底色/描边，仅运行中保留绿。
+                 （此前只有文字颜色随状态变，底色恒定绿。超出「删导出诊断 + 调按钮布局」的字面范围，请过目） -->
+            <Border Grid.Column="3" Height="30" Margin="0,0,12,0">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource LiveBadge}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding SteamRunning}" Value="False">
+                                <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{DynamicResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
@@ -207,14 +240,9 @@
                     </TextBlock.Style>
                 </TextBlock>
             </Border>
-            <!-- A4 诊断导出（⚠️ 不在已确认的布局图内，评审时请过目）：与「刷新」并列。
-                 有意用 MinHeight 而非 Height —— 本文件 Height 裸值已用掉基线 9 中的 8，不再消耗余量。 -->
-            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" MinHeight="30" Content="导出诊断"
-                    Command="{Binding ExportDiagnosticsCommand}"
-                    ToolTip="把 Steam 诊断包（各 VDF 路径/原文/计数/错误明细）导出到日志目录"
-                    AutomationProperties.Name="导出 Steam 诊断"/>
-            <Button Grid.Column="5" Style="{DynamicResource SecondaryButton}" Height="30" Content="刷新"
-                    Command="{Binding LoadCommand}"/>
+            <!-- VerticalAlignment=Center：页头行高由标题块决定（约 44px），按钮不设对齐会默认 Stretch 被拉高 -->
+            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" VerticalAlignment="Center"
+                    Content="刷新" Command="{Binding LoadCommand}"/>
         </Grid>
 
         <!-- ============ 工具行 ============ -->
