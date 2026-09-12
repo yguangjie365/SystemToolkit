@@ -38,6 +38,11 @@ public static class OuiTable
         ["DC:A6:32"] = "Raspberry Pi",
         ["00:17:88"] = "Philips (Hue)",
         ["00:1A:11"] = "Google",
+        // 用户网段实需扩充（2026-09-12）：逐条经 maclookup.app 对 IEEE 注册表核实，
+        // 单测 OuiTableTests 锁死——新增条目必须同流程（核实来源 + 锁条目），禁止凭记忆加。
+        ["68:AB:BC"] = "小米 Xiaomi",
+        ["08:84:FB"] = "荣耀 Honor",
+        ["10:82:3D"] = "锐捷 Ruijie",
     };
 
     /// <summary>

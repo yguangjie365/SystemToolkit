@@ -96,6 +96,14 @@ public class LanScanTests
         Assert.Null(OuiTable.Lookup(""));
     }
 
+    /// <summary>2026-09-12 用户网段扩充条目锁（来源：maclookup.app 对 IEEE 注册表逐条核实）。</summary>
+    [Theory]
+    [InlineData("68:AB:BC:B5:32:0D", "小米 Xiaomi")]
+    [InlineData("08:84:FB:71:A1:FC", "荣耀 Honor")]
+    [InlineData("10:82:3D:90:F1:28", "锐捷 Ruijie")]
+    public void Oui_VerifiedUserLanEntries_AreLocked(string mac, string expected) =>
+        Assert.Equal(expected, OuiTable.Lookup(mac));
+
     // ═══════════════ 邻居表行解析（官方布局回归锁） ═══════════════
 
     [Fact]
