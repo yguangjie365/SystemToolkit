@@ -73,6 +73,24 @@ public partial class GameCardVm : ObservableObject
 
     public string SizeOnDiskText => OverviewSizeText(Model.SizeOnDisk);
 
+    // ================= A2 详情面板投影（2026-09-13） =================
+
+    /// <summary>AppID 文本（详情面板展示用；uint 无千分位，纯数字）。</summary>
+    public string AppIdText => AppId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 安装目录完整路径（详情面板展示用）。拼法与 <c>SteamService.OpenGameFolder</c> 保持一致
+    /// （<c>库路径\steamapps\common\安装子目录</c>）——否则会出现「面板显示的路径」与
+    /// 「点『打开目录』实际打开的路径」不一致的状态欺骗。缺任一段时返回空串，View 隐藏该行。
+    /// </summary>
+    public string InstallPathText =>
+        string.IsNullOrEmpty(Model.LibraryPath) || string.IsNullOrEmpty(Model.InstallDir)
+            ? string.Empty
+            : Path.Combine(Model.LibraryPath, "steamapps", "common", Model.InstallDir);
+
+    /// <summary>有可展示的安装路径（View 用它隐藏空行，不显示半截路径）。</summary>
+    public bool HasInstallPath => InstallPathText.Length > 0;
+
     private static string OverviewSizeText(ulong bytes) => GameVmFormat.SizeText(bytes);
 }
 
@@ -740,6 +758,25 @@ public partial class GameManagerViewModel : ObservableObject
             _logger.Error($"[游戏] {action}异常：{ex.Message}", ex);
         }
     }
+
+    // ================= A2 详情面板（2026-09-13） =================
+
+    /// <summary>详情面板当前查看的游戏；<c>null</c> = 面板关闭（View 用它驱动遮罩与面板可见性）。</summary>
+    [ObservableProperty]
+    private GameCardVm? _selectedGame;
+
+    partial void OnSelectedGameChanged(GameCardVm? value) => OnPropertyChanged(nameof(IsDetailOpen));
+
+    /// <summary>详情面板是否打开。</summary>
+    public bool IsDetailOpen => SelectedGame is not null;
+
+    /// <summary>打开详情面板（卡片封面/名称单击触发；参数 = 该卡 GameCardVm）。</summary>
+    [RelayCommand]
+    private void OpenDetail(GameCardVm? vm) => SelectedGame = vm;
+
+    /// <summary>关闭详情面板（✕ 按钮 / 点遮罩 / Esc 三个入口）。</summary>
+    [RelayCommand]
+    private void CloseDetail() => SelectedGame = null;
 
     [RelayCommand]
     private void LaunchGame(GameCardVm? vm)

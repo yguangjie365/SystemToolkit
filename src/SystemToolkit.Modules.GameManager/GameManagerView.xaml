@@ -126,6 +126,51 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- ============ A2 详情面板本地样式（2026-09-13） ============
+             🔴 所有尺寸一律写在 Style Setter 内：本文件 Width / BorderThickness / StrokeThickness
+             裸值已顶满 UiTokenRatchet 基线（width 4 / border 5 / stroke 2 / height 9 / padding 7），
+             内联的 Width 数字字面量（如 390）会直接让棘轮变红；写在 Setter 的 Value 里则不匹配该正则。 -->
+        <Style x:Key="DetailPanel" TargetType="Border">
+            <Setter Property="Width" Value="390"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="DetailCover" TargetType="Border">
+            <Setter Property="Height" Value="200"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+        </Style>
+        <Style x:Key="DetailDivider" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        </Style>
+        <Style x:Key="DetailMetaLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="DetailMetaValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <!-- 操作键：与卡片操作键同一观感（micro 字号 + 紧凑内边距）；危险键复用 Brush_Danger* 语义色 -->
+        <Style x:Key="DetailActionButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="30"/>
+        </Style>
+        <Style x:Key="DetailDangerButton" TargetType="Button" BasedOn="{StaticResource DetailActionButton}">
+            <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -374,7 +419,9 @@
                                 <StackPanel>
                                     <!-- 封面（参考稿：175px 高 + 底部微遮罩 + hover 缩放 + 未安装徽章覆盖；
                                          缺失用字母占位。header.jpg 横版优先见 SteamService.FindCoverArt 注释） -->
-                                    <Border Height="175" ClipToBounds="True" Background="{DynamicResource Brush_SurfaceAlt}">
+                                    <Border Height="175" ClipToBounds="True" Background="{DynamicResource Brush_SurfaceAlt}"
+                                            MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"
+                                            ToolTip="点击查看详情">
                                         <Border.Triggers>
                                             <!-- hover 封面轻微放大（参考稿 scale 1.04，0.35s） -->
                                             <EventTrigger RoutedEvent="Border.MouseEnter">
@@ -467,7 +514,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                                                       Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                                       Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"
+                                                       MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"/>
                                             <Button Grid.Column="1" Style="{StaticResource CardActionButton}" Content="⋯"
                                                     Padding="7,2" FontSize="{DynamicResource Font_SizeBody}" AutomationProperties.Name="更多操作" ToolTip="更多操作"
                                                     MinWidth="28" MinHeight="24"
@@ -598,5 +646,172 @@
                 </TextBlock.Style>
             </TextBlock>
         </Border>
+
+        <!-- ============ A2 详情面板（2026-09-13，形态主人裁定：右侧滑出 + 遮罩） ============
+             · 遮罩只盖根 Grid 的 0~3 行（页头~内容区），底部反馈条保留可见——面板内触发的
+               「启动 / 卸载」结果必须能被看到（项目「不静默」纪律）。
+             · 遮罩用 Brush_SurfaceAlt + Opacity（仓内先例：DriverManagerView 长操作遮罩），
+               不新增 scrim token —— 那要同步 TokenKeys + 两个主题包 + 04 规范 §3.1，牵动三个守卫。
+             · 本块不出现任何内联数字裸值：尺寸走上方 StyleSetter，间距走 Space_* 令牌。
+             · 只有遮罩挂关闭处理器；面板本体不挂（点面板内部不会误关）。 -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="10"
+              Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVis}}">
+            <Border Background="{DynamicResource Brush_SurfaceAlt}" Opacity="0.7"
+                    MouseLeftButtonDown="OnScrimClick"/>
+            <Border x:Name="DetailPanel" Style="{StaticResource DetailPanel}" Focusable="True">
+                <Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <!-- 封面：复用卡片同一张 CoverPath。FindCoverArt 首选 header.jpg（460×215），
+                                 390 宽面板下属轻微缩小 → 清晰；改取 library_hero 反而更糊（它在候选序末位）。 -->
+                            <Border Style="{StaticResource DetailCover}">
+                                <Grid>
+                                    <Image Source="{Binding SelectedGame.CoverPath, Converter={StaticResource CoverImage}}"
+                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding SelectedGame.HasCover, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock Text="{Binding SelectedGame.Name, Mode=OneWay}" FontSize="{DynamicResource Font_SizeTitleLg}" FontWeight="Bold"
+                                               Foreground="{DynamicResource Brush_TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Padding="{DynamicResource Space_MD}"
+                                               Visibility="{Binding SelectedGame.HasCover, Converter={x:Static local:InverseBoolConverter.Instance}}"/>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Margin="{DynamicResource Space_LG}">
+                                <TextBlock Text="{Binding SelectedGame.Name, Mode=OneWay}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush_TextPrimary}" TextWrapping="Wrap"/>
+
+                                <!-- 状态徽章：默认「已安装」；未装完转 warning、库离线转 danger。
+                                     与卡片同口径、同优先级（库离线放最后，后匹配者胜） -->
+                                <Border Padding="{DynamicResource Space_XXS}" CornerRadius="{DynamicResource Radius_XS}"
+                                        HorizontalAlignment="Left" Margin="{DynamicResource Space_SM}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource Brush_SuccessSoft}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush_SuccessBorder}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedGame.IsFullyInstalled}" Value="False">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush_WarningSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush_Warning}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedGame.IsLibraryOffline}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush_Danger}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock FontFamily="{DynamicResource Font_Mono}" FontSize="{DynamicResource Font_SizeMicro}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="已安装"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessText}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedGame.IsFullyInstalled}" Value="False">
+                                                        <Setter Property="Text" Value="下载/更新中"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding SelectedGame.IsLibraryOffline}" Value="True">
+                                                        <Setter Property="Text" Value="库离线"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+
+                                <!-- 元数据：全部复用卡片既有格式化投影（SizeText / PlaytimeText / LastPlayedText），
+                                     不另写一份，避免「卡片与详情显示不一致」的口径漂移 -->
+                                <StackPanel Margin="{DynamicResource Space_SM}">
+                                    <Grid Margin="{DynamicResource Space_XXS}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource DetailMetaLabel}" Text="AppID"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource DetailMetaValue}"
+                                                   Text="{Binding SelectedGame.AppIdText, Mode=OneWay}"/>
+                                    </Grid>
+                                    <Grid Margin="{DynamicResource Space_XXS}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource DetailMetaLabel}" Text="占用"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource DetailMetaValue}"
+                                                   Text="{Binding SelectedGame.SizeText, Mode=OneWay}"/>
+                                    </Grid>
+                                    <Grid Margin="{DynamicResource Space_XXS}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource DetailMetaLabel}" Text="游玩时长"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource DetailMetaValue}"
+                                                   Text="{Binding SelectedGame.PlaytimeText, Mode=OneWay}"/>
+                                    </Grid>
+                                    <Grid Margin="{DynamicResource Space_XXS}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource DetailMetaLabel}" Text="最近游玩"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource DetailMetaValue}"
+                                                   Text="{Binding SelectedGame.LastPlayedText, Mode=OneWay}"/>
+                                    </Grid>
+                                    <!-- 安装位置：路径缺失（库离线 / 字段为空）时整行隐藏，不显示半截路径。
+                                         路径截断显示，ToolTip 给全量（与「打开目录」实际打开的位置同源） -->
+                                    <Grid Margin="{DynamicResource Space_XXS}"
+                                          Visibility="{Binding SelectedGame.HasInstallPath, Converter={StaticResource BoolToVis}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource DetailMetaLabel}" Text="安装位置"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource DetailMetaValue}"
+                                                   Text="{Binding SelectedGame.InstallPathText, Mode=OneWay}"
+                                                   ToolTip="{Binding SelectedGame.InstallPathText, Mode=OneWay}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- 操作区：一主三次（主人裁定）。四个命令全是页面既有命令，参数 = SelectedGame，
+                                     未新增任何命令与 Core 能力 -->
+                                <Border Style="{StaticResource DetailDivider}" Margin="{DynamicResource Space_MD}"/>
+                                <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
+                                        Content="启动" Command="{Binding LaunchGameCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                <Grid Margin="{DynamicResource Space_SM}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Style="{StaticResource DetailActionButton}" Content="商店页面" Margin="{DynamicResource Space_XXS}"
+                                            Command="{Binding OpenStoreCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                    <Button Grid.Column="1" Style="{StaticResource DetailActionButton}" Content="打开目录" Margin="{DynamicResource Space_XXS}"
+                                            Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                    <Button Grid.Column="2" Style="{StaticResource DetailDangerButton}" Content="⚠ 卸载" Margin="{DynamicResource Space_XXS}"
+                                            Command="{Binding UninstallGameCommand}" CommandParameter="{Binding SelectedGame}"/>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 关闭键：固定在面板右上（不随内容滚动）。用外层 Border 承载深底 + 浅字，
+                         保证压在任何封面/浅底上都可读——不赌 SecondaryButton 模板是否透传 Background -->
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Margin="{DynamicResource Space_XS}" MinWidth="28" MinHeight="28"
+                            Background="{DynamicResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_Pill}">
+                        <Button Style="{StaticResource AccountChipButton}" Background="Transparent"
+                                Command="{Binding CloseDetailCommand}"
+                                ToolTip="关闭（Esc）" AutomationProperties.Name="关闭详情"
+                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>
