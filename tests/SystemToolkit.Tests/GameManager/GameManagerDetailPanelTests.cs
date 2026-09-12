@@ -26,12 +26,13 @@ public class GameManagerDetailPanelTests
         string libraryPath = @"D:\SteamLibrary",
         ulong sizeOnDisk = 0,
         ulong playtimeMinutes = 0,
-        uint stateFlags = 4) =>
+        uint stateFlags = 4,
+        bool installed = true) =>
         new()
         {
             AppId = appId,
             Name = name,
-            Installed = true,
+            Installed = installed,
             InstallDir = installDir,
             LibraryPath = libraryPath,
             SizeOnDisk = sizeOnDisk,
@@ -188,17 +189,46 @@ public class GameManagerDetailPanelTests
         {
             var vm = new GameManagerViewModel(new SteamService());
 
-            // 判据是位运算 (StateFlags & 4) != 0，即 bit2=FullyInstalled。
-            // ⚠️ 注意 StateFlags=6 也含 bit2 → 按现有实现 IsFullyInstalled 为 true（StateText 显示「已安装」），
-            //    而 SteamGame.StateFlags 的文档注释把 6 写作「下载中」——两者口径不一致，属**既存问题**。
-            //    本用例只钉住实现自身的位语义，不替它改判据（改判据属另一变更单元，已在变更记录中报告）。
+            // 位语义按 Steam EAppState：bit1 = UpdateRequired(2)、bit2 = FullyInstalled(4)。
+            // 🔴 2026-09-13 收紧：6 = bit1+bit2 是「已安装但待更新」，不能再落到「已安装」。
             var installed = new GameCardVm(Game(1, stateFlags: 4), "c.png", false, vm);
             var downloading = new GameCardVm(Game(2, stateFlags: 2), "c.png", false, vm);
+            var needsUpdate = new GameCardVm(Game(4, stateFlags: 6), "c.png", false, vm);
             var offline = new GameCardVm(Game(3, stateFlags: 4), "c.png", true, vm);
+            var notInstalled = new GameCardVm(Game(5, stateFlags: 0, installed: false), "c.png", false, vm);
 
-            Assert.True(installed.IsFullyInstalled);    // bit2 置位 → 徽章走「已安装」
-            Assert.False(downloading.IsFullyInstalled); // 只有 bit1（UpdateRequired）→ 徽章走「下载/更新中」
-            Assert.True(offline.IsLibraryOffline);      // 徽章走「库离线」（优先级最高）
+            // 纯已安装（bit2 且非 bit1）
+            Assert.True(installed.IsFullyInstalled);
+            Assert.False(installed.NeedsUpdate);
+            Assert.Equal(GameCardState.Installed, installed.StateKind);
+            Assert.Equal("已安装", installed.StateText);
+            Assert.False(installed.ShowProgressBadge);
+
+            // 只有 bit1（UpdateRequired，无 bit2）→ 未装全
+            Assert.False(downloading.IsFullyInstalled);
+            Assert.False(downloading.NeedsUpdate);
+            Assert.Equal(GameCardState.Downloading, downloading.StateKind);
+            Assert.Equal("下载/更新中", downloading.StateText);
+            Assert.True(downloading.ShowProgressBadge);
+
+            // 🔴 收紧的那一条：bit2+bit1 同置
+            Assert.False(needsUpdate.IsFullyInstalled);
+            Assert.True(needsUpdate.NeedsUpdate);
+            Assert.Equal(GameCardState.NeedsUpdate, needsUpdate.StateKind);
+            Assert.Equal("需更新", needsUpdate.StateText);
+            Assert.True(needsUpdate.ShowProgressBadge);
+
+            // 库离线优先于「需更新」（优先级：未安装 > 库离线 > 需更新）
+            Assert.Equal(GameCardState.LibraryOffline, offline.StateKind);
+            Assert.Equal("库离线", offline.StateText);
+            Assert.False(offline.ShowProgressBadge);
+
+            // 未安装（库存里的"见过但没装"条目）：StateFlags=0 也会让 bit2 为假，
+            // 所以进度徽章**必须**绑精确状态判据——否则「未安装」与「下载/更新中」两块徽章同时可见
+            // （封面遮罩是半透明渐变 #80000000，压不住下面那块）。这条是 2026-09-13 修叠加徽章时的回归锁。
+            Assert.Equal(GameCardState.NotInstalled, notInstalled.StateKind);
+            Assert.False(notInstalled.IsFullyInstalled);
+            Assert.False(notInstalled.ShowProgressBadge);
         });
     }
 }

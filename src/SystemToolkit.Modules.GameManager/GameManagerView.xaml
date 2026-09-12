@@ -498,9 +498,12 @@
                                             <!-- 底部微遮罩（参考稿 ::after：40px 渐变压暗，封面与卡片过渡更柔） -->
                                             <Rectangle Height="42" VerticalAlignment="Bottom" IsHitTestVisible="False"
                                                        Fill="{DynamicResource Brush_CoverFade}"/>
-                                            <!-- 未安装：徽章覆盖在封面底部（参考稿 .card-cover-overlay + .badge-state） -->
+                                            <!-- 下载/更新中 与 需更新：徽章覆盖在封面底部（参考稿 .card-cover-overlay + .badge-state）。
+                                                 🔴 可见性绑 ShowProgressBadge（精确状态判据），不绑「IsFullyInstalled 取反」——
+                                                 未安装条目 StateFlags=0 同样让 bit2 为假，泛化位会与下面「未安装」徽章**同时可见**，
+                                                 两层半透明遮罩叠加后压不住下面那块（2026-09-13 收紧） -->
                                             <StackPanel VerticalAlignment="Bottom"
-                                                        Visibility="{Binding IsFullyInstalled, Converter={x:Static local:InverseBoolConverter.Instance}}">
+                                                        Visibility="{Binding ShowProgressBadge, Converter={StaticResource BoolToVis}}">
                                                 <StackPanel.Background>
                                                     <StaticResource ResourceKey="Brush_CoverOverlay"/>
                                                 </StackPanel.Background>
@@ -508,7 +511,7 @@
                                                         Background="{DynamicResource Brush_WarningSoft}"
                                                         BorderBrush="{DynamicResource Brush_Warning}" BorderThickness="1"
                                                         CornerRadius="{DynamicResource Radius_XS}" Padding="7,2">
-                                                    <TextBlock Text="下载/更新中" FontFamily="{DynamicResource Font_Mono}"
+                                                    <TextBlock Text="{Binding StateText, Mode=OneWay}" FontFamily="{DynamicResource Font_Mono}"
                                                                FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Warning}"/>
                                                 </Border>
                                             </StackPanel>
@@ -772,6 +775,12 @@
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding SelectedGame.IsFullyInstalled}" Value="False">
                                                         <Setter Property="Text" Value="下载/更新中"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
+                                                    </DataTrigger>
+                                                    <!-- 需更新（bit2+bit1 同置）：紧跟在上面那条之后，靠后匹配者胜，
+                                                         把「已安装但待更新」从「下载/更新中」里分出来（2026-09-13 收紧） -->
+                                                    <DataTrigger Binding="{Binding SelectedGame.NeedsUpdate}" Value="True">
+                                                        <Setter Property="Text" Value="需更新"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding SelectedGame.IsLibraryOffline}" Value="True">

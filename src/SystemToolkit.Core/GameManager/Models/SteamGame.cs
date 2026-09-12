@@ -19,8 +19,14 @@ public sealed record SteamGame
     public ulong SizeOnDisk { get; init; }
 
     /// <summary>
-    /// 安装状态位（StateFlags）。常见值：4 = 已安装完全，6 = 下载中。
-    /// 解析为位标志：bit0=Uninstalled, bit1=UpdateRequired, bit2=FullyInstalled, 等。
+    /// 安装状态位（StateFlags），对应 Steam <c>EAppState</c> 的位或：
+    /// <c>1</c>=Uninstalled · <c>2</c>=UpdateRequired · <c>4</c>=FullyInstalled · <c>8</c>=UpdateQueued ·
+    /// <c>32</c>=FilesMissing · <c>256</c>=UpdateRunning · <c>512</c>=UpdatePaused · <c>1024</c>=UpdateStarted ·
+    /// <c>2048</c>=Uninstalling · <c>4096</c>=BackupRunning。
+    /// <para>
+    /// 🔴 常见组合：<c>4</c> = 装好且最新；<c>6</c>（=2|4）= **已安装但待更新**——不是"下载中"。
+    /// 消费方判「装全」必须同时看 bit2 置位**且** bit1 未置位，只看 bit2 会把 6 说成「已安装」。
+    /// </para>
     /// </summary>
     public uint StateFlags { get; init; }
 

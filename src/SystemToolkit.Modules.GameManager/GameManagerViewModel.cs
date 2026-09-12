@@ -11,15 +11,18 @@ using SystemToolkit.Core.GameManager.Services;
 namespace SystemToolkit.Modules.GameManager;
 
 /// <summary>
-/// 卡片状态（四态互斥；<b>判据优先序即声明序</b>：未安装 &gt; 库离线 &gt; 下载/更新中 &gt; 已安装）。
+/// 卡片状态（五态互斥；<b>判据优先序即声明序</b>：未安装 &gt; 库离线 &gt; 需更新 &gt; 下载/更新中 &gt; 已安装）。
 /// </summary>
 public enum GameCardState
 {
-    /// <summary>安装完整且库可用。</summary>
+    /// <summary>安装完整且库可用（bit2 置位、bit1 未置位）。</summary>
     Installed,
 
     /// <summary>正在下载/更新（<c>.acf</c> 的 StateFlags bit2 未置位）。</summary>
     Downloading,
+
+    /// <summary>已安装但有更新待下（bit2 与 bit1 同置，即实测的 <c>6</c>）。</summary>
+    NeedsUpdate,
 
     /// <summary>库目录不可用（离线盘 / 网络盘）。</summary>
     LibraryOffline,
@@ -86,11 +89,30 @@ public partial class GameCardVm : ObservableObject
     /// <summary>未安装（View 据此显示「未安装」徽章、并隐藏对未安装项无意义的操作）。</summary>
     public bool IsNotInstalled => !Model.Installed;
 
-    /// <summary>安装状态：bit2（FullyInstalled）置位 = 安装完整，否则下载/更新中。</summary>
-    public bool IsFullyInstalled => (Model.StateFlags & 4) != 0;
+    /// <summary>
+    /// 安装完整（Steam <c>EAppState</c>：bit2「FullyInstalled」置位，且 bit1「UpdateRequired」**未**置位）。
+    /// <para>
+    /// 🔴 bit1 必须一起判：<c>6 = 110b</c> 是「已安装 **但待更新**」，只看 bit2 会把它说成「已安装」——
+    /// 等于告诉用户"这就是最新的"，是**状态欺骗**（本机实测该值确实出现在库中，2026-09-13 收紧）。
+    /// </para>
+    /// </summary>
+    public bool IsFullyInstalled => (Model.StateFlags & 4) != 0 && (Model.StateFlags & 2) == 0;
+
+    /// <summary>已安装但有更新待下（bit2 与 bit1 同置；与 <see cref="IsFullyInstalled"/> 互斥）。</summary>
+    public bool NeedsUpdate => Model.Installed && (Model.StateFlags & 4) != 0 && (Model.StateFlags & 2) != 0;
 
     /// <summary>
-    /// 四态判据（互斥）。
+    /// 「进度类」徽章可见性（下载/更新中 或 需更新）。
+    /// <para>
+    /// 🔴 徽章可见性必须绑**状态判据本身**，不能绑 "IsFullyInstalled 取反" 这类**泛化状态位**：
+    /// 未安装条目的 <c>StateFlags=0</c> 也让 bit2 为假 → 泛化位会同时点亮「未安装」与「下载/更新中」
+    /// 两块叠加徽章（实测 2026-09-13：封面遮罩是半透明渐变 `#80000000`，被压住的那块会**透出来**）。
+    /// </para>
+    /// </summary>
+    public bool ShowProgressBadge => StateKind is GameCardState.Downloading or GameCardState.NeedsUpdate;
+
+    /// <summary>
+    /// 五态判据（互斥，优先序同 <see cref="GameCardState"/> 声明序）。
     /// 🔴 <b>未安装必须最先判</b>：未安装条目的 <c>StateFlags=0</c>，若先判 bit2 会落到
     /// 「下载/更新中」——那是**错误文案**（告诉用户一个没发生的事实）。
     /// </summary>
@@ -108,6 +130,11 @@ public partial class GameCardVm : ObservableObject
                 return GameCardState.LibraryOffline;
             }
 
+            if (NeedsUpdate)
+            {
+                return GameCardState.NeedsUpdate;
+            }
+
             return IsFullyInstalled ? GameCardState.Installed : GameCardState.Downloading;
         }
     }
@@ -117,6 +144,7 @@ public partial class GameCardVm : ObservableObject
     {
         GameCardState.NotInstalled => "未安装",
         GameCardState.LibraryOffline => "库离线",
+        GameCardState.NeedsUpdate => "需更新",
         GameCardState.Downloading => "下载/更新中",
         _ => "已安装",
     };
@@ -389,7 +417,9 @@ public partial class GameManagerViewModel : ObservableObject
             ulong total = 0;
             foreach (GameCardVm g in Games)
             {
-                if (g.IsFullyInstalled)
+                // 判据用 IsInstalled（有 .acf）而非 IsFullyInstalled：待更新的游戏**确实装着、也确实占盘**，
+                // 用「装全」去数会让「N 款已安装」少算（2026-09-13 随 bit1 收紧一并改口径）。
+                if (g.IsInstalled)
                 {
                     installed++;
                 }

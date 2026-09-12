@@ -33,10 +33,11 @@ public sealed record SteamInventoryGame
     public ulong SizeOnDisk { get; init; }
 
     /// <summary>
-    /// 安装状态位（<c>.acf</c> 的 <c>StateFlags</c>；未安装恒为 0）。
+    /// 安装状态位（<c>.acf</c> 的 <c>StateFlags</c>；未安装恒为 0）。位定义见
+    /// <see cref="SteamGame.StateFlags"/>。
     /// <para>
-    /// 卡片需要它区分「已安装完全」与「下载/更新中」——只靠 <see cref="Installed"/> 不够
-    /// （正在下载的游戏也是 installed）。
+    /// 卡片需要它区分「已安装完全」「需更新」「下载/更新中」——只靠 <see cref="Installed"/> 不够
+    /// （正在下载的游戏也是 installed）。🔴 判「装全」要同看 bit1：<c>6</c> = 已安装但待更新。
     /// </para>
     /// </summary>
     public uint StateFlags { get; init; }
