@@ -60,6 +60,7 @@ packages/
 Tools/logs/
 Tools/tmp/
 tools/private/
+tools/LanProbe/
 
 ########################################
 # 临时工作目录（工具/会话中间产物）

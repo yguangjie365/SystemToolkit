@@ -366,17 +366,25 @@ public partial class LanScanTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>行内 Ping：真实 ICMP 判定直接落本页操作日志（用户 09-12 反馈：不再跳诊断 Tab）。</summary>
     [RelayCommand]
-    private void PingRow(LanDeviceRow? row)
+    private async Task PingRowAsync(LanDeviceRow? row)
     {
-        if (row is not null)
+        if (row is null)
         {
-            PingRequested?.Invoke(row.Ip);
+            return;
+        }
+
+        try
+        {
+            string verdict = await _scan.PingOnceAsync(row.Ip).ConfigureAwait(true);
+            _log($"[局域网] Ping {row.Ip} → {verdict}");
+        }
+        catch (Exception ex)
+        {
+            _log("[局域网] ❌ Ping 异常：" + ex.Message);
         }
     }
-
-    /// <summary>Ping 联动请求（组合根转接：目标写入诊断页持续 ping 并切 Tab）。</summary>
-    public event Action<string>? PingRequested;
 
     [RelayCommand]
     private void DismissBanner() => BannerVisible = false;

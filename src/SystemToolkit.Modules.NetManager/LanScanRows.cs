@@ -52,6 +52,9 @@ public sealed class LanDeviceRow
 
     public string Hostname => Device.Hostname ?? "（未反查到名称）";
 
+    /// <summary>OS 推断列（TTL 分类，带「(推断)」后缀；无 ICMP 应答为"—"）。</summary>
+    public string OsText => Device.Os ?? "—";
+
     public string FirstSeenText => Device.FirstSeen.ToString("MM-dd HH:mm");
 
     public string LastSeenText => Device.LastSeen.ToString("HH:mm:ss");

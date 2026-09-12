@@ -70,7 +70,7 @@ public partial class LanScanTabViewModel
                 e.Type == LanEventType.Conflict && e.Ip == device.Ip && e.OldMac is not null);
             if (peerSource is not null)
             {
-                LanDevice peer = device with { Mac = peerSource.OldMac!, Hostname = null, Vendor = OuiTable.Lookup(peerSource.OldMac!) };
+                LanDevice peer = device with { Mac = peerSource.OldMac!, Hostname = null, Os = null, Vendor = OuiTable.Lookup(peerSource.OldMac!) };
                 rows.Add(new LanDeviceRow(peer, LanRowKind.ConflictPeer, $"对偶应答 {device.Mac}"));
             }
         }
@@ -82,7 +82,7 @@ public partial class LanScanTabViewModel
             {
                 rows.Add(new LanDeviceRow(
                     new LanDevice(entry.Ip, entry.Mac, entry.Hostname, entry.Vendor,
-                        entry.FirstSeen, entry.LastSeen),
+                        entry.FirstSeen, entry.LastSeen, entry.Os),
                     LanRowKind.Offline));
             }
         }

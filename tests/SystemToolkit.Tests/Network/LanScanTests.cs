@@ -101,10 +101,10 @@ public class LanScanTests
     [Fact]
     public void Probe_ParseTable_ReadsVerifiedOffsets_AndSkipsBadRows()
     {
-        IntPtr table = Marshal.AllocHGlobal(LanNeighborProbe.TableHeaderSize + 2 * LanNeighborProbe.RowSize);
+        IntPtr table = Marshal.AllocHGlobal(LanNeighborProbe.TableHeaderSize + 3 * LanNeighborProbe.RowSize);
         try
         {
-            Marshal.WriteInt32(table, LanNeighborProbe.TableEntriesOffset, 2);
+            Marshal.WriteInt32(table, LanNeighborProbe.TableEntriesOffset, 3);
 
             IntPtr row0 = IntPtr.Add(table, LanNeighborProbe.TableHeaderSize);
             Marshal.WriteInt16(row0, LanNeighborProbe.RowAddressOffset, LanNeighborProbe.AfInet);
@@ -126,6 +126,17 @@ public class LanScanTests
 
             IntPtr row1 = IntPtr.Add(table, LanNeighborProbe.TableHeaderSize + LanNeighborProbe.RowSize);
             Marshal.WriteInt16(row1, LanNeighborProbe.RowAddressOffset, 10); // 非 AF_INET：整行跳过
+
+            // row2：合法族 + len 6 但 MAC 全零（实机 .99 未解析占位行）→ 必须挡掉
+            IntPtr row2 = IntPtr.Add(table, LanNeighborProbe.TableHeaderSize + 2 * LanNeighborProbe.RowSize);
+            Marshal.WriteInt16(row2, LanNeighborProbe.RowAddressOffset, LanNeighborProbe.AfInet);
+            Marshal.WriteByte(row2, LanNeighborProbe.RowAddressOffset + LanNeighborProbe.SockAddrIpOffset, 192);
+            for (int i = 0; i < 6; i++)
+            {
+                Marshal.WriteByte(row2, LanNeighborProbe.RowPhysAddrOffset + i, 0); // 显式清零（AllocHGlobal 是脏内存）
+            }
+            Marshal.WriteInt32(row2, LanNeighborProbe.RowPhysLenOffset, 6);
+            Marshal.WriteInt32(row2, LanNeighborProbe.RowStateOffset, 0);
 
             List<NeighborEntry> rows = LanNeighborProbe.ParseTable(table);
             NeighborEntry only = Assert.Single(rows);
@@ -493,6 +504,88 @@ public class LanScanTests
         }
     }
 
+    // ═══════════════ LanOs / LanNbstat / 富化（实机验收整改 2026-09-12） ═══════════════
+
+    [Theory]
+    [InlineData(128, "Windows (推断)")]
+    [InlineData(121, "Windows (推断)")]
+    [InlineData(64, "Linux / Android / macOS (推断)")]
+    [InlineData(57, "Linux / Android / macOS (推断)")]
+    [InlineData(255, "网络设备 / 老款苹果 (推断)")]
+    [InlineData(50, null)]
+    [InlineData(200, null)]
+    public void Os_Classify_TtlBands(int? ttl, string? expected) =>
+        Assert.Equal(expected, LanOs.Classify(ttl));
+
+    [Fact]
+    public void Nbstat_Prefers20Unique_AndFallsBackToFirstUnique00()
+    {
+        const string full = """
+            Interface: Ethernet 2
+            Node Address: 00-15-5D-11-22-33
+
+              Computer Name          <00>  UNIQUE      Registered      192.168.1.20         192.168.1.20
+              WORKGROUP              <00>  GROUP       Registered      192.168.1.20         192.168.1.20
+              DESKTOP-ABC            <20>  UNIQUE      Registered      192.168.1.20         192.168.1.20
+            """;
+        const string no20 = """
+            Interface: Ethernet 2
+
+              PC01                   <00>  UNIQUE      Registered      10.0.0.9             10.0.0.9
+              WORKGROUP              <00>  GROUP       Registered      10.0.0.9             10.0.0.9
+            """;
+        Assert.Equal("DESKTOP-ABC", LanNbstat.Parse(full));
+        Assert.Equal("PC01", LanNbstat.Parse(no20));
+        Assert.Null(LanNbstat.Parse("命令失败: 找不到。"));
+        Assert.Null(LanNbstat.Parse(null));
+    }
+
+    private sealed class FakePeerProbe : ILanPeerProbe
+    {
+        public LanPeerInfo Info { get; init; } = new(128, "NB-PC");
+
+        public Task<LanPeerInfo> QueryAsync(string ipv4, CancellationToken ct = default) => Task.FromResult(Info);
+    }
+
+    [Fact]
+    public async Task Scan_WithPeerProbe_FillsNetBiosNameAndOsText()
+    {
+        string path = TempPath();
+        try
+        {
+            FakeProbe probe = new FakeProbe().Alive("192.168.9.10", "AA:00:00:00:00:10");
+            var service = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null), // DNS 无 PTR
+                peerProbe: new FakePeerProbe());
+            LanScanResult result = await RunScan(service);
+            LanDevice only = Assert.Single(result.Devices);
+            Assert.Equal("NB-PC", only.Hostname);           // nbtstat 兜底
+            Assert.Equal("Windows (推断)", only.Os);          // TTL=128
+            Assert.Equal("Windows (推断)", service.PeekBaseline()!.Entries.Single().Os);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task PingOnce_Loopback_ReturnsVerdict()
+    {
+        string path = TempPath();
+        try
+        {
+            var service = new LanScanService(new FakeProbe(), new LanBaselineStore(path));
+            string verdict = await service.PingOnceAsync("127.0.0.1");
+            Assert.StartsWith("✅", verdict); // 回环必应答（与持续 ping 用例同源先例）
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static LanBaseline Baseline(params (string Ip, string Mac)[] pairs) =>
         new(LanBaselineStore.FormatVersion, T0,
             pairs.Select(p => new LanBaselineEntry(p.Ip, p.Mac, null, null, T0, T0)).ToList(), []);
@@ -537,7 +630,7 @@ public class LanScanTests
             _readCounts.Remove(ip);
         }
 
-        public bool TryPoke(string ipv4, string localIp)
+        public bool TryPoke(string ipv4)
         {
             Interlocked.Increment(ref _pokes);
             return _alive.Contains(ipv4);

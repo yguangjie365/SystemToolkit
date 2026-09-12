@@ -34,9 +34,6 @@ public partial class NetManagerViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedTabIndex;
 
-    /// <summary>切回「网络诊断」Tab 的请求（View 注入：RadioButton 程序勾选，走既有 Checked 通道）。</summary>
-    public Action? SwitchToDiagnosticsTabRequest { get; set; }
-
     public NetManagerViewModel(
         INetworkInfoService infoService,
         INetConfigService configService,
@@ -64,14 +61,6 @@ public partial class NetManagerViewModel : ObservableObject
         {
             Log("[联动] 安全修复完成，自动复诊断……");
             _ = Diagnostics.RunDiagnosticsSafeAsync();
-        };
-
-        // 跨页联动（NET-6 示意图 5️⃣）：局域网行「Ping」→ 目标写入诊断页持续 ping 并切 Tab
-        Lan.PingRequested += ip =>
-        {
-            Diagnostics.PingTarget = ip;
-            Log($"[联动] 已把 {ip} 填入持续 ping 目标");
-            SwitchToDiagnosticsTabRequest?.Invoke();
         };
 
         Log($"网络管理模块已加载（提权运行：{(elevation.IsElevated ? "是" : "否——写操作执行时按需弹出 UAC）")}");

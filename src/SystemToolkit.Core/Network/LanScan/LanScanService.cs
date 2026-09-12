@@ -34,6 +34,7 @@ public sealed class LanScanService
     private readonly LanBaselineStore _store;
     private readonly ILogger _log;
     private readonly Func<string, Task<string?>> _resolveHost;
+    private readonly ILanPeerProbe? _peer;
 
     /// <summary>上一轮观测（网段标签 → IP↔MAC）：跨轮冲突判定的内存态，不落盘。</summary>
     private readonly Dictionary<string, Dictionary<string, string>> _previousRounds = new(StringComparer.Ordinal);
@@ -43,13 +44,22 @@ public sealed class LanScanService
         ILanNeighborProbe probe,
         LanBaselineStore store,
         ILogger? logger = null,
-        Func<string, Task<string?>>? hostnameResolver = null)
+        Func<string, Task<string?>>? hostnameResolver = null,
+        ILanPeerProbe? peerProbe = null)
     {
         _probe = probe;
         _store = store;
         _log = logger ?? NullLogger.Instance;
         _resolveHost = hostnameResolver ?? ResolveHostnameAsync;
+        _peer = peerProbe;
     }
+
+    /// <summary>
+    /// 单次 ping 判定文本（局域网 Tab 行内「Ping」用——真实 ICMP，无状态自建探针；永不抛）。
+    /// 刻意不走 <see cref="_peer"/>：扫描富化可被假件静音，但用户手点 Ping 必须真打网络。
+    /// </summary>
+    public Task<string> PingOnceAsync(string ipv4, CancellationToken ct = default) =>
+        new LanPeerProbe().PingVerdictAsync(ipv4, ct);
 
     /// <summary>当前基线（UI 首屏「已知设备」计数用；不触发扫描）。</summary>
     public LanBaseline? PeekBaseline() => _store.Load().Data;
@@ -86,7 +96,7 @@ public sealed class LanScanService
 
                 try
                 {
-                    bool hit = await Task.Run(() => _probe.TryPoke(ip, plan.LocalIp), ct).ConfigureAwait(false);
+                    bool hit = await Task.Run(() => _probe.TryPoke(ip), ct).ConfigureAwait(false);
                     int n = Interlocked.Increment(ref done);
                     progress?.Report(new LanScanProgress("ARP 扫段", n, plan.Hosts.Count));
                     return hit ? ip : null;
@@ -120,7 +130,7 @@ public sealed class LanScanService
                 progress?.Report(new LanScanProgress("补齐 MAC", 0, blind.Count));
                 foreach (string ip in blind)
                 {
-                    _probe.TryPoke(ip, plan.LocalIp);
+                    _probe.TryPoke(ip);
                 }
 
                 await Task.Delay(150, ct).ConfigureAwait(false);
@@ -142,6 +152,12 @@ public sealed class LanScanService
                 devices.Add(new LanDevice(ordered[i], mac, names[i], OuiTable.Lookup(mac), now, now));
             }
 
+            // ③a TTL/NetBIOS 富化（可选探针）：主机名补 nbtstat、OS 走 TTL 推断；规模闸门防 ICMP 风暴
+            if (_peer is not null && devices.Count <= PeerEnrichLimit)
+            {
+                devices = await EnrichAsync(devices, ct).ConfigureAwait(false);
+            }
+
             // ④ 基线比对 + 首轮候选即时双探复核 → 事件/冲突/新基线（空 MAC 行不参与绑定比对）
             LanBaselineLoad load = _store.Load();
             _previousRounds.TryGetValue(plan.NetworkLabel, out Dictionary<string, string>? previous);
@@ -153,7 +169,7 @@ public sealed class LanScanService
             List<LanEvent> events = [.. diff.Events];
             List<string> conflicted = [.. diff.ConflictedIps];
             List<LanBaselineEntry> entries = [.. diff.Entries];
-            await RecheckCandidatesAsync(plan, diff.NeedsRecheck, events, conflicted, entries, ct)
+            await RecheckCandidatesAsync(diff.NeedsRecheck, events, conflicted, entries, ct)
                 .ConfigureAwait(false);
 
             // ⑤ 落盘（事件环 = 本轮新事件在前，历史事件在后）与跨轮态更新：仅完整轮次执行
@@ -181,6 +197,42 @@ public sealed class LanScanService
 
     /// <summary>主机名反查并发闸（DNS 压力上限，单条超时 400ms 见 <see cref="ResolveHostnameAsync"/>）。</summary>
     private const int NameResolveConcurrency = 16;
+
+    /// <summary>补充探测（TTL+nbtstat）规模闸门：超过则跳过（超大网段下 8 并发 × 1.5s 会拖垮单轮）。</summary>
+    public const int PeerEnrichLimit = 128;
+
+    private async Task<List<LanDevice>> EnrichAsync(List<LanDevice> devices, CancellationToken ct)
+    {
+        using SemaphoreSlim gate = new(8);
+        var probes = devices.Select(async d =>
+        {
+            try
+            {
+                await gate.WaitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return d;
+            }
+
+            try
+            {
+                LanPeerInfo info = await _peer!.QueryAsync(d.Ip, ct).ConfigureAwait(false);
+                return d with { Hostname = d.Hostname ?? info.NetBiosName, Os = LanOs.Classify(info.Ttl) };
+            }
+            catch (OperationCanceledException)
+            {
+                return d;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }).ToList();
+
+        ct.ThrowIfCancellationRequested();
+        return [.. await Task.WhenAll(probes).ConfigureAwait(false)];
+    }
 
     private async Task<string?[]> ResolveNamesAsync(List<string> ips, CancellationToken ct)
     {
@@ -223,7 +275,6 @@ public sealed class LanScanService
     /// 两次 MAC 不一致 → 升级 Conflict；一致 → 定论 BindingChanged 并把基线条目切到新绑定代际。
     /// </summary>
     private async Task RecheckCandidatesAsync(
-        LanSubnetPlan plan,
         IReadOnlyList<LanDevice> candidates,
         List<LanEvent> events,
         List<string> conflicted,
@@ -233,10 +284,10 @@ public sealed class LanScanService
         foreach (LanDevice device in candidates)
         {
             ct.ThrowIfCancellationRequested();
-            _probe.TryPoke(device.Ip, plan.LocalIp);
+            _probe.TryPoke(device.Ip);
             string? macA = PeekMac(device.Ip);
             await Task.Delay(250, ct).ConfigureAwait(false);
-            _probe.TryPoke(device.Ip, plan.LocalIp);
+            _probe.TryPoke(device.Ip);
             string? macB = PeekMac(device.Ip);
 
             entries.RemoveAll(e => string.Equals(e.Ip, device.Ip, StringComparison.Ordinal));

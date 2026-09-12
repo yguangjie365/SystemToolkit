@@ -20,10 +20,12 @@ public readonly record struct NeighborEntry(string Ip, string Mac, int IfIndex, 
 public interface ILanNeighborProbe
 {
     /// <summary>
-    /// 主动 ARP 探测（<c>SendARP</c>）：<paramref name="localIp"/> 指定出接口，
-    /// 命中返回 <c>true</c>（收到应答）；无应答/超时/参数错返回 <c>false</c>，不抛。
+    /// 主动 ARP 探测（<c>SendARP</c>）：命中返回 <c>true</c>（收到应答）；无应答/超时/参数错
+    /// 返回 <c>false</c>，不抛。🔴 内部固定 SrcIP=0（让系统按目标路由自动选出接口）——实机证明
+    /// 传入本机 IP 反而对直连目标返 1168 ERROR_HOST_UNREACHABLE，导致 ARP 全灭。多网卡各扫本段时
+    /// src=0 仍按目标的直连网卡出 ARP，语义正确。
     /// </summary>
-    bool TryPoke(string ipv4, string localIp);
+    bool TryPoke(string ipv4);
 
     /// <summary>读全量 IPv4 邻居表快照（<c>GetIpNetTable2(AF_INET)</c>）。失败返回空表，不抛。</summary>
     IReadOnlyList<NeighborEntry> ReadNeighbors();

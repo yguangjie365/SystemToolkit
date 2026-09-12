@@ -209,10 +209,18 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Header="厂商（OUI）" Width="138">
+                        <GridViewColumn Header="厂商（OUI）" Width="130">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Vendor}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="OS（推断）" Width="150">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding OsText}" FontSize="{DynamicResource Font_SizeBodySm}"
                                                Foreground="{DynamicResource Brush_TextSecondary}"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

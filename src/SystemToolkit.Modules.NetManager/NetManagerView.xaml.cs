@@ -44,8 +44,6 @@ public partial class NetManagerView : UserControl
             Settings.ConfirmRequest = Vm.ConfirmRequest;
             Repair.ConfirmRequest = Vm.ConfirmRequest;
             Optimize.ConfirmRequest = Vm.ConfirmRequest;
-            // NET-6 联动：局域网行「Ping」→ 程序勾选诊断 Tab（走既有 Checked → ShowPanel 通道）
-            Vm.SwitchToDiagnosticsTabRequest = () => DiagTabRadio.IsChecked = true;
             await Vm.LoadAsync().ConfigureAwait(true);
         }
         catch (Exception ex)

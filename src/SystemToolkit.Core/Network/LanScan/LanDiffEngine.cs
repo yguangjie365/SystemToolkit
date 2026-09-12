@@ -61,6 +61,7 @@ public static class LanDiffEngine
                     LastSeen = now,
                     Hostname = device.Hostname ?? prior.Hostname,
                     Vendor = device.Vendor ?? prior.Vendor,
+                    Os = device.Os ?? prior.Os,
                 };
                 continue;
             }
@@ -124,7 +125,7 @@ public static class LanDiffEngine
         ToEntry(device, firstSeen: now);
 
     private static LanBaselineEntry ToEntry(LanDevice device, DateTimeOffset firstSeen) =>
-        new(device.Ip, device.Mac, device.Hostname, device.Vendor, firstSeen, device.LastSeen);
+        new(device.Ip, device.Mac, device.Hostname, device.Vendor, firstSeen, device.LastSeen, device.Os);
 
     private static string Suffix(LanDevice device) =>
         device.Hostname is null && device.Vendor is null ? "" : $"：{device.Hostname ?? device.Vendor}";

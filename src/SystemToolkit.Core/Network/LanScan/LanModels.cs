@@ -13,13 +13,15 @@ namespace SystemToolkit.Core.Network.LanScan;
 /// <param name="Vendor">OUI 厂商标识；未命中为 null。</param>
 /// <param name="FirstSeen">该 IP↔MAC 绑定首次发现时间（来自基线）。</param>
 /// <param name="LastSeen">本轮确认在线的时间。</param>
+/// <param name="Os">TTL 推断的操作系统类别（带「(推断)」后缀；无 ICMP 应答为 null）。</param>
 public sealed record LanDevice(
     string Ip,
     string Mac,
     string? Hostname,
     string? Vendor,
     DateTimeOffset FirstSeen,
-    DateTimeOffset LastSeen);
+    DateTimeOffset LastSeen,
+    string? Os = null);
 
 /// <summary>基线比对事件类型（NET-6 判定三事件 + 离线软事件）。</summary>
 public enum LanEventType
@@ -62,13 +64,15 @@ public sealed record LanEvent(
 /// <param name="Vendor">OUI 厂商。</param>
 /// <param name="FirstSeen">绑定首次发现。</param>
 /// <param name="LastSeen">绑定最后确认在线。</param>
+/// <param name="Os">最近一次 TTL 推断的 OS 类别。</param>
 public sealed record LanBaselineEntry(
     string Ip,
     string Mac,
     string? Hostname,
     string? Vendor,
     DateTimeOffset FirstSeen,
-    DateTimeOffset LastSeen);
+    DateTimeOffset LastSeen,
+    string? Os = null);
 
 /// <summary>
 /// 局域网基线快照（AtomicFile 落盘形态）：绑定表 + 事件历史环（保留最近 N 条）。

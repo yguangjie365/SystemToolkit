@@ -76,10 +76,12 @@ public sealed class NetManagerModule : ModuleBase
         // 类型注册 + 可选参数 = 生产拿 NullLogger，LanScan 动作不会落盘）
         services.AddSingleton<ILanNeighborProbe, LanNeighborProbe>();
         services.AddSingleton<LanBaselineStore>();
+        services.AddSingleton<ILanPeerProbe, LanPeerProbe>();
         services.AddSingleton(sp => new LanScanService(
             sp.GetRequiredService<ILanNeighborProbe>(),
             sp.GetRequiredService<LanBaselineStore>(),
-            sp.GetRequiredKeyedService<ILogger>("netmanager")));
+            sp.GetRequiredKeyedService<ILogger>("netmanager"),
+            peerProbe: sp.GetRequiredService<ILanPeerProbe>()));
 
         // VM 组合根 + 视图
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）
