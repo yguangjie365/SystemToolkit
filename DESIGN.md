@@ -5,13 +5,13 @@
 > （2026-09-10 放开双主题，`src/SystemToolkit.UI.Common/Themes/Packs/Nvidia/Nvidia.Dark.xaml` 已在产，
 > 运行期切换不重启）。因此「若要作为可发布主题包落地需先推翻裁定」这一前置**已完成**。
 > 正文 §1–§7 是 Nvidia.Dark 主题包的取色/排版/组件依据，仍有效；但**具体令牌值以
-> `Docs/04-UI设计规范.md` §3.1 与主题包文件为准**（有 `TokenKeysCoverage` / `DesignSpecTokenSync` 守卫），
+> `Docs/20-专题设计/04-UI设计规范.md` §3.1 与主题包文件为准**（有 `TokenKeysCoverage` / `DesignSpecTokenSync` 守卫），
 > 本文数值仅供溯源，可能与最终值有微调。
 
 > 本文件是 design-md 引入的 NVIDIA 设计系统参考（token 取自内置 `nvidia` 模板，未编造）。
 > ⚠️ 项目裁定：**不开发深色模式、单 Light 主题**（AGENTS §四 / ADR-003）。NVIDIA 签名是黑底+绿点缀，属深色——
 > 若要作为**可发布主题包**落地，需先推翻"不做深色"裁定并新增 `Packs/Nvidia/Nvidia.Dark.xaml` + 走完整令牌契约
-> （TokenKeys + 覆盖测试 + 04 规范表）。当前仅作为**设计探索原型**（见 `Docs/mockups/系统主题-Nvidia风格.html`）。
+> （TokenKeys + 覆盖测试 + 04 规范表）。当前仅作为**设计探索原型**（见 `Docs/70-原型与提示词/系统主题-Nvidia风格.html`）。
 
 ## 1. Visual Theme & Atmosphere
 高对比、技术至上的力量感。纯黑 `#000000` + 纯白 `#ffffff` 为基座，NVIDIA 绿 `#76b900` 作**纯点缀**（边框/下划线/active，绝不做大面积填充）。工业、克制、精准——像把 GPU 硬件渲染成像素。

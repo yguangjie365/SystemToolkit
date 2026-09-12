@@ -25,7 +25,7 @@ public class DesignSpecTokenSyncTests
     {
         string theme = File.ReadAllText(Path.Combine(RepoRoot(),
             "src/SystemToolkit.UI.Common/Themes/Packs/Claude/Claude.Light.xaml"));
-        string spec = File.ReadAllText(Path.Combine(RepoRoot(), "Docs/04-UI设计规范.md")).ToLowerInvariant();
+        string spec = File.ReadAllText(Path.Combine(RepoRoot(), "Docs/20-专题设计/04-UI设计规范.md")).ToLowerInvariant();
         string[] specLines = spec.Split('\n');
 
         var failures = new List<string>();
@@ -57,7 +57,7 @@ public class DesignSpecTokenSyncTests
     {
         string theme = File.ReadAllText(Path.Combine(RepoRoot(),
             "src/SystemToolkit.UI.Common/Themes/Packs/Claude/Claude.Light.xaml"));
-        string spec = File.ReadAllText(Path.Combine(RepoRoot(), "Docs/04-UI设计规范.md")).ToLowerInvariant();
+        string spec = File.ReadAllText(Path.Combine(RepoRoot(), "Docs/20-专题设计/04-UI设计规范.md")).ToLowerInvariant();
         string[] specLines = spec.Split('\n');
 
         // 抓主题中所有「显式 hex」笔刷：SolidColorBrush/GradientStop 的 Color="#..." 字面量

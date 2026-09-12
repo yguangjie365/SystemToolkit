@@ -29,7 +29,7 @@ public sealed record MusicLibraryLoadResult(MusicLibrary Library, string? LoadWa
 /// <remarks>
 /// <para><b>为什么不用 SQLite</b>：仓库当前零 SQLite 代码（<c>Directory.Packages.props</c> 无相关包、
 /// <c>src/</c> 无 <c>SqliteConnection</c>），已交付的七个模块一律 JSON + <c>AtomicFile</c>。
-/// 为音乐单独引入一套存储栈不值当，且 JSON 天然满足 Docs/03 §4.9 的「模块故障隔离」倾向
+/// 为音乐单独引入一套存储栈不值当，且 JSON 天然满足 Docs/99-归档/03-数据库设计.md §4.9 的「模块故障隔离」倾向
 /// ——曲库文件损坏不会波及主库。</para>
 /// <para>🟠 <b>写入必须走 <see cref="Utilities.AtomicFile"/></b>（<c>SourceSanityGuardTests</c>
 /// 会拦直写文件的 <c>File.WriteAllText</c>）：扫描到一半被中断/断电时，

@@ -10,7 +10,7 @@ namespace SystemToolkit.Modules.NetManager;
 
 /// <summary>
 /// 「局域网扫描」Tab（NET-6）：主动扫段 + 基线 diff + IP 冲突监控。布局契约见已批准示意图
-/// <c>Docs/mockups/局域网扫描-NET6示意图.html</c>（①主界面 ②空态 ③失败态）。
+/// <c>Docs/70-原型与提示词/局域网扫描-NET6示意图.html</c>（①主界面 ②空态 ③失败态）。
 /// <para>
 /// 全程免提权（调研定稿）；自动监控默认关、5 分钟一轮；扫描可取消（取消轮不提交基线）。
 /// 🔴 本文件禁止 OnXxxChanged partial 钩子（_wpftmp 通道 CS0759 教训）——联动一律在赋值点手工接线。

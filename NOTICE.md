@@ -1,6 +1,6 @@
 # NOTICE — 第三方资源归属与许可证
 
-> SystemToolkit 源代码采用 **GPL-3.0** 许可证（见 [LICENSE](LICENSE)，Copyright © 2026 yguangjie365；2026-09-08 前的历史版本按 MIT 许可发布，变更决策见 [ADR-004](Docs/decisions/ADR-004-开源许可证变更MIT转GPL-3.0.md)）。
+> SystemToolkit 源代码采用 **GPL-3.0** 许可证（见 [LICENSE](LICENSE)，Copyright © 2026 yguangjie365；2026-09-08 前的历史版本按 MIT 许可发布，变更决策见 [ADR-004](Docs/50-决策/ADR-004-开源许可证变更MIT转GPL-3.0.md)）。
 > 本文件列出随软件分发的**第三方字体与图标资源**，它们遵循各自独立的许可证，**不适用 GPL-3.0**。
 
 ---
@@ -104,7 +104,7 @@
 
 ## 四、运行时依赖的第三方组件
 
-见 [ADR-002 §5.3 依赖清单](Docs/decisions/ADR-002-驱动中心技术来源与第三方代码引入规范.md#53-第三方依赖清单)。该清单是应用 About 页的**唯一数据源**，新增依赖不登记即视为违规。
+见 [ADR-002 §5.3 依赖清单](Docs/50-决策/ADR-002-驱动中心技术来源与第三方代码引入规范.md#53-第三方依赖清单)。该清单是应用 About 页的**唯一数据源**，新增依赖不登记即视为违规。
 
 当前已登记：
 
@@ -132,7 +132,7 @@
 | ④ 与本项目自有代码的**分离** | ✅ 仅通过公开 API 调用（依赖注入 + 接口隔离），未见源码级混合、未见复制片段 |
 
 **⚠️ 衍生组件提示（非本项目直接依赖，但随 LHM 二进制分发）：**
-LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项目走「PawnIO 路线」（见 `Docs/09-开发规范/TASKS.md` K-001 复诊），
+LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项目走「PawnIO 路线」（见 `Docs/40-开发规范/TASKS.md` K-001 复诊），
 未内置 WinRing0 驱动二进制。若将来要切换回 WinRing0 路线，**须单独核实其许可证条款**并在本表登记后再引入。
 
 **🟠 待办（Q-015 未决）**：MPL-2.0 是否长期可接受，仍需用户拍板。若否决，替代路线为「纯 WMI + `Hardware.Info` + PawnIO 自采」，

@@ -8,7 +8,7 @@
                 <!-- 主题令牌占位（[0]）：App.OnStartup 由 ThemeManager.Apply 按设置替换为
                      Claude.Light 或 Nvidia.Dark（ADR-005 双主题） -->
                 <ResourceDictionary/>
-                <!-- 图标几何（24 格线性 1.5；规范见 Docs/08-图标规范与清单.md） -->
+                <!-- 图标几何（24 格线性 1.5；规范见 Docs/70-原型与提示词/08-图标规范与清单.md） -->
                 <ResourceDictionary Source="pack://application:,,,/SystemToolkit.UI.Common;component/Themes/Icons.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

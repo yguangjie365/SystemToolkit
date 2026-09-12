@@ -1,6 +1,6 @@
 ﻿# ============================================================
 #  SystemToolkit build core (V1-000)
-#  Spec: Docs/09-开发规范/04-文件与目录规范.md §1.3 (product anti-fake 3 lines)
+#  Spec: Docs/40-开发规范/04-文件与目录规范.md §1.3 (product anti-fake 3 lines)
 #  Usage: Tools\Build.ps1 [-NoTest]
 #  Entry: users run Tools\Build.bat (wrapper of this file)
 #  NOTE: must be saved as UTF-8 with BOM (required by Windows PS 5.1)
