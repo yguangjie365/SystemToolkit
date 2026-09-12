@@ -224,9 +224,15 @@ public sealed partial class SteamService
         }
     }
 
-    private static bool IsNonGameEntry(SteamGame g) =>
-        g.AppId == 228983
-        || g.Name.Equals("Steamworks Common Redistributables", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// 非游戏条目判定（Steam 公共运行库等）。已安装扫描与库存扫描**共用同一口径**，
+    /// 避免两处过滤条件不同导致"同一款游戏在卡片网格里消失、在库存里又出现"。
+    /// </summary>
+    private static bool IsNonGame(uint appId, string name) =>
+        appId == 228983
+        || name.Equals("Steamworks Common Redistributables", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNonGameEntry(SteamGame g) => IsNonGame(g.AppId, g.Name);
 
     /// <summary>扫描各库 appmanifest_*.acf，并从 userdata 的 localconfig.vdf 补游玩时长与最近游玩。</summary>
     [SupportedOSPlatform("windows")]
@@ -270,55 +276,15 @@ public sealed partial class SteamService
         }
 
         // 补游玩时长：扫 userdata/*/config/localconfig.vdf
-        try
+        // 🔴 解析逻辑已抽出为 ParseLocalConfigPlaytimes（SteamService.Inventory.cs）——
+        // 与库存扫描共用同一实现：两处各写一份必然漂移（其中一处修了字段名、另一处没修）。
+        Dictionary<uint, (ulong Minutes, long LastPlayed)> playtimes =
+            ParseLocalConfigPlaytimes(steamInstallPath, errors);
+        foreach ((uint id, (ulong Minutes, long LastPlayed) pt) in playtimes)
         {
-            string userdataDir = Path.Combine(steamInstallPath, "userdata");
-            if (Directory.Exists(userdataDir))
-            {
-                var playtimes = new Dictionary<uint, (ulong mins, long lastPlayed)>();
-                foreach (string userDir in Directory.EnumerateDirectories(userdataDir))
-                {
-                    string lcFile = Path.Combine(userDir, "config", "localconfig.vdf");
-                    if (!File.Exists(lcFile))
-                        continue;
-                    try
-                    {
-                        VdfValue root = VdfParser.Parse(File.ReadAllText(lcFile));
-                        VdfValue? software = DeepObject(root, "UserLocalConfigStore", "Software", "Valve", "Steam", "apps");
-                        if (software?.GetObjEntries() is { } appEnts)
-                        {
-                            foreach ((string? appid, VdfValue? appObj) in appEnts)
-                            {
-                                if (!uint.TryParse(appid, NumberStyles.None, CultureInfo.InvariantCulture, out uint id))
-                                    continue;
-                                // 【坑】localconfig.vdf 里的字段名是 "Playtime"（旧版 "Playtime2"）；
-                                // "playtime_forever" 是 Steam Web API 的字段名，本地文件里不存在，
-                                // 曾导致游玩时长永远解析为 0（2026-09-03 修复，已用本机 localconfig.vdf 实测）。
-                                ulong mins = ParseULong(appObj.GetStr("Playtime") ?? appObj.GetStr("Playtime2"));
-                                long last = ParseLong(appObj.GetStr("LastPlayed"));
-                                // 多用户取 max（REVIEW-3 G-4：旧实现 mins 较小时整条跳过，
-                                // LastPlayed 取不到跨用户最大值 →「最近游玩」显示错误）
-                                if (!playtimes.TryGetValue(id, out (ulong mins, long lastPlayed) cur))
-                                {
-                                    playtimes[id] = (mins, last);
-                                }
-                                else
-                                {
-                                    playtimes[id] = (Math.Max(mins, cur.mins), Math.Max(last, cur.lastPlayed));
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception e) { errors.Add($"localconfig({userDir}): {e.Message}"); }
-                }
-                foreach ((uint id, (ulong mins, long lastPlayed) pt) in playtimes)
-                {
-                    if (games.TryGetValue(id, out SteamGame? g))
-                        games[id] = g with { PlaytimeMinutes = pt.mins, LastPlayed = pt.lastPlayed };
-                }
-            }
+            if (games.TryGetValue(id, out SteamGame? g))
+                games[id] = g with { PlaytimeMinutes = pt.Minutes, LastPlayed = pt.LastPlayed };
         }
-        catch (Exception e) { errors.Add($"userdata 扫描: {e.Message}"); }
 
         // 补封面：按实测三级路径探测（主目录 appcache 优先）
         int coverHits = 0;
