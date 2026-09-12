@@ -4,7 +4,7 @@ using System.Windows.Controls;
 namespace SystemToolkit.Modules.NetManager;
 
 /// <summary>
-/// 网络管理视图：4 Tab（设置/诊断/修复/优化）+ 底部共享日志面板。
+/// 网络管理视图：5 Tab（设置/诊断/修复/优化/局域网扫描）+ 底部共享日志面板。
 /// Loaded 完成组合根接线（确认回调 + 首屏数据，幂等）；Tab 切换由 code-behind 控制面板可见性
 /// （AppManager 同款机制——不改布局结构，无响应式重排）。
 /// </summary>
@@ -19,8 +19,12 @@ public partial class NetManagerView : UserControl
         InitializeComponent();
         DataContext = vm;
         Loaded += OnLoaded;
-        // 审查 O7（2026-09-10）：切页卸载/关窗时取消持续 ping（循环与 VM 常驻泄漏）
-        Unloaded += (_, _) => (DataContext as NetManagerViewModel)?.Diagnostics.CancelPing();
+        // 审查 O7（2026-09-10）：切页卸载/关窗时取消持续 ping（循环与 VM 常驻泄漏）；NET-6 同款收口自动监控
+        Unloaded += (_, _) =>
+        {
+            (DataContext as NetManagerViewModel)?.Diagnostics.CancelPing();
+            (DataContext as NetManagerViewModel)?.Lan.CancelMonitor();
+        };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -40,6 +44,8 @@ public partial class NetManagerView : UserControl
             Settings.ConfirmRequest = Vm.ConfirmRequest;
             Repair.ConfirmRequest = Vm.ConfirmRequest;
             Optimize.ConfirmRequest = Vm.ConfirmRequest;
+            // NET-6 联动：局域网行「Ping」→ 程序勾选诊断 Tab（走既有 Checked → ShowPanel 通道）
+            Vm.SwitchToDiagnosticsTabRequest = () => DiagTabRadio.IsChecked = true;
             await Vm.LoadAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -85,5 +91,6 @@ public partial class NetManagerView : UserControl
         DiagPanel.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         RepairPanel.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         OptimizePanel.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+        LanPanel.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
     }
 }

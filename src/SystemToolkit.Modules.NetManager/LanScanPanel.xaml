@@ -1,0 +1,335 @@
+<UserControl x:Class="SystemToolkit.Modules.NetManager.LanScanPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SystemToolkit.Modules.NetManager"
+             xmlns:controls="clr-namespace:SystemToolkit.UI.Common.Controls;assembly=SystemToolkit.UI.Common"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1300">
+    <!-- 网络管理第 5 Tab「局域网扫描」（NET-6，示意图 2026-09-12 批准）。
+         DataContext = LanScanTabViewModel（父视图 {Binding Lan} 注入）；三态齐备：主表/空/失败。
+         行上限 ≤1024（子网截断防呆），ListView+VirtualizingStackPanel 默认开启。 -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="LanChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_LG}"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="LanChipText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="LanListHeader" TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeCaption}"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="LanBadge" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Conflict">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="ConflictPeer">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Changed">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="New">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Info}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Offline">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ════════ 工具行：适配器 / 扫描 / 监控 / 搜索（示意图 ① 首行）════════ -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox Grid.Column="0" Width="280" Style="{DynamicResource ThemedComboBox}"
+                      FontSize="{DynamicResource Font_SizeBodySm}"
+                      ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}"
+                      DisplayMemberPath="DisplayText"/>
+            <Button Grid.Column="2" Style="{DynamicResource RowPrimaryButton}" Content="重新扫描"
+                    Command="{Binding ScanCommand}"/>
+            <Button Grid.Column="4" Style="{DynamicResource CardButton}" Content="取消"
+                    Command="{Binding CancelScanCommand}"
+                    Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+            <TextBlock Grid.Column="6" Text="{Binding LastScanText}" VerticalAlignment="Center"
+                       FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+            <StackPanel Grid.Column="8" Orientation="Horizontal">
+                <ToggleButton Style="{DynamicResource ThemedToggleButton}" IsChecked="{Binding IsMonitorOn}"
+                              Command="{Binding ToggleMonitorCommand}" VerticalAlignment="Center"
+                              ToolTip="默认关：开启后每 5 分钟后台复扫一轮（自动监控）"/>
+                <TextBlock Text="自动监控（5 分钟）" VerticalAlignment="Center" Margin="6,0,0,0"
+                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+            </StackPanel>
+            <Grid Grid.Column="10" Width="220">
+                <TextBox Style="{DynamicResource FieldInput}"
+                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="搜索 IP / MAC / 主机名 / 厂商（包含匹配）"/>
+                <TextBlock Text="搜索 IP / MAC / 主机名 / 厂商" IsHitTestVisible="False" Margin="8,0,0,0"
+                           VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeMicro}"
+                           Foreground="{DynamicResource Brush_TextMuted}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilterText}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Grid>
+
+        <!-- ════════ 冲突横幅（示意图 ① banner：红底 + 定位/忽略）════════ -->
+        <Border Grid.Row="1" Margin="0,10,0,0" CornerRadius="{DynamicResource Radius_LG}"
+                Background="{DynamicResource Brush_DangerSoft}" BorderBrush="{DynamicResource Brush_DangerBorder}"
+                BorderThickness="1" Padding="12,8"
+                Visibility="{Binding BannerVisible, Converter={StaticResource BoolToVis}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding BannerText}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold"
+                               Foreground="{DynamicResource Brush_DangerText}"/>
+                    <TextBlock Text="{Binding BannerDetail}" FontSize="{DynamicResource Font_SizeMicro}"
+                               Foreground="{DynamicResource Brush_DangerText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{DynamicResource CardButton}" Content="定位该行" Command="{Binding LocateBannerCommand}"/>
+                    <Button Style="{DynamicResource CardButton}" Content="忽略" Margin="6,0,0,0" Command="{Binding DismissBannerCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ════════ 统计芯片行（徽标双通道：文字 + 颜色）════════ -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,10">
+            <Border Style="{StaticResource LanChip}" Background="{DynamicResource Brush_SurfaceAlt}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_TextSecondary}"><Run Text="设备 "/><Run Text="{Binding DeviceCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+            <Border Style="{StaticResource LanChip}" Margin="8,0,0,0" Background="{DynamicResource Brush_SuccessSoft}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_SuccessText}"><Run Text="在线 "/><Run Text="{Binding OnlineCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+            <Border Style="{StaticResource LanChip}" Margin="8,0,0,0" Background="{DynamicResource Brush_DangerSoft}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_DangerText}"><Run Text="冲突 "/><Run Text="{Binding ConflictCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+            <Border Style="{StaticResource LanChip}" Margin="8,0,0,0" Background="{DynamicResource Brush_WarningSoft}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_Warning}"><Run Text="绑定变更 "/><Run Text="{Binding ChangedCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+            <Border Style="{StaticResource LanChip}" Margin="8,0,0,0" Background="{DynamicResource Brush_AccentSoft}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_Info}"><Run Text="新设备 "/><Run Text="{Binding NewCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+            <Border Style="{StaticResource LanChip}" Margin="8,0,0,0" Background="{DynamicResource Brush_SurfaceAlt}">
+                <TextBlock Style="{StaticResource LanChipText}" Foreground="{DynamicResource Brush_TextMuted}"><Run Text="离线 "/><Run Text="{Binding OfflineCount, Mode=OneWay}"/></TextBlock>
+            </Border>
+        </StackPanel>
+
+        <!-- ════════ 主表（正常态）════════ -->
+        <Border Grid.Row="3" Style="{DynamicResource ToolCard}" Padding="0"
+                Visibility="{Binding TableVis, Mode=OneWay}">
+            <ListView x:Name="DeviceList" ItemsSource="{Binding Rows}" BorderThickness="0"
+                      controls:GridViewColumnSizing.AutoFillLastColumn="True"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      d:ItemsSource="{d:SampleData ItemCount=3}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource ListItemRowTallStyle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsConflictRow}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Brush_DangerSoft}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.View>
+                    <GridView ColumnHeaderContainerStyle="{StaticResource LanListHeader}">
+                        <GridViewColumn Header="状态" Width="86">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding KindText}" Style="{StaticResource LanBadge}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="IP 地址" Width="118">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Ip}" FontFamily="{DynamicResource Font_Mono}"
+                                               FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="MAC" Width="158">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Mac}" FontFamily="{DynamicResource Font_Mono}"
+                                                   FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                        <TextBlock Text="{Binding OldMacNote, StringFormat=← 原 {0}}" FontSize="{DynamicResource Font_SizeMicro}"
+                                                   Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="厂商（OUI）" Width="138">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Vendor}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="主机名">
+                            <GridViewColumn.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=GridViewColumnHeader}}"/>
+                                </DataTemplate>
+                            </GridViewColumn.HeaderTemplate>
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Hostname}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                               Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="首次发现" Width="96">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding FirstSeenText}" FontFamily="{DynamicResource Font_Mono}"
+                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="最近在线" Width="96">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding LastSeenText}" FontFamily="{DynamicResource Font_Mono}"
+                                               FontSize="{DynamicResource Font_Micro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="操作" Width="112">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{DynamicResource CardButton}" Content="Ping" Padding="6,2" MinWidth="0" MinHeight="0"
+                                                Command="{Binding DataContext.PingRowCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Style="{DynamicResource CardButton}" Content="复制" Padding="6,2" MinWidth="0" MinHeight="0" Margin="4,0,0,0"
+                                                Command="{Binding DataContext.CopyRowCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </Border>
+
+        <!-- ════════ 空态（示意图 ②）════════ -->
+        <StackPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="{Binding EmptyVis, Mode=OneWay}">
+            <TextBlock Text="🛰" FontSize="{DynamicResource Font_SizeDisplay}" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource Brush_Accent}"/>
+            <TextBlock Text="扫描本网段，摸清所有设备与 IP↔MAC 绑定" FontSize="{DynamicResource Font_SizeBody}"
+                       FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}" Margin="0,10,0,4"/>
+            <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextSecondary}"
+                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="440">
+                建立基线后自动监控：新设备接入、绑定变更、IP 冲突当场报警。<LineBreak/>
+                <Run FontWeight="SemiBold" Foreground="{DynamicResource Brush_Accent}">全程无需管理员权限</Run>，仅覆盖本机所在子网。
+            </TextBlock>
+            <Button Style="{DynamicResource RowPrimaryButton}" Content="开始首次扫描" HorizontalAlignment="Center"
+                    Margin="0,12,0,0" Command="{Binding ScanCommand}"/>
+        </StackPanel>
+
+        <!-- ════════ 失败态（示意图 ③：无可用 IPv4 适配器）════════ -->
+        <StackPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="{Binding FailedVis, Mode=OneWay}">
+            <TextBlock Text="⚠" FontSize="{DynamicResource Font_SizeDisplay}" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource Brush_DangerText}"/>
+            <TextBlock Text="未检测到可用的 IPv4 网络适配器" FontSize="{DynamicResource Font_SizeBody}"
+                       FontWeight="SemiBold" Foreground="{DynamicResource Brush_TextPrimary}" Margin="0,10,0,4"/>
+            <TextBlock Text="请连接有线/Wi-Fi 后重试；纯虚拟网卡与 APIPA（169.254.x）地址已自动排除。"
+                       FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+            <Button Style="{DynamicResource CardButton}" Content="重试" HorizontalAlignment="Center"
+                    Margin="0,12,0,0" Command="{Binding RetryCommand}"/>
+        </StackPanel>
+
+        <!-- ════════ 扫描进度（示意图 ① 底部细进度条；显示用途显式 OneWay）════════ -->
+        <StackPanel Grid.Row="4">
+            <ProgressBar Height="3" Minimum="0" Maximum="100" Margin="0,8,0,0" BorderThickness="0"
+                         Value="{Binding ProgressValue, Mode=OneWay}" Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"
+                         Background="{DynamicResource Brush_Track}" Foreground="{DynamicResource Brush_Accent}"/>
+            <TextBlock Text="{Binding ProgressText}" FontFamily="{DynamicResource Font_Mono}"
+                       FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
+                       Margin="0,4,0,0" Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+        </StackPanel>
+
+        <!-- ════════ 事件流（最近 50 条，可折叠）════════ -->
+        <Border Grid.Row="5" Margin="0,10,0,0" BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0">
+            <StackPanel>
+                <ToggleButton x:Name="EventsToggle" IsChecked="True" Content="▾ 事件流（最近 50 条）"
+                              FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,6,0,4"
+                              Checked="OnEventsToggleChanged" Unchecked="OnEventsToggleChanged"
+                              Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                <Border x:Name="EventsHost" Background="{DynamicResource Brush_SurfaceAlt}"
+                        CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="140">
+                    <ListBox ItemsSource="{Binding Events}" BorderThickness="0" Background="Transparent"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding TimeText}" FontFamily="{DynamicResource Font_Mono}"
+                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                    <TextBlock Text="{Binding Glyph}" FontSize="{DynamicResource Font_SizeMicro}" Margin="8,0,0,0"
+                                               Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                    <TextBlock Text="{Binding Text}" FontSize="{DynamicResource Font_SizeMicro}" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Brush_TextSecondary}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

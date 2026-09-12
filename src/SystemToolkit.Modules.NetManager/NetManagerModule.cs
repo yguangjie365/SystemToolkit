@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Network.LanScan;
 using SystemToolkit.Core.Network.Services;
 
 namespace SystemToolkit.Modules.NetManager;
@@ -71,6 +72,15 @@ public sealed class NetManagerModule : ModuleBase
         services.AddSingleton<ContinuousPingService>();
         services.AddSingleton<INetworkSnapshotService, NetworkSnapshotService>();
 
+        // NET-6 局域网扫描：探针/基线存储/编排服务（DI 铁律第三参 ILogger 必须工厂喂键控——
+        // 类型注册 + 可选参数 = 生产拿 NullLogger，LanScan 动作不会落盘）
+        services.AddSingleton<ILanNeighborProbe, LanNeighborProbe>();
+        services.AddSingleton<LanBaselineStore>();
+        services.AddSingleton(sp => new LanScanService(
+            sp.GetRequiredService<ILanNeighborProbe>(),
+            sp.GetRequiredService<LanBaselineStore>(),
+            sp.GetRequiredKeyedService<ILogger>("netmanager")));
+
         // VM 组合根 + 视图
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）
         services.AddSingleton(sp => new NetManagerViewModel(
@@ -83,6 +93,7 @@ public sealed class NetManagerModule : ModuleBase
             sp.GetRequiredService<INetRepairService>(),
             sp.GetRequiredService<ITcpTuningService>(),
             sp.GetRequiredService<IElevationProvider>(),
+            sp.GetRequiredService<LanScanService>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager")));
         services.AddSingleton<NetManagerView>();
     }

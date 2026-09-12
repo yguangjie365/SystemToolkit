@@ -6,6 +6,7 @@ using SystemToolkit.Core.Backup.Services;
 using SystemToolkit.Core.Drivers;
 using SystemToolkit.Core.FileTransfer.Services;
 using SystemToolkit.Core.GameManager.Models;
+using SystemToolkit.Core.Network.LanScan;
 using SystemToolkit.Core.Network.Services;
 using SystemToolkit.Infrastructure.FileTransfer;
 using SystemToolkit.Modules.DriverManager;
@@ -236,16 +237,17 @@ public class ViewLoadSmokeGuardTests
     }
 
     /// <summary>
-    /// 网络管理视图全页加载冒烟（2026-09-06 V0.4 交付随附）：4 Tab 布局 + Run 绑定 +
-    /// 组合根 VM 构造。与驱动用例同类串行执行——Application 全 AppDomain 单实例，
+    /// 网络管理视图全页加载冒烟（2026-09-06 V0.4 交付随附；2026-09-12 NET-6 扩为 5 Tab）：
+    /// 5 Tab 布局 + Run 绑定 + 组合根 VM 构造。与驱动用例同类串行执行——Application 全 AppDomain 单实例，
     /// 必须经 EnsureApplication 复用（ Driver 用例先行创建）。
     /// </summary>
     [Fact]
-    public void NetManagerView_LoadsWithFourTabs_WithoutException()
+    public void NetManagerView_LoadsWithFiveTabs_WithoutException()
     {
         Exception? captured = null;
         string stage = "init";
         string snapshotDir = Path.Combine(Path.GetTempPath(), $"net-view-smoke-{Guid.NewGuid():N}");
+        string baselinePath = Path.Combine(Path.GetTempPath(), $"net-lan-smoke-{Guid.NewGuid():N}.json");
 
         var thread = new Thread(() =>
         {
@@ -258,6 +260,8 @@ public class ViewLoadSmokeGuardTests
                     helperPath: Path.Combine(Path.GetTempPath(), "no-such-helper.exe"));
                 var info = new NetworkInfoService();
                 var tuning = new TcpTuningService(runner);
+                // NET-6：真探针构造零系统调用；基线重定向 temp 文件（冒烟不触发 Loaded/Scan，双保险）
+                var lanScan = new LanScanService(new LanNeighborProbe(), new LanBaselineStore(baselinePath));
                 var vm = new NetManagerViewModel(
                     info,
                     new NetConfigService(runner),
@@ -267,7 +271,8 @@ public class ViewLoadSmokeGuardTests
                     new ContinuousPingService(),
                     new NetRepairService(runner, info),
                     tuning,
-                    new WindowsElevationProvider());
+                    new WindowsElevationProvider(),
+                    lanScan);
                 var view = new NetManagerView(vm);
 
                 stage = "measure + arrange";
@@ -295,6 +300,11 @@ public class ViewLoadSmokeGuardTests
             {
                 Directory.Delete(snapshotDir, recursive: true);
             }
+
+            if (File.Exists(baselinePath))
+            {
+                File.Delete(baselinePath);
+            }
         }
         catch (IOException)
         {
@@ -303,6 +313,73 @@ public class ViewLoadSmokeGuardTests
 
         Assert.True(captured is null,
             $"网络管理 View 加载抛异常（阶段：{stage}）：\n{captured}");
+    }
+
+    /// <summary>
+    /// LAN 扫描面板独立冒烟（NET-6 批次二）：绑定的真正附着时机是 <see cref="Window.Show"/>
+    /// （MUSIC-7 二炸教训——Run.Text / RangeBase.Value 的 TwoWay 默认只对只读源崩在 Show 布局期），
+    /// 故必须挂窗 Show/Close，而不是 Measure/Arrange 了事。假件=真探针类但零调用，基线重定向 temp。
+    /// </summary>
+    [Fact]
+    public void LanScanPanel_LoadsInWindow_WithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+        string baselinePath = Path.Combine(Path.GetTempPath(), $"lan-panel-smoke-{Guid.NewGuid():N}.json");
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct vm + panel";
+                var lanScan = new LanScanService(new LanNeighborProbe(), new LanBaselineStore(baselinePath));
+                var vm = new LanScanTabViewModel(new NetworkInfoService(), lanScan, _ => { });
+                var panel = new LanScanPanel { DataContext = vm };
+
+                stage = "show + close";
+                var window = new Window
+                {
+                    Content = panel,
+                    Width = 1300,
+                    Height = 800,
+                    ShowInTaskbar = false,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = -4000,
+                    Top = -4000,
+                };
+                window.Show();
+                window.Close();
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        })
+        {
+            IsBackground = true,
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            if (File.Exists(baselinePath))
+            {
+                File.Delete(baselinePath);
+            }
+        }
+        catch (IOException)
+        {
+            // 清理失败不影响判定
+        }
+
+        Assert.True(captured is null,
+            $"局域网扫描 Panel 挂窗加载抛异常（阶段：{stage}）：\n{captured}");
     }
 
     /// <summary>
