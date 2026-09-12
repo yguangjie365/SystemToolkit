@@ -51,6 +51,9 @@
                 <DataTrigger Binding="{Binding Kind}" Value="Offline">
                     <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Self">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_Accent}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
     </UserControl.Resources>
@@ -82,8 +85,13 @@
             </Grid.ColumnDefinitions>
             <ComboBox Grid.Column="0" Width="280" Style="{DynamicResource ThemedComboBox}"
                       FontSize="{DynamicResource Font_SizeBodySm}"
-                      ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}"
-                      DisplayMemberPath="DisplayText"/>
+                      ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
             <Button Grid.Column="2" Style="{DynamicResource RowPrimaryButton}" Content="重新扫描"
                     Command="{Binding ScanCommand}"/>
             <Button Grid.Column="4" Style="{DynamicResource CardButton}" Content="取消"
@@ -208,8 +216,18 @@
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding Mac}" FontFamily="{DynamicResource Font_Mono}"
                                                    FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextPrimary}"/>
-                                        <TextBlock Text="{Binding OldMacNote, StringFormat=← 原 {0}}" FontSize="{DynamicResource Font_SizeMicro}"
-                                                   Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                        <TextBlock Text="{Binding OldMacNoteText}" FontSize="{DynamicResource Font_SizeMicro}"
+                                                   Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="6,0,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding OldMacNoteText}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -230,12 +248,7 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Header="主机名">
-                            <GridViewColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=GridViewColumnHeader}}"/>
-                                </DataTemplate>
-                            </GridViewColumn.HeaderTemplate>
+                        <GridViewColumn Header="主机名" Width="170">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Hostname}" FontSize="{DynamicResource Font_SizeBodySm}"

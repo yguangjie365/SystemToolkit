@@ -473,7 +473,8 @@ public partial class LanScanTabViewModel : ObservableObject
             return null;
         }
 
-        return plan;
+        // 本机 MAC 随计划下传（服务侧 ②b 特判补全用）
+        return plan with { LocalMac = SelectedAdapter.Model.MacAddress };
     }
 
     /// <summary>可扫描判定：已连接物理网卡 + 有非 APIPA 的带前缀 IPv4（多值假设：逐条找，不做单值假设）。</summary>

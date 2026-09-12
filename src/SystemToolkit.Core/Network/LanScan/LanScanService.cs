@@ -144,6 +144,15 @@ public sealed class LanScanService
                 }
             }
 
+            // ②b 本机特判（实机 09-12）：SendARP 打自己 IP 能应答但 ARP 不上线（邻居表无条目），
+            //      用计划携带的适配器 MAC 补全，免本机行永远「未学到 MAC」
+            if (plan.LocalMac is not null
+                && alive.Contains(plan.LocalIp, StringComparer.Ordinal)
+                && !macs.ContainsKey(plan.LocalIp))
+            {
+                macs[plan.LocalIp] = LanMac.Normalize(plan.LocalMac) ?? "";
+            }
+
             // ③ 主机名并发反查（限流 + 单次 400ms 超时降级 null）+ OUI 富化 → 设备清单
             var ordered = alive.Order(StringComparer.Ordinal).ToList();
             string?[] names = ordered.Count <= HostnameResolveLimit

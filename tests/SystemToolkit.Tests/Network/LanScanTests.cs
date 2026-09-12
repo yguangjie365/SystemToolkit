@@ -435,6 +435,28 @@ public class LanScanTests
     }
 
     [Fact]
+    public async Task Scan_LocalHost_AnswerButNoNeighborEntry_FilledWithAdapterMac()
+    {
+        string path = TempPath();
+        try
+        {
+            // 实机 09-12 形态复刻：本机 IP 应答 SendARP，但 ARP 不上线 → 邻居表无条目
+            FakeProbe probe = new FakeProbe().AliveWithoutMac("192.168.9.50");
+            var service = new LanScanService(
+                probe, new LanBaselineStore(path),
+                hostnameResolver: static _ => Task.FromResult<string?>(null));
+            LanScanResult r = await service.ScanAsync(
+                TestPlan() with { LocalMac = "aa-bb-cc-dd-ee-ff" });
+            LanDevice self = Assert.Single(r.Devices);
+            Assert.Equal("AA:BB:CC:DD:EE:FF", self.Mac); // 归一化补全，不再「未学到 MAC」
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Scan_Cancelled_WasCancelled_NoBaselineCommit()
     {
         string path = TempPath();

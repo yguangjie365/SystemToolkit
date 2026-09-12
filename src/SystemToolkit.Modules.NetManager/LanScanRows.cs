@@ -25,6 +25,9 @@ public enum LanRowKind
 
     /// <summary>应答但邻居表未学到 MAC（灰，跨网段/防火墙形态）。</summary>
     NoMac = 6,
+
+    /// <summary>扫描发起机自身（Accent 徽标，实机 09-12 反馈：本机行需可辨识）。</summary>
+    Self = 7,
 }
 
 /// <summary>局域网设备表行视图模型（NET-6 示意图 ① 表格列契约）。</summary>
@@ -61,6 +64,7 @@ public sealed class LanDeviceRow
 
     public string KindText => Kind switch
     {
+        LanRowKind.Self => "本机",
         LanRowKind.Conflict => "冲突",
         LanRowKind.ConflictPeer => "冲突·另一应答",
         LanRowKind.Changed => "绑定变更",
@@ -71,6 +75,9 @@ public sealed class LanDeviceRow
     };
 
     public bool IsConflictRow => Kind is LanRowKind.Conflict or LanRowKind.ConflictPeer;
+
+    /// <summary>「← 原 XX:…」注记：无旧值时为空串（实机 09-12：StringFormat 对 null 也渲染前缀，留脏字）。</summary>
+    public string OldMacNoteText => OldMacNote is null ? "" : $"← 原 {OldMacNote}";
 
     /// <summary>可搜索文本（预计算：IP/MAC/主机名/厂商 小写拼接）。</summary>
     public string SearchBlob =>

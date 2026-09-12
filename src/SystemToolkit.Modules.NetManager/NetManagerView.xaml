@@ -163,8 +163,13 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                     <TextBlock Text="DNS 设置" Style="{DynamicResource CardTitle}"/>
                                     <ComboBox Style="{DynamicResource ThemedComboBox}" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,0,8"
                                               ItemsSource="{Binding Settings.PresetList}"
-                                              SelectedItem="{Binding Settings.SelectedPreset}"
-                                              DisplayMemberPath="Name"/>
+                                              SelectedItem="{Binding Settings.SelectedPreset}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -611,8 +616,13 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                     <TextBlock Text="接口" Style="{DynamicResource KvLabel}" Margin="0,0,0,4"/>
                                     <ComboBox Style="{DynamicResource ThemedComboBox}"
                                               ItemsSource="{Binding Optimize.Interfaces}"
-                                              SelectedItem="{Binding Optimize.SelectedInterface}"
-                                              DisplayMemberPath="Name"/>
+                                              SelectedItem="{Binding Optimize.SelectedInterface}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                 </StackPanel>
 
                                 <!-- 新跃点数 -->

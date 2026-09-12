@@ -8,11 +8,14 @@ namespace SystemToolkit.Core.Network.LanScan;
 /// <param name="NetworkLabel">如 <c>192.168.1.0/24</c>（UI 芯片展示）。</param>
 /// <param name="Hosts">待探测主机 IP（已排除网络号与广播地址，升序）。</param>
 /// <param name="Truncated">网段规模超上限被截断（大网段防呆，UI 需黄标提示）。</param>
+/// <param name="LocalMac">扫描适配器的本机 MAC（实机 09-12 反馈：SendARP 自己不回表，
+/// 本机行需由此补全；null 时本机按普通设备降级显示）。</param>
 public sealed record LanSubnetPlan(
     string LocalIp,
     string NetworkLabel,
     IReadOnlyList<string> Hosts,
-    bool Truncated);
+    bool Truncated,
+    string? LocalMac = null);
 
 /// <summary>
 /// 子网枚举纯函数：「ip/prefix」（<see cref="SystemToolkit.Core.Network.Models.NetAdapterInfo.IPv4WithMask"/>

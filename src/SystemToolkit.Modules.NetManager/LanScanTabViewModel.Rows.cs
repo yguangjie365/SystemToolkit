@@ -24,16 +24,17 @@ public partial class LanScanTabViewModel
         }
     }
 
-    /// <summary>排序权重：冲突对 → 变更 → 新设备 → 在线 → 无 MAC → 离线（问题置顶，示意图 ①）。</summary>
+    /// <summary>排序权重：冲突对 → 变更 → 新设备 → 本机/在线 → 无 MAC → 离线（问题置顶，示意图 ①）。</summary>
     private static int KindWeight(LanRowKind kind) => kind switch
     {
         LanRowKind.Conflict => 0,
         LanRowKind.ConflictPeer => 1,
         LanRowKind.Changed => 2,
         LanRowKind.New => 3,
-        LanRowKind.Online => 4,
-        LanRowKind.NoMac => 5,
-        _ => 6,
+        LanRowKind.Self => 4,
+        LanRowKind.Online => 5,
+        LanRowKind.NoMac => 6,
+        _ => 7,
     };
 
     /// <summary>行合成：本轮设备（冲突/变更/新 → 徽标）+ 冲突对偶行 + 基线内未应答离线行。</summary>
@@ -55,9 +56,11 @@ public partial class LanScanTabViewModel
             .Select(static e => e.Ip)
             .ToHashSet(StringComparer.Ordinal);
 
+        string selfMac = LanMac.Normalize(SelectedAdapter?.Model.MacAddress) ?? "";
         foreach (LanDevice device in result.Devices)
         {
-            LanRowKind kind = device.Mac.Length == 0 ? LanRowKind.NoMac
+            LanRowKind kind = selfMac.Length > 0 && string.Equals(device.Mac, selfMac, StringComparison.Ordinal) ? LanRowKind.Self
+                : device.Mac.Length == 0 ? LanRowKind.NoMac
                 : conflictIps.Contains(device.Ip) ? LanRowKind.Conflict
                 : changedBy.ContainsKey(device.Ip) ? LanRowKind.Changed
                 : newIps.Contains(device.Ip) ? LanRowKind.New
