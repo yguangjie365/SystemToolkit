@@ -16,4 +16,11 @@
     <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- A1/A3（2026-09-13）：BuildAccounts / UpdateLibraryCapacity 开放直测
+         （账户当前项标记、同卷多库的剩余空间去重——这两处靠 UI 手点验不出来）。
+         与 Core / Infrastructure / FileBackup / MusicManager 同款做法。 -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+
 </Project>

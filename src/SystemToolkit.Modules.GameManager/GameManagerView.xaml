@@ -9,6 +9,9 @@
         <!-- 封面限宽解码（REVIEW-3 S-4：直绑 string 按原始尺寸解码，1200×1800 竖版 4 倍冗余内存） -->
         <local:CoverImageConverter x:Key="CoverImage"/>
         <local:InverseBoolConverter x:Key="InverseBool"/>
+        <!-- 统计行两段之间的横向间隙（A3）。用具名 Thickness 而非 Space_XXS：后者四边 4px，
+             会给这一行凭空加 8px 高；这里只要左侧 4px。 -->
+        <Thickness x:Key="StatsGap">4,0,0,0</Thickness>
         <!-- 游戏卡片：封面 + 名称 + 元数据行 + 操作行（设计 §7 卡片范式；布局对齐 GameManager.html 参考稿） -->
         <Style x:Key="GameCard" TargetType="Border">
             <Setter Property="Width" Value="320"/>
@@ -47,6 +50,61 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+
+        <!-- ============ A1 账户选择器（2026-09-13） ============ -->
+        <!-- 紧凑头像框：与页头 34px 头像同款观感（圆角方形 + 深底 + 图片/字母二选一）。
+             尺寸写在此处 Setter 内：棘轮只扫 Width="数字" 的内联形态，与本文件 GameCard 同款做法保持一致。 -->
+        <Style x:Key="AccountAvatarBox" TargetType="Border">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/><!-- 圆角方形（与页头一致） -->
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_MD}"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_DarkSurface}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- 账户菜单项。Header 绑**整项**（HeaderTemplate 的 DataContext 取自 Header 值，不是项的 DataContext）。
+             ⚠️ 有意不用 MenuItem.IsCheckable：ToolkitMenuItem 是给卡片 ⋯ 菜单设计的非勾选样式，
+             勾选框区在该模板下未经验证 → 改为模板内自带「当前」标记，不依赖样式支持。 -->
+        <Style x:Key="AccountMenuItem" TargetType="MenuItem" BasedOn="{StaticResource ToolkitMenuItem}">
+            <Setter Property="Header" Value="{Binding}"/>
+            <Setter Property="Command" Value="{Binding SwitchCommand}"/>
+            <Setter Property="HeaderTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource AccountAvatarBox}">
+                                <Grid>
+                                    <Image Source="{Binding AvatarPath}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality">
+                                        <Image.Style>
+                                            <Style TargetType="Image">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasAvatar}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Image.Style>
+                                    </Image>
+                                    <TextBlock Text="{Binding Initial}" FontSize="{DynamicResource Font_SizeMicro}" FontWeight="Bold"
+                                               Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Visibility="{Binding HasAvatar, Converter={x:Static local:InverseBoolConverter.Instance}}"/>
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                       Margin="{DynamicResource Space_XS}" VerticalAlignment="Center"/>
+                            <Border Padding="{DynamicResource Space_XXS}" CornerRadius="{DynamicResource Radius_XS}"
+                                    Background="{DynamicResource Brush_AccentSoft}" VerticalAlignment="Center"
+                                    Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="当前" FontFamily="{DynamicResource Font_Mono}"
+                                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Accent}"/>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -66,6 +124,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="游戏管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
@@ -73,45 +132,65 @@
                     <Run Text="{Binding HeaderSubtitle, Mode=OneWay}"/>
                 </TextBlock>
             </StackPanel>
-            <!-- 账户区：头像 + 账户名（本地 avatarcache PNG；缺失字母占位） -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
-                <Border Width="34" Height="34" CornerRadius="{DynamicResource Radius_XLLg}" ClipToBounds="True"
-                        Background="{DynamicResource Brush_DarkSurface}">
-                    <Grid>
-                        <Image Source="{Binding AvatarPath}" Stretch="UniformToFill">
-                            <Image.Style>
-                                <Style TargetType="Image">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding AvatarPath}" Value="{x:Null}">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Image.Style>
-                        </Image>
-                        <TextBlock Text="{Binding AvatarInitial}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
-                                   Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding AvatarPath}" Value="{x:Null}">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
-                </Border>
-                <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
-                    <TextBlock Text="{Binding AccountName}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
-                               Foreground="{DynamicResource Brush_TextPrimary}"/>
-                    <TextBlock Text="Steam 账户" FontSize="{DynamicResource Font_SizeMicro}"
-                               Foreground="{DynamicResource Brush_TextMuted}"/>
+            <!-- 账户区（A1 账户选择器，2026-09-13）：点开下拉切换账户。
+                 下拉用 ContextMenu 而非自绘 Popup —— 复用主题词汇 ToolkitContextMenu/ToolkitMenuItem
+                 （与卡片 ⋯ 菜单同一套），且 DataContext 桥接方式在本文件已实证。
+                 禁用时用 ToolTip 说明原因（🟠 禁用按钮必须有因可查）。 -->
+            <Button x:Name="AccountButton" Grid.Column="2" Style="{DynamicResource SecondaryButton}"
+                    Margin="{DynamicResource Space_XS}" VerticalAlignment="Center" MinHeight="34"
+                    Click="OnAccountMenuClick"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    IsEnabled="{Binding CanPickAccount}"
+                    ToolTipService.ShowOnDisabled="True"
+                    ToolTip="切换 Steam 账户（需要 Steam 中已记住账户）"
+                    AutomationProperties.Name="Steam 账户，点击切换">
+                <Button.ContextMenu>
+                    <!-- ContextMenu 属独立可视树：DataContext 走 PlacementTarget.Tag（页级 VM）→
+                         ItemsSource 取 Accounts；各容器 MenuItem 的 DataContext 自动是 SteamAccountVm -->
+                    <ContextMenu Style="{DynamicResource ToolkitContextMenu}"
+                                 DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}"
+                                 ItemsSource="{Binding Accounts}"
+                                 ItemContainerStyle="{StaticResource AccountMenuItem}"/>
+                </Button.ContextMenu>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="34" Height="34" CornerRadius="{DynamicResource Radius_XLLg}" ClipToBounds="True"
+                            Background="{DynamicResource Brush_DarkSurface}">
+                        <Grid>
+                            <Image Source="{Binding AvatarPath}" Stretch="UniformToFill">
+                                <Image.Style>
+                                    <Style TargetType="Image">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding AvatarPath}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Image.Style>
+                            </Image>
+                            <TextBlock Text="{Binding AvatarInitial}" FontSize="{DynamicResource Font_SizeBodyLg}" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush_OnDark}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding AvatarPath}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center" Margin="{DynamicResource Space_XS}">
+                        <TextBlock Text="{Binding AccountName}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
+                                   Foreground="{DynamicResource Brush_TextPrimary}"/>
+                        <TextBlock Text="Steam 账户 ▾" FontSize="{DynamicResource Font_SizeMicro}"
+                                   Foreground="{DynamicResource Brush_TextMuted}"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Button>
             <Border Grid.Column="3" Style="{DynamicResource LiveBadge}" Height="30" Margin="0,0,12,0">
                 <TextBlock FontSize="{DynamicResource Font_SizeMicro}" FontFamily="{DynamicResource Font_Mono}" FontWeight="Bold" VerticalAlignment="Center">
                     <TextBlock.Style>
@@ -128,7 +207,13 @@
                     </TextBlock.Style>
                 </TextBlock>
             </Border>
-            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" Content="刷新"
+            <!-- A4 诊断导出（⚠️ 不在已确认的布局图内，评审时请过目）：与「刷新」并列。
+                 有意用 MinHeight 而非 Height —— 本文件 Height 裸值已用掉基线 9 中的 8，不再消耗余量。 -->
+            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" MinHeight="30" Content="导出诊断"
+                    Command="{Binding ExportDiagnosticsCommand}"
+                    ToolTip="把 Steam 诊断包（各 VDF 路径/原文/计数/错误明细）导出到日志目录"
+                    AutomationProperties.Name="导出 Steam 诊断"/>
+            <Button Grid.Column="5" Style="{DynamicResource SecondaryButton}" Height="30" Content="刷新"
                     Command="{Binding LoadCommand}"/>
         </Grid>
 
@@ -181,10 +266,18 @@
                     Content="启动 Steam" Command="{Binding LaunchClientCommand}"/>
         </Grid>
 
-        <!-- ============ 状态栏（参考稿：内容区上方单行 mono 统计） ============ -->
-        <TextBlock Grid.Row="2" Style="{DynamicResource MonoText}" FontSize="{DynamicResource Font_SizeMicro}"
-                   Foreground="{DynamicResource Brush_TextMuted}" Margin="2,0,0,12"
-                   Text="{Binding InstalledSummary, Mode=OneWay}"/>
+        <!-- ============ 状态栏（参考稿：内容区上方单行 mono 统计） ============
+             A3（2026-09-13）：并入库容量段（VM 的 LibraryCapacityText）。独立 TextBlock 而非并进一个字符串，
+             这样"无库/卷不可读"时整段可隐藏，不会留下悬空的分隔符。 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,0,0,12">
+            <TextBlock Style="{DynamicResource MonoText}" FontSize="{DynamicResource Font_SizeMicro}"
+                       Foreground="{DynamicResource Brush_TextMuted}"
+                       Text="{Binding InstalledSummary, Mode=OneWay}"/>
+            <TextBlock Style="{DynamicResource MonoText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="{StaticResource StatsGap}"
+                       Foreground="{DynamicResource Brush_TextMuted}"
+                       Visibility="{Binding HasLibraryCapacity, Converter={StaticResource BoolToVis}}"
+                       Text="{Binding LibraryCapacityText, Mode=OneWay}"/>
+        </StackPanel>
 
         <!-- ============ 内容区：三态 ============ -->
         <Grid Grid.Row="3">

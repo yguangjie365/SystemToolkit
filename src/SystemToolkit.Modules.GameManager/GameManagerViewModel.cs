@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Text.Json;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -94,7 +95,78 @@ internal static class GameVmFormat
 }
 
 /// <summary>
-/// 游戏管理页 VM：Steam 本地库只读展示 + 启动/商店/目录/卸载引导。
+/// 账户下拉里的一项（A1 账户选择器，2026-09-13）：头像 + 显示名 + 是否当前账户。
+/// <para>
+/// 🔴 切换命令放在**项自身**而非页 VM：<c>ContextMenu</c> 属独立可视树，项模板内用
+/// <c>RelativeSource FindAncestor</c> 回不到页 VM（本文件卡片 ⋯ 菜单靠
+/// <c>PlacementTarget.Tag</c> 桥接，但那是"单容器"场景，ItemsSource 生成的多个容器不适用）。
+/// </para>
+/// </summary>
+public partial class SteamAccountVm : ObservableObject
+{
+    private readonly GameManagerViewModel _owner;
+
+    /// <summary>构造。头像路径与"是否当前"由页 VM 在后台预计算后传入（沿用 GameCardVm 同款做法）。</summary>
+    public SteamAccountVm(SteamUser model, bool isCurrent, string? avatarPath, GameManagerViewModel owner)
+    {
+        Model = model;
+        _isCurrent = isCurrent;
+        _avatarPath = avatarPath;
+        _owner = owner;
+    }
+
+    /// <summary>底层模型。⚠️ 切换用 <see cref="SteamUser.AccountName"/>（登录名），**不是** PersonaName（昵称）。</summary>
+    public SteamUser Model { get; }
+
+    public string SteamId64 => Model.SteamId64;
+
+    /// <summary>显示名：PersonaName（用户昵称）优先，空则回退 AccountName。</summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(Model.PersonaName) ? Model.AccountName : Model.PersonaName;
+
+    /// <summary>头像字母占位（与页头 <c>AvatarInitial</c> 同一规则：取首字符大写，空回退 "St"）。</summary>
+    public string Initial
+    {
+        get
+        {
+            string n = DisplayName.Trim();
+            return n.Length == 0 ? "St" : n[..1].ToUpperInvariant();
+        }
+    }
+
+    /// <summary>当前登录账户（菜单里标记「当前」）。切换成功后由页 VM 就地重标，不重扫游戏库。</summary>
+    [ObservableProperty]
+    private bool _isCurrent;
+
+    /// <summary>本地头像绝对路径；缺失为 null。</summary>
+    [ObservableProperty]
+    private string? _avatarPath;
+
+    partial void OnAvatarPathChanged(string? value) => OnPropertyChanged(nameof(HasAvatar));
+
+    /// <summary>🔴 无头像时 AvatarPath 为 null（非空串），但**判空必须用 IsNullOrEmpty**——
+    /// 与 GameCardVm 同款坑，写成 "is not null" 会在空串时误判为有头像。</summary>
+    public bool HasAvatar => !string.IsNullOrEmpty(AvatarPath);
+
+    /// <summary>
+    /// 切换到本账户。命令体**顶层** catch —— <c>AsyncRelayCommand</c> 会吞异常
+    /// （守卫 <c>AsyncCommandCatchGuardTests</c> 基线制，判据为花括号深度 == 1）。
+    /// </summary>
+    [RelayCommand]
+    private async Task SwitchAsync()
+    {
+        try
+        {
+            await _owner.SwitchAccountAsync(this).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _owner.ReportAccountSwitchFailure(DisplayName, ex);
+        }
+    }
+}
+
+/// <summary>
+/// 游戏管理页 VM：Steam 本地库只读展示 + 启动/商店/目录/卸载引导 + 账户切换（A1）+ 诊断导出（A4）。
 /// 数据全部来自本地 VDF/ACF（设计 §3 第一阶段策略）；加载在后台线程，一次进入页面加载一次。
 /// </summary>
 public partial class GameManagerViewModel : ObservableObject
@@ -188,6 +260,41 @@ public partial class GameManagerViewModel : ObservableObject
 
     /// <summary>Steam 库数量（页头副标题用；LoadAsync 完成后赋值）。</summary>
     public int LibraryCount { get; private set; }
+
+    // ================= A1 账户选择器（2026-09-13） =================
+
+    /// <summary>记住的 Steam 账户（下拉项；含头像与"当前"标记）。</summary>
+    public ObservableCollection<SteamAccountVm> Accounts { get; } = new();
+
+    /// <summary>有可切换的账户（下拉按钮可用性）。账户集合变化后由 <see cref="NotifyAccountsChanged"/> 手动通知。</summary>
+    public bool HasAccounts => Accounts.Count > 0;
+
+    /// <summary>账户切换进行中（切换会关停 Steam，最长 10s；期间禁止再次触发）。</summary>
+    [ObservableProperty]
+    private bool _isSwitchingAccount;
+
+    partial void OnIsSwitchingAccountChanged(bool value) => OnPropertyChanged(nameof(CanPickAccount));
+
+    /// <summary>账户下拉可点（有账户且不在切换中）。禁用时由 View 的 ToolTip 说明原因。</summary>
+    public bool CanPickAccount => HasAccounts && !IsSwitchingAccount;
+
+    /// <summary>账户集合重建后调用（ObservableCollection 不通知 Count 派生属性）。</summary>
+    private void NotifyAccountsChanged()
+    {
+        OnPropertyChanged(nameof(HasAccounts));
+        OnPropertyChanged(nameof(CanPickAccount));
+    }
+
+    // ================= A3 库容量（2026-09-13） =================
+
+    /// <summary>库容量摘要（「· 库 N 个 · 剩余 X GB」）。空串 = 无可展示内容（View 隐藏该段）。</summary>
+    [ObservableProperty]
+    private string _libraryCapacityText = string.Empty;
+
+    partial void OnLibraryCapacityTextChanged(string value) => OnPropertyChanged(nameof(HasLibraryCapacity));
+
+    /// <summary>有库容量可展示。</summary>
+    public bool HasLibraryCapacity => LibraryCapacityText.Length > 0;
 
     /// <summary>页头副标题（HTML 参考稿口径：「N 款游戏 · M 个库」）。</summary>
     public string HeaderSubtitle => SteamInstalled
@@ -357,6 +464,18 @@ public partial class GameManagerViewModel : ObservableObject
                 // 头像走 ObservableProperty 赋值 → 触发 UI 变更通知
                 AvatarPath = mostRecentId is null ? null : _steam.GetAvatarPath(mostRecentId);
                 LibraryCount = data.Libraries.Count;
+                BuildAccounts(data.Users, activeUser);        // A1
+                UpdateLibraryCapacity(data.Libraries);        // A3
+            }
+            else
+            {
+                // Steam 卸载/不可用：清干净，避免上一轮的值残留（账户名/头像/容量/库数）
+                Accounts.Clear();
+                NotifyAccountsChanged();
+                LibraryCapacityText = string.Empty;
+                AccountName = "—";
+                AvatarPath = null;
+                LibraryCount = 0;
             }
 
             ApplySort();
@@ -437,6 +556,203 @@ public partial class GameManagerViewModel : ObservableObject
                 GamesView.Refresh();
             }
         };
+    }
+
+    // ================= A1 账户：构建与切换 =================
+
+    /// <summary>
+    /// 构建账户下拉项。
+    /// <para>
+    /// 头像走 <see cref="SteamService.GetAvatarPath"/>（**路径式** API，WPF 直接绑 Image.Source）。
+    /// ⚠️ 不用 <c>FetchUserAvatarsAsync</c>：它返回 base64 data URI（Blazor 时代的形状），
+    /// WPF 侧还得再解码成 BitmapImage，徒增内存与代码。
+    /// </para>
+    /// </summary>
+    /// <remarks>internal + InternalsVisibleTo：直测覆盖"当前项标记"与 0/1/N 账户（UI 手点验不出来）。</remarks>
+    internal void BuildAccounts(IReadOnlyList<SteamUser> users, SteamUser? active)
+    {
+        Accounts.Clear();
+        foreach (SteamUser u in users)
+        {
+            bool isCurrent = active is not null
+                && string.Equals(u.SteamId64, active.SteamId64, StringComparison.Ordinal);
+            Accounts.Add(new SteamAccountVm(u, isCurrent, _steam.GetAvatarPath(u.SteamId64), this));
+        }
+
+        NotifyAccountsChanged();
+    }
+
+    /// <summary>
+    /// 切换到指定账户（A1）。
+    /// 🔴 <c>SteamService.SwitchAccount</c> 内部会 taskkill Steam 并**最长阻塞 10s**
+    /// （<c>KillSteamAndWait</c>）→ 必须离 UI 线程，否则页面冻结 10 秒。
+    /// 属"修改类"操作：确认门 + 文案讲清后果（会重启 Steam、改写 loginusers.vdf）。
+    /// </summary>
+    internal async Task SwitchAccountAsync(SteamAccountVm target)
+    {
+        if (IsSwitchingAccount)
+        {
+            return; // 防连点（按钮已由 CanPickAccount 禁用，这里是兜底）
+        }
+
+        if (target.IsCurrent)
+        {
+            StatusText = $"已是当前账户：{target.DisplayName}";
+            StatusLevel = 0;
+            return;
+        }
+
+        // 切换走的是 AccountName（登录名）；Model 上缺失则中止——写进 vdf 会造出坏条目
+        string accountName = target.Model.AccountName;
+        if (string.IsNullOrWhiteSpace(accountName))
+        {
+            StatusText = $"账户 {target.DisplayName} 缺少登录名，无法切换";
+            StatusLevel = 2;
+            _logger.Warn($"[游戏] 账户 SteamId={target.SteamId64} 无 AccountName，切换中止");
+            return;
+        }
+
+        if (ConfirmRequest?.Invoke(
+                "切换 Steam 账户",
+                $"将切换到：{target.DisplayName}\n\n"
+                + "此操作会：\n"
+                + "· 关闭正在运行的 Steam（进行中的下载/上传会中断）\n"
+                + "· 改写 Steam 登录配置 loginusers.vdf（自动留 .bak 备份）\n"
+                + "· 以该账户重新启动 Steam\n\n"
+                + "确定继续吗？") != true)
+        {
+            _logger.Info($"已取消切换账户：{target.DisplayName}");
+            StatusText = $"已取消切换账户：{target.DisplayName}";
+            StatusLevel = 0;
+            return;
+        }
+
+        IsSwitchingAccount = true;
+        StatusText = $"正在切换到 {target.DisplayName}…（Steam 将被重启）";
+        StatusLevel = 0;
+        try
+        {
+            bool ok = await Task.Run(() => _steam.SwitchAccount(accountName)).ConfigureAwait(true);
+            if (ok)
+            {
+                AccountName = target.DisplayName;
+                AvatarPath = target.AvatarPath;
+                foreach (SteamAccountVm a in Accounts)
+                {
+                    a.IsCurrent = ReferenceEquals(a, target);
+                }
+
+                // 实测进程态，而不是凭"我们刚启动过"下断言
+                SteamRunning = _steam.IsClientRunning();
+                StatusText = $"已切换到 {target.DisplayName}，Steam 正在以该账户启动";
+                StatusLevel = 1;
+            }
+            else
+            {
+                StatusText = $"切换账户失败：{target.DisplayName}（详见日志）";
+                StatusLevel = 2;
+            }
+
+            _logger.Info($"切换账户 → {target.DisplayName}({accountName})：{ok}");
+        }
+        catch (Exception ex)
+        {
+            StatusText = "切换账户异常：" + ex.Message;
+            StatusLevel = 2;
+            _logger.Error("切换账户异常", ex);
+        }
+        finally
+        {
+            IsSwitchingAccount = false;
+        }
+    }
+
+    /// <summary>账户项命令的兜底出口（项 VM 的 catch 分支调用；异常不得静默）。</summary>
+    internal void ReportAccountSwitchFailure(string displayName, Exception ex)
+    {
+        StatusText = $"切换账户异常：{displayName}";
+        StatusLevel = 2;
+        _logger.Error($"[游戏] 切换账户异常（{displayName}）", ex);
+    }
+
+    // ================= A3 库容量 =================
+
+    /// <summary>
+    /// 库容量摘要。
+    /// ⚠️ 剩余空间按**卷根去重**累加：同一分区上可以有多个库（多个 libraryfolders 条目指向同一盘），
+    /// 直接逐库累加会把同一块可用空间算多次。卷未就绪/网络盘时 <c>FreeSize</c> 为 0（FillDriveSize 吞异常），
+    /// 此时该卷不计入，但库数照报。
+    /// </summary>
+    /// <remarks>internal + InternalsVisibleTo：直测覆盖"同卷多库去重"（最易写错的一处）。</remarks>
+    internal void UpdateLibraryCapacity(IReadOnlyList<SteamLibrary> libraries)
+    {
+        if (libraries.Count == 0)
+        {
+            LibraryCapacityText = string.Empty;
+            return;
+        }
+
+        var freeByRoot = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+        foreach (SteamLibrary lib in libraries)
+        {
+            if (lib.FreeSize == 0)
+            {
+                continue;
+            }
+
+            string root = Path.GetPathRoot(lib.Path) ?? lib.Path;
+            freeByRoot[root] = lib.FreeSize; // 同卷各库取值相同，覆盖无副作用
+        }
+
+        if (freeByRoot.Count == 0)
+        {
+            LibraryCapacityText = $"· 库 {libraries.Count} 个";
+            return;
+        }
+
+        ulong free = 0;
+        foreach (ulong v in freeByRoot.Values)
+        {
+            free += v;
+        }
+
+        LibraryCapacityText = $"· 库 {libraries.Count} 个 · 剩余 {GameVmFormat.SizeText(free)}";
+    }
+
+    // ================= A4 诊断导出 =================
+
+    /// <summary>
+    /// 导出 Steam 解析诊断包到 <c>%LOCALAPPDATA%\SystemToolkit\logs\</c>（A4）。
+    /// 用途：VDF/ACF 解析异常时把「各文件路径 + 原文 + 计数 + 错误明细」一次性带走排障。
+    /// ⚠️ 包内**含 loginusers.vdf / libraryfolders.vdf 原文**（含账户名与 SteamID64）→ 仅落本地，
+    /// 状态栏文案只给路径、不打印内容。
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportDiagnosticsAsync()
+    {
+        try
+        {
+            SteamDebugInfo dump = await Task.Run(_steam.GetDebugDump).ConfigureAwait(true);
+            string dir = Path.Combine(
+                System.Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SystemToolkit",
+                "logs");
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(
+                dir,
+                "steam-debug-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".json");
+            string json = JsonSerializer.Serialize(dump, new JsonSerializerOptions { WriteIndented = true });
+            SystemToolkit.Core.Utilities.AtomicFile.WriteAllText(file, json);
+            StatusText = $"诊断已导出：{file}";
+            StatusLevel = 1;
+            _logger.Info($"Steam 诊断已导出：{file}");
+        }
+        catch (Exception ex)
+        {
+            StatusText = "导出诊断失败：" + ex.Message;
+            StatusLevel = 2;
+            _logger.Error("导出 Steam 诊断失败", ex);
+        }
     }
 
     /// <summary>
