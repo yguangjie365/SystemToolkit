@@ -1,5 +1,13 @@
 # DESIGN.md — SystemToolkit · NVIDIA 风格主题（设计参考）
 
+> ⚠️ **【2026-09-13 归档标记】本节首段的裁定说明已过时，正文色板已落地。**
+> 原文写「项目裁定：不开发深色模式、单 Light 主题」——**该裁定已被 ADR-005 推翻**
+> （2026-09-10 放开双主题，`src/SystemToolkit.UI.Common/Themes/Packs/Nvidia/Nvidia.Dark.xaml` 已在产，
+> 运行期切换不重启）。因此「若要作为可发布主题包落地需先推翻裁定」这一前置**已完成**。
+> 正文 §1–§7 是 Nvidia.Dark 主题包的取色/排版/组件依据，仍有效；但**具体令牌值以
+> `Docs/04-UI设计规范.md` §3.1 与主题包文件为准**（有 `TokenKeysCoverage` / `DesignSpecTokenSync` 守卫），
+> 本文数值仅供溯源，可能与最终值有微调。
+
 > 本文件是 design-md 引入的 NVIDIA 设计系统参考（token 取自内置 `nvidia` 模板，未编造）。
 > ⚠️ 项目裁定：**不开发深色模式、单 Light 主题**（AGENTS §四 / ADR-003）。NVIDIA 签名是黑底+绿点缀，属深色——
 > 若要作为**可发布主题包**落地，需先推翻"不做深色"裁定并新增 `Packs/Nvidia/Nvidia.Dark.xaml` + 走完整令牌契约
