@@ -20,6 +20,21 @@ public sealed record SteamInventoryGame
     /// <summary>显示名（缺失时为 <c>App {id}</c>，见 <see cref="SteamInventorySnapshot"/>）。</summary>
     public string Name { get; init; } = string.Empty;
 
+    /// <summary>
+    /// 中文名（来自 <c>appinfo.vdf</c> 的 <c>common.name_localized</c>；空串 = 该游戏无中文名）。
+    /// <para>
+    /// 🔴 <see cref="Name"/> 恒为**英文原名**（<c>.acf</c> 与 <c>common.name</c> 都不带语言），
+    /// 界面要显示中文只能靠本字段（2026-09-13 实机反馈：黑神话：悟空显示成英文名）。
+    /// </para>
+    /// </summary>
+    public string NameZh { get; init; } = string.Empty;
+
+    /// <summary>
+    /// 头图**相对路径**（<c>appinfo.vdf</c> 的 <c>common.header_image</c>；空串 = 未提供）。
+    /// 形如 <c>header.jpg</c> 或 <c>{hash}/header.jpg</c>，供封面 CDN 拼 URL。
+    /// </summary>
+    public string HeaderImage { get; init; } = string.Empty;
+
     /// <summary>是否已安装到本地（<c>.acf</c> 清单命中）。</summary>
     public bool Installed { get; init; }
 

@@ -126,17 +126,31 @@ public sealed partial class SteamService
         foreach (uint appId in merged.Keys.ToArray())
         {
             SteamInventoryGame g = merged[appId];
-            if (g.Name.Length > 0)
+            if (g.Name.Length == 0)
+            {
+                missingNames++;
+            }
+
+            if (!appInfo.TryGetValue(appId, out SteamAppInfoEntry? entry))
             {
                 continue;
             }
 
-            missingNames++;
-            if (appInfo.TryGetValue(appId, out SteamAppInfoEntry? entry) && entry.Name.Length > 0)
+            string name = g.Name;
+            if (name.Length == 0 && entry.Name.Length > 0)
             {
-                merged[appId] = g with { Name = entry.Name };
+                name = entry.Name;
                 namedFromAppInfo++;
             }
+
+            // 🔴 中文名与头图路径对**已安装条目同样适用**：.acf 只有英文名、且完全不带头图信息，
+            // 所以这一步不能只在"缺名"时做（否则装了游戏的中文名永远出不来、封面只能靠猜 URL）。
+            merged[appId] = g with
+            {
+                Name = name,
+                NameZh = entry.ChineseName,
+                HeaderImage = entry.PreferredHeaderImage,
+            };
         }
 
         if (appInfoCount == 0)

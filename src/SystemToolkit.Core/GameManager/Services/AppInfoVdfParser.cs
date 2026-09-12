@@ -268,8 +268,7 @@ public static class AppInfoVdfParser
                 stream.Position = blobStart;
                 if (ReadExactly(stream, blob))
                 {
-                    Capture(blob, stringTable, out string name, out string type);
-                    result[appId] = new SteamAppInfoEntry { Name = name, Type = type };
+                    result[appId] = Capture(blob, stringTable);
                 }
             }
 
@@ -280,18 +279,20 @@ public static class AppInfoVdfParser
     }
 
     // =====================================================================================
-    // 单条目 blob → (名称, 类型)
+    // 单条目 blob → 一条记录
     // =====================================================================================
 
-    private static void Capture(
-        ReadOnlySpan<byte> blob,
-        IReadOnlyList<string>? stringTable,
-        out string name,
-        out string type)
+    /// <summary>
+    /// 解析单条目 blob。
+    /// <para>
+    /// 取四类字段（都取自 <c>common</c>，两种布局都兼容）：
+    /// <c>name</c> / <c>type</c> / <c>name_localized.{schinese,tchinese}</c> / <c>header_image.*</c>。
+    /// 后两类是 2026-09-13 实机反馈所需：游戏页显示英文名（本地明明有中文名）、部分封面取不到
+    /// （旧 CDN 域已 404，而 <c>header_image</c> 就写着当前有效的相对路径）。
+    /// </para>
+    /// </summary>
+    private static SteamAppInfoEntry Capture(ReadOnlySpan<byte> blob, IReadOnlyList<string>? stringTable)
     {
-        name = string.Empty;
-        type = string.Empty;
-
         var reader = new BlobReader(blob);
 
         // 真实文件的 blob 以 type=0 + key("appinfo") 包一层，字段在其内部。
@@ -314,25 +315,39 @@ public static class AppInfoVdfParser
         var capture = default(CaptureState);
 
         // 返回值有意忽略：即使中途判定「该条目不可信」，已经捕获到的字段仍然可用（少给数据优于不给数据）
-        Walk(ref reader, stringTable, level: 0, parentIsCommon: false, ref capture, depth: 0);
+        Walk(ref reader, stringTable, parentKey: string.Empty, grandParentKey: string.Empty, ref capture, depth: 0);
 
-        name = TextSanitizer.StripInvisible(capture.Name) ?? string.Empty;
-        type = capture.Type ?? string.Empty;
+        return new SteamAppInfoEntry
+        {
+            Name = TextSanitizer.StripInvisible(capture.Name) ?? string.Empty,
+            Type = capture.Type ?? string.Empty,
+            NameSchinese = TextSanitizer.StripInvisible(capture.NameSchinese) ?? string.Empty,
+            NameTchinese = TextSanitizer.StripInvisible(capture.NameTchinese) ?? string.Empty,
+            HeaderImageSchinese = capture.HeaderImageSchinese ?? string.Empty,
+            HeaderImageEnglish = capture.HeaderImageEnglish ?? string.Empty,
+            HeaderImageTchinese = capture.HeaderImageTchinese ?? string.Empty,
+        };
     }
 
-    /// <summary>捕获状态（名称优先取根级，其次取 <c>common</c> 内；都只取第一次命中）。</summary>
+    /// <summary>捕获状态（各字段只取第一次命中）。</summary>
     private struct CaptureState
     {
         public string? Name;
         public string? Type;
+        public string? NameSchinese;
+        public string? NameTchinese;
+        public string? HeaderImageSchinese;
+        public string? HeaderImageEnglish;
+        public string? HeaderImageTchinese;
     }
 
     /// <summary>
     /// 顺序遍历一个对象体（读到 type=8 结束）。
     /// <para>
-    /// <paramref name="level"/>：0 = <c>appinfo</c> 的直接字段层；1 = 某个子对象的字段层。
-    /// 只有「level 0」与「level 1 且父键为 <c>common</c>」才参与捕获——更深的层级仍需递归
-    /// （必须消费其字节才能定位下一个兄弟字段），但不取用。
+    /// <paramref name="parentKey"/> = **当前对象体的键**（根层为空串）、
+    /// <paramref name="grandParentKey"/> = 它的父键。用这两层键判断「这个字段该不该取」——
+    /// 取代了此前"按 level 编号猜层级"的写法：层级判断在 <c>name_localized.schinese</c> 这种
+    /// 「common 下的二级对象」面前会失效，而键路径不会。
     /// </para>
     /// <para>
     /// 🔴 返回值 = 「本次遍历是否正常走完」。<c>false</c> 表示**该条目已不可信**，调用方必须停止：
@@ -344,8 +359,8 @@ public static class AppInfoVdfParser
     private static bool Walk(
         ref BlobReader reader,
         IReadOnlyList<string>? stringTable,
-        int level,
-        bool parentIsCommon,
+        string parentKey,
+        string grandParentKey,
         ref CaptureState capture,
         int depth)
     {
@@ -353,8 +368,6 @@ public static class AppInfoVdfParser
         {
             return false;
         }
-
-        bool canCapture = level == 0 || parentIsCommon;
 
         while (true)
         {
@@ -369,13 +382,11 @@ public static class AppInfoVdfParser
             }
 
             string key = reader.ReadKey(stringTable);
-            bool isCommon = level == 0
-                && string.Equals(key, "common", StringComparison.OrdinalIgnoreCase);
 
             switch (type)
             {
                 case TypeObject:
-                    if (!Walk(ref reader, stringTable, level + 1, isCommon, ref capture, depth + 1))
+                    if (!Walk(ref reader, stringTable, key, parentKey, ref capture, depth + 1))
                     {
                         return false;
                     }
@@ -383,11 +394,11 @@ public static class AppInfoVdfParser
                     break;
 
                 case TypeString:
-                    ApplyCapture(ref capture, canCapture, key, reader.ReadCString());
+                    ApplyCapture(ref capture, parentKey, grandParentKey, key, reader.ReadCString());
                     break;
 
                 case TypeWideString:
-                    ApplyCapture(ref capture, canCapture, key, reader.ReadWideString());
+                    ApplyCapture(ref capture, parentKey, grandParentKey, key, reader.ReadWideString());
                     break;
 
                 case TypeInt32:
@@ -419,21 +430,67 @@ public static class AppInfoVdfParser
         }
     }
 
-    /// <summary>把「根级 / <c>common</c> 内」的 <c>name</c>、<c>type</c> 收进捕获状态（各只取第一次命中）。</summary>
-    private static void ApplyCapture(ref CaptureState capture, bool canCapture, string key, string value)
+    /// <summary>
+    /// 按**键路径**取用字段（各只取第一次命中）：
+    /// <list type="bullet">
+    /// <item>根层 或 <c>common</c> 内 → <c>name</c> / <c>type</c>（新客户端放根级，旧客户端放 common）</item>
+    /// <item><c>common.name_localized.{schinese,tchinese}</c> → 中文名</item>
+    /// <item><c>common.header_image.{schinese,english,tchinese}</c> → 头图**相对路径**（可能带 hash 子目录）</item>
+    /// </list>
+    /// </summary>
+    private static void ApplyCapture(
+        ref CaptureState capture,
+        string parentKey,
+        string grandParentKey,
+        string key,
+        string value)
     {
-        if (!canCapture)
+        bool inRoot = parentKey.Length == 0;
+        bool inCommon = parentKey.Equals("common", StringComparison.OrdinalIgnoreCase);
+        bool inNameLocalized = parentKey.Equals("name_localized", StringComparison.OrdinalIgnoreCase)
+            && grandParentKey.Equals("common", StringComparison.OrdinalIgnoreCase);
+        bool inHeaderImage = parentKey.Equals("header_image", StringComparison.OrdinalIgnoreCase)
+            && grandParentKey.Equals("common", StringComparison.OrdinalIgnoreCase);
+
+        if ((inRoot || inCommon) && capture.Name is null && key == "name")
         {
+            capture.Name = value;
             return;
         }
 
-        if (capture.Name is null && key == "name")
-        {
-            capture.Name = value;
-        }
-        else if (capture.Type is null && key == "type")
+        if ((inRoot || inCommon) && capture.Type is null && key == "type")
         {
             capture.Type = value;
+            return;
+        }
+
+        if (inNameLocalized && key == "schinese" && capture.NameSchinese is null)
+        {
+            capture.NameSchinese = value;
+            return;
+        }
+
+        if (inNameLocalized && key == "tchinese" && capture.NameTchinese is null)
+        {
+            capture.NameTchinese = value;
+            return;
+        }
+
+        if (inHeaderImage && key == "schinese" && capture.HeaderImageSchinese is null)
+        {
+            capture.HeaderImageSchinese = value;
+            return;
+        }
+
+        if (inHeaderImage && key == "english" && capture.HeaderImageEnglish is null)
+        {
+            capture.HeaderImageEnglish = value;
+            return;
+        }
+
+        if (inHeaderImage && key == "tchinese" && capture.HeaderImageTchinese is null)
+        {
+            capture.HeaderImageTchinese = value;
         }
     }
 

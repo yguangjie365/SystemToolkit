@@ -163,12 +163,32 @@ public sealed partial class SteamService
     private static readonly HttpClient CoverHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     /// <summary>
-    /// 本地无封面时从 Steam 官方 CDN 下载到应用缓存目录（用户实测指定：
-    /// https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg，公开 CDN、URL 固定）。
-    /// header.jpg（460×215 横版）优先匹配卡片比例；404 再试 library_600x900.jpg（竖版）。
-    /// 任何失败返回 null（静默，UI 显示占位）——封面缺失不应报错打扰用户。
+    /// 本地无封面时从 Steam 官方 CDN 下载到应用缓存目录。
+    /// <para>
+    /// 🔴 <b>2026-09-13 修正域与路径</b>：原先只用
+    /// <c>cdn.cloudflare.steamstatic.com/steam/apps/{id}/header.jpg</c> —— 该地址**已 404**
+    /// （实机反馈「有些游戏获取不到封面」）。实测可用的是
+    /// <c>shared.fastly.steamstatic.com/store_item_assets/steam/apps/{id}/…</c>，
+    /// 且新式资源的文件名**带 hash 子目录**（如 <c>{hash}/header.jpg</c>），
+    /// 而该相对路径就写在 <c>appinfo.vdf</c> 的 <c>common.header_image</c> 里 —— 故优先用它。
+    /// </para>
+    /// <para>
+    /// 候选顺序：appinfo 给的相对路径 → 新域固定 header.jpg → 新域竖版 → 旧域（保底，当前 404）。
+    /// header.jpg（460×215 横版）优先匹配卡片比例。任何失败返回 null（静默，UI 显示占位）。
+    /// </para>
     /// </summary>
-    public static async Task<string?> EnsureCoverFromCdnAsync(string cacheDir, uint appId, CancellationToken ct = default)
+    /// <param name="cacheDir">封面缓存目录。</param>
+    /// <param name="appId">AppId。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <param name="headerImageSuffix">
+    /// <c>appinfo.common.header_image</c> 给出的相对路径（可空）——形如 <c>header.jpg</c>
+    /// 或 <c>{hash}/header.jpg</c>。空/缺省时退化为固定候选。
+    /// </param>
+    public static async Task<string?> EnsureCoverFromCdnAsync(
+        string cacheDir,
+        uint appId,
+        CancellationToken ct = default,
+        string? headerImageSuffix = null)
     {
         if (appId == 0)
             return null;
@@ -179,11 +199,21 @@ public sealed partial class SteamService
                 return target;
 
             Directory.CreateDirectory(cacheDir);
-            string[] urls =
-            [
-                $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg",
-                $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/library_600x900.jpg",
-            ];
+            const string SharedBase = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/";
+            var urls = new List<string>(5);
+            if (!string.IsNullOrWhiteSpace(headerImageSuffix))
+            {
+                // 已带 hash 子目录的相对路径：原样拼接（不要另加 header.jpg）
+                urls.Add(SharedBase + appId.ToString(CultureInfo.InvariantCulture) + "/" + headerImageSuffix);
+            }
+
+            string id = appId.ToString(CultureInfo.InvariantCulture);
+            urls.Add($"{SharedBase}{id}/header.jpg");
+            urls.Add($"{SharedBase}{id}/library_600x900.jpg");
+            urls.Add($"https://shared.fastly.steamstatic.com/steam/apps/{id}/header.jpg");
+            // 旧域保底：截至 2026-09-13 实测 404，留着以防 Steam 回退，成本只有一次 404
+            urls.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{id}/header.jpg");
+
             foreach (string url in urls)
             {
                 try

@@ -52,7 +52,18 @@ public partial class GameCardVm : ObservableObject
     private GameManagerViewModel Owner { get; }
 
     public uint AppId => Model.AppId;
-    public string Name => Model.Name;
+
+    /// <summary>
+    /// 显示名：**优先中文名**（<c>appinfo.vdf</c> 的 <c>name_localized</c>），无中文名时用原名。
+    /// <para>
+    /// 🔴 <c>Model.Name</c> 恒为英文原名（<c>.acf</c> / <c>common.name</c> 都不带语言信息），
+    /// 所以「Steam 里显示中文、本软件显示英文」只能在这里修（2026-09-13 实机反馈）。
+    /// </para>
+    /// </summary>
+    public string Name => Model.NameZh.Length > 0 ? Model.NameZh : Model.Name;
+
+    /// <summary>英文原名（搜索时与 <see cref="Name"/> 一起参与匹配——用户可能按原名找）。</summary>
+    public string NameOriginal => Model.Name;
 
     /// <summary>封面路径（可后台 CDN 补下后刷新）。</summary>
     [ObservableProperty]
@@ -485,7 +496,10 @@ public partial class GameManagerViewModel : ObservableObject
         }
 
         string q = SearchQuery.Trim();
-        return q.Length == 0 || vm.Name.Contains(q, StringComparison.OrdinalIgnoreCase);
+        // 中文名与英文原名**都可命中**：显示用中文，但用户很可能按 Steam 商店里的英文名来找
+        return q.Length == 0
+            || vm.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || vm.NameOriginal.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
     // ================= B2 库存显示（2026-09-13） =================
@@ -794,7 +808,8 @@ public partial class GameManagerViewModel : ObservableObject
                         await gate.WaitAsync().ConfigureAwait(false);
                         try
                         {
-                            string? path = await SteamService.EnsureCoverFromCdnAsync(cacheDir, vm.AppId)
+                            string? path = await SteamService.EnsureCoverFromCdnAsync(
+                                    cacheDir, vm.AppId, default, vm.Model.HeaderImage)
                                 .ConfigureAwait(false);
                             if (path is not null)
                             {

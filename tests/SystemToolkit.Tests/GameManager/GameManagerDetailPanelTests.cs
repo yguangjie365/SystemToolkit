@@ -232,6 +232,32 @@ public class GameManagerDetailPanelTests
         });
     }
 
+    /// <summary>
+    /// 显示名优先中文名（中文名来自 appinfo 的 <c>name_localized</c>），
+    /// 且英文原名仍可被搜索命中（用户可能按商店里的英文名找）。
+    /// </summary>
+    [Fact]
+    public void Card_PrefersChineseName_ButKeepsEnglishForSearch()
+    {
+        RunOnSta(() =>
+        {
+            var vm = new GameManagerViewModel(new SteamService());
+            var card = new GameCardVm(
+                Game(2358720, name: "Black Myth: Wukong") with { NameZh = "黑神话：悟空" },
+                "c.png",
+                false,
+                vm);
+
+            Assert.Equal("黑神话：悟空", card.Name);
+            Assert.Equal("Black Myth: Wukong", card.NameOriginal);
+
+            // 无中文名的条目：显示名回退英文原名（不得显示空白）
+            var plain = new GameCardVm(Game(246420, name: "Kingdom Rush"), "c.png", false, vm);
+            Assert.Equal("Kingdom Rush", plain.Name);
+            Assert.Equal("Kingdom Rush", plain.NameOriginal);
+        });
+    }
+
     // ==================== 安装引导（批次 4 · B3） ====================
 
     /// <summary>

@@ -39,6 +39,62 @@ public class AppInfoVdfParserTests
     }
 
     [Fact]
+    public void Parse_V41_LocalizedNamesAndHeaderImages_AreCaptured()
+    {
+        // 真机形态（2026-09-13 从本机 appinfo.vdf 实测）：中文名在 common.name_localized.schinese，
+        // 头图在 common.header_image.<lang>，且新式头图带 hash 子目录。
+        // ⚠️ blob 与文件**必须用同一个 builder**：v41 的 key 是字符串表索引，
+        // 两个 builder 各持一张表 → 索引错位、字段全部读错（本用例首版就踩了这个）。
+        var builder = new AppInfoFileBuilder(AppInfoVdfParser.MagicV41);
+        byte[] blob = builder.Blob()
+            .Object("appinfo")
+            .Object("common")
+            .Str("name", "Black Myth: Wukong")
+            .Str("type", "Game")
+            .Object("name_localized")
+            .Str("english", "Black Myth: Wukong")
+            .Str("schinese", "黑神话：悟空")
+            .Str("tchinese", "黑神話：悟空")
+            .End()
+            .Object("header_image")
+            .Str("english", "header.jpg")
+            .Str("schinese", "523c28b76572f3ea7dd6decd94e0333c2502c26a/header_schinese.jpg")
+            .End()
+            .End()
+            .End()
+            .ToArray();
+
+        byte[] file = builder.Add(2358720, blob).Build();
+
+        SteamAppInfoEntry e = Parse(file)[2358720u];
+
+        Assert.Equal("Black Myth: Wukong", e.Name); // name 恒为英文原名
+        Assert.Equal("Game", e.Type);
+        Assert.Equal("黑神话：悟空", e.NameSchinese);
+        Assert.Equal("黑神話：悟空", e.NameTchinese);
+        Assert.Equal("黑神话：悟空", e.ChineseName);
+        // 头图优先简中（带 hash 子目录），英文那份也留着
+        Assert.Equal("523c28b76572f3ea7dd6decd94e0333c2502c26a/header_schinese.jpg", e.PreferredHeaderImage);
+        Assert.Equal("header.jpg", e.HeaderImageEnglish);
+    }
+
+    [Fact]
+    public void Parse_V41_WithoutLocalizedFields_ChineseNameAndHeaderAreEmpty()
+    {
+        // Kingdom Rush 实测就没有 name_localized / header_image（只有 name）——
+        // ChineseName 必须是空串而**不能回退成英文**，否则界面会把英文名当"中文名"用
+        byte[] file = new AppInfoFileBuilder(AppInfoVdfParser.MagicV41)
+            .AddGame(246420, "Kingdom Rush", "Game")
+            .Build();
+
+        SteamAppInfoEntry e = Parse(file)[246420u];
+
+        Assert.Equal("Kingdom Rush", e.Name);
+        Assert.Equal(string.Empty, e.ChineseName);
+        Assert.Equal(string.Empty, e.PreferredHeaderImage);
+    }
+
+    [Fact]
     public void Parse_V41_FlatRootLevelNameAndType_AlsoWorks()
     {
         // 新客户端把 name/type 直接放根级（不经 common）
