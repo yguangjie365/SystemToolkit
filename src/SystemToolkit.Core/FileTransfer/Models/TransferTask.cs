@@ -22,11 +22,22 @@ public enum TransferStatus
     /// <summary>传输中。</summary>
     Transferring,
 
-    /// <summary>已暂停（协议预留位，当前版本未实现恢复）。</summary>
+    /// <summary>已暂停（2026-09-13 批次 P1 落地：双向 PAUSE/RESUME）。</summary>
     Paused,
 
-    /// <summary>已完成（SHA-256 校验通过并落定）。</summary>
+    /// <summary>
+    /// 已完成（SHA-256 校验通过并落定）。
+    /// </summary>
     Completed,
+
+    /// <summary>
+    /// 已跳过（数据已收到，但按同名冲突策略**未写入**目标目录；2026-09-13 批次 P1）。
+    /// <para>
+    /// 🔴 与 <see cref="Completed"/> 严格区分：跳过时目标目录里**没有**新文件，
+    /// 若报「已完成」就是状态欺骗。它也不是失败——传输本身没出错。
+    /// </para>
+    /// </summary>
+    Skipped,
 
     /// <summary>失败（含校验不通过、对端拒绝、网络错误）。</summary>
     Failed,
@@ -81,6 +92,18 @@ public sealed class TransferTask
 
     /// <summary>错误信息（失败时）。</summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// 机器可读原因码（见 <see cref="TransferReasonCodes"/>；失败/拒绝/跳过时填入，成功为空）。
+    /// UI 断言与分支应认它，不要匹配 <see cref="ErrorMessage"/> 的措辞。
+    /// </summary>
+    public string? ReasonCode { get; set; }
+
+    /// <summary>本机用户发起暂停的时刻（仅**本机**暂停时记录；对端暂停不设，因为它决定何时恢复）。</summary>
+    public DateTimeOffset? PausedAt { get; set; }
+
+    /// <summary>是否因**对端**要求而挂起（用于界面区分"我暂停的"与"对面暂停的"）。</summary>
+    public bool PausedByPeer { get; set; }
 
     /// <summary>传输进度百分比（0-100）。</summary>
     public double Progress => FileSize > 0 ? Math.Round(TransferredBytes * 100.0 / FileSize, 1) : 0;

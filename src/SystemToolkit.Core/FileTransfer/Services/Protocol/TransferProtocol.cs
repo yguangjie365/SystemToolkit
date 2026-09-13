@@ -42,6 +42,16 @@ public sealed class TransferMessage
     public string? Error { get; init; }
 
     /// <summary>
+    /// 机器可读原因码（见 <see cref="Models.TransferReasonCodes"/>，2026-09-13 批次 P1）。
+    /// <para>
+    /// 与 <see cref="Error"/> 的分工：<see cref="Error"/> 给人看（措辞可改），本字段给代码看
+    /// （UI 分支 / 历史筛选 / 测试断言）。**两者必须同发**——只给码会让用户看不懂，
+    /// 只给文案会让下游只能做字符串匹配。
+    /// </para>
+    /// </summary>
+    public string? ReasonCode { get; init; }
+
+    /// <summary>
     /// 文件最后修改时间（Unix 毫秒；0 = 未知）。发送方在握手时携带，
     /// 接收方在落定后还原——手机照片等原始时间属性跨设备保留（2026-09-06 协议扩展）。
     /// </summary>
@@ -78,6 +88,18 @@ public enum TransferMessageType
 
     /// <summary>取消传输。</summary>
     Cancel,
+
+    /// <summary>
+    /// 暂停传输（协议 §4.2，**双向**，2026-09-13 批次 P1 落地）。
+    /// <para>
+    /// 语义：「**我这边**暂停了，你不要再发数据」——发送方收到即挂起分片循环，接收方收到即停收。
+    /// 被通知方的任务状态同步置「已暂停」，避免界面显示"传输中"而实际零字节流动（状态欺骗）。
+    /// </para>
+    /// </summary>
+    Pause,
+
+    /// <summary>恢复传输（协议 §4.2，双向）。收到即解除挂起，双方状态回到「传输中」。</summary>
+    Resume,
 
     /// <summary>错误。</summary>
     Error,

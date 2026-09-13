@@ -627,6 +627,7 @@ a {
 
 .upload-task__status.is-done { color: var(--success); }
 .upload-task__status.is-fail { color: var(--danger); }
+.upload-task__status.is-skipped { color: var(--warning); }
 .upload-task__status.is-queued { color: var(--warning); }
 
 /* ============ 待续传区块（2026-09-13） ============

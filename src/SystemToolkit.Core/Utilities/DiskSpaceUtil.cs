@@ -64,6 +64,33 @@ public static class DiskSpaceUtil
     }
 
     /// <summary>
+    /// 取目标路径所在卷的剩余空间（字节）；无法判定时返回 null。
+    /// <para>
+    /// 与 <see cref="Check"/> 的分工：<c>Check</c> 回答"够不够"，本方法回答"到底还剩多少"——
+    /// 确认门弹窗要如实显示数字（"剩余 62.4 GB"），只给"充足/不足"不足以让人判断。
+    /// 同样是**无法判定即 null**，不得用 0 冒充"没有空间"。
+    /// </para>
+    /// </summary>
+    public static long? TryGetAvailableFreeBytes(string path)
+    {
+        try
+        {
+            string pathRoot = Path.GetPathRoot(Path.GetFullPath(path))!;
+            if (string.IsNullOrEmpty(pathRoot))
+            {
+                return null;
+            }
+
+            var driveInfo = new DriveInfo(pathRoot);
+            return driveInfo.IsReady ? driveInfo.AvailableFreeSpace : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// 兼容封装：仅在明确判定不足时返回 false。
     /// <see cref="DiskSpaceCheck.Unknown"/> 时返回 true（不阻断备份/恢复），
     /// 需要区分“无法确认”的调用方请改用 <see cref="Check"/>。

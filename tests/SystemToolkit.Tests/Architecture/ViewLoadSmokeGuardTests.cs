@@ -238,6 +238,74 @@ public class ViewLoadSmokeGuardTests
     }
 
     /// <summary>
+    /// 接收确认对话框冒烟（2026-09-13 批次 P1 ⑦）：把「同名 + 策略=询问」这个最复杂的形态
+    /// 真的 Show 出来再关掉。
+    /// <para>
+    /// 为什么要挂窗 Show：新窗口的资源引用（DynamicResource 键名、模板内命名元素）只有在
+    /// 真实布局期才会求值——只构造不显示会漏掉整类崩溃（本仓 MUSIC-7 二炸的教训）。
+    /// </para>
+    /// <para>
+    /// 顺带钉住一条行为契约：**关窗即拒绝**。<see cref="ReceiveConfirmWindow.Decision"/> 的默认值
+    /// 若是「接受」，一次 Esc / 误关窗就等于替用户放行了一个网络文件。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReceiveConfirmWindow_LoadsWithConflictAsk_WithoutException()
+    {
+        Exception? captured = null;
+        string stage = "init";
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication().Resources.MergedDictionaries.Add(LoadThemeWithFontsStubbed());
+
+                stage = "construct window";
+                var request = new TransferRequestEventArgs("task-1", "报告.pdf", 48L * 1024 * 1024, "192.168.1.23:18889")
+                {
+                    ReceiveDirectory = @"D:\Downloads\Received",
+                    AvailableFreeBytes = 62L * 1024 * 1024 * 1024,
+                    DiskSpace = SystemToolkit.Core.Utilities.DiskSpaceCheck.Enough,
+                    TargetExists = true,
+                    ConflictAction = SystemToolkit.Core.FileTransfer.Models.ConflictResolution.Renamed,
+                    ConflictPolicy = SystemToolkit.Core.FileTransfer.Models.TransferConflictPolicy.Ask,
+                    PeerDeviceName = "DESKTOP-A1B2",
+                };
+                var window = new ReceiveConfirmWindow(request, 30)
+                {
+                    ShowInTaskbar = false,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = -4000,
+                    Top = -4000,
+                };
+
+                stage = "show + close";
+                window.Show();
+                window.Close();
+
+                stage = "assert default decision";
+                Assert.False(window.Decision.Accept, "未点任何按钮时（含关窗）必须收场为「拒绝」");
+
+                stage = "done";
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        })
+        {
+            IsBackground = true,
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(30));
+
+        Assert.True(captured is null,
+            $"接收确认对话框加载抛异常（阶段：{stage}）：\n{captured}");
+    }
+
+    /// <summary>
     /// 网络管理视图全页加载冒烟（2026-09-06 V0.4 交付随附；09-12 NET-6 扩 5 Tab、NET-7 扩 6 Tab）：
     /// 6 Tab 布局 + Run 绑定 + 组合根 VM 构造。与驱动用例同类串行执行——Application 全 AppDomain 单实例，
     /// 必须经 EnsureApplication 复用（ Driver 用例先行创建）。

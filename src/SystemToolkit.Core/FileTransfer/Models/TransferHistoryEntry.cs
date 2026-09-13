@@ -42,6 +42,12 @@ public sealed class TransferHistoryEntry
     /// <summary>失败原因（成功时为空）。</summary>
     public string? ErrorMessage { get; init; }
 
+    /// <summary>
+    /// 机器可读原因码（见 <see cref="TransferReasonCodes"/>；成功时为空）。
+    /// 历史是跨会话的，措辞会随版本变，所以判据必须落在码上。
+    /// </summary>
+    public string? ReasonCode { get; init; }
+
     /// <summary>方向的中文本地化文本（与 TransferTask 的速度/进度文本同理，供界面直接绑定）。</summary>
     public string DirectionText => Direction == TransferDirection.Send ? "发送" : "接收";
 
@@ -51,8 +57,17 @@ public sealed class TransferHistoryEntry
         TransferStatus.Completed => "完成",
         TransferStatus.Failed => "失败",
         TransferStatus.Cancelled => "已取消",
+        TransferStatus.Skipped => "已跳过",
         _ => Status.ToString(),
     };
+
+    /// <summary>
+    /// 原因的中文说明（失败/跳过时非空；成功时为空字符串）。
+    /// UI 直接绑这一列即可，不必自己拼 <see cref="ErrorMessage"/> 与 <see cref="ReasonCode"/>。
+    /// </summary>
+    public string ReasonText => string.IsNullOrEmpty(ReasonCode)
+        ? ErrorMessage ?? string.Empty
+        : $"{TransferReasonCodes.Describe(ReasonCode)}（{ReasonCode}）";
 
     /// <summary>格式化的文件大小（界面直接绑定，免得再写一个转换器）。</summary>
     public string SizeText => SystemToolkit.Core.Utilities.FormatUtil.FormatSize(FileSize);

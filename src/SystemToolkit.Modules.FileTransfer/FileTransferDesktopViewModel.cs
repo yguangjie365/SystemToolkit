@@ -52,6 +52,13 @@ public sealed class TransferTaskRowVm : ObservableObject
         OnPropertyChanged(nameof(SpeedText));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(DirectionText));
+        OnPropertyChanged(nameof(ReasonText));
+        // 状态派生的一切都要重算：暂停/恢复会让按钮文案与可用性同时翻转，
+        // 漏一条就会出现"状态已变成已暂停，按钮还写着暂停"
+        OnPropertyChanged(nameof(IsActive));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(PauseResumeText));
     }
 
     public string FileName => Model.FileName;
@@ -69,16 +76,41 @@ public sealed class TransferTaskRowVm : ObservableObject
         TransferStatus.Pending => "排队中",
         TransferStatus.Negotiating => "等待确认",
         TransferStatus.Transferring => "传输中",
-        TransferStatus.Paused => "已暂停",
+        TransferStatus.Paused => Model.PausedByPeer ? "已暂停（对端）" : "已暂停",
         TransferStatus.Completed => "已完成",
+        TransferStatus.Skipped => "已跳过",
         TransferStatus.Failed => "失败",
         TransferStatus.Cancelled => "已取消",
         _ => Model.Status.ToString(),
     };
 
+    /// <summary>
+    /// 原因文案：优先机器可读原因码（稳定判据），没有码时才退回散文。
+    /// 历史与任务行共用这一条规则，避免两处措辞各写一套。
+    /// </summary>
+    public string ReasonText => string.IsNullOrEmpty(Model.ReasonCode)
+        ? Model.ErrorMessage ?? string.Empty
+        : TransferReasonCodes.Describe(Model.ReasonCode);
+
     public string DirectionText => Model.Direction == TransferDirection.Send ? "↑ 发送" : "↓ 接收";
 
-    public bool IsActive => Model.Status is TransferStatus.Pending or TransferStatus.Negotiating or TransferStatus.Transferring;
+    /// <summary>
+    /// 是否仍占着资源（进度/取消/暂停都据此显示）。
+    /// 🔴 必须含 <see cref="TransferStatus.Paused"/>：暂停中的任务照样占着接收并发槽与 .part，
+    /// 若把它判成"非活跃"，用户就会看到任务行突然失去取消键——而它还在后台占着资源。
+    /// </summary>
+    public bool IsActive => Model.Status is TransferStatus.Pending or TransferStatus.Negotiating
+        or TransferStatus.Transferring or TransferStatus.Paused;
+
+    /// <summary>是否可暂停（只有还在跑的任务能暂停）。</summary>
+    public bool CanPause => Model.Status is TransferStatus.Pending or TransferStatus.Negotiating
+        or TransferStatus.Transferring;
+
+    /// <summary>是否可恢复。</summary>
+    public bool CanResume => Model.Status == TransferStatus.Paused;
+
+    /// <summary>暂停/恢复按钮的文案（同一按钮位轮流承担两个动作，不额外占列宽）。</summary>
+    public string PauseResumeText => CanResume ? "继续" : "暂停";
 }
 
 /// <summary>
@@ -158,8 +190,17 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
     }
 
-    /// <summary>确认对话框回调（由组合根转接）。</summary>
+    /// <summary>确认对话框回调（由组合根转接；用于"清空历史"这类纯确认）。</summary>
     public Func<string, string, bool>? ConfirmRequest { get; set; }
+
+    /// <summary>
+    /// 接收确认回调（View 注入；返回用户的决定，含同名处理方式）。
+    /// <para>
+    /// 与 <see cref="ConfirmRequest"/> 分开的原因：接收确认要展示"存到哪/盘剩多少/同名会怎样"
+    /// 并允许逐次选择处理方式，两个 bool 表达不了（用 bool 就得让 UI 去改全局策略 = 越权）。
+    /// </para>
+    /// </summary>
+    public Func<TransferRequestEventArgs, TransferDecision>? ConfirmTransferRequest { get; set; }
 
     /// <summary>文件选择对话框回调（View 注入；返回 null 表示用户取消）。</summary>
     public Func<IReadOnlyList<string>?>? PickFiles { get; set; }
@@ -182,6 +223,46 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _requireReceiveConfirmation = true;
+
+    /// <summary>
+    /// 同名文件冲突策略（协议 §4.4；**两条接收通道共用**——电脑互传与手机上传都按它落定）。
+    /// </summary>
+    [ObservableProperty]
+    private TransferConflictPolicy _conflictPolicy = TransferConflictPolicy.Rename;
+
+    /// <summary>下拉选项（含中文标签；直接绑 enum 会显示英文枚举名）。</summary>
+    public IReadOnlyList<ConflictPolicyOption> ConflictPolicyOptions { get; } =
+    [
+        new(TransferConflictPolicy.Rename, "自动改名（推荐）"),
+        new(TransferConflictPolicy.Ask, "每次询问"),
+        new(TransferConflictPolicy.Skip, "跳过不接收"),
+        new(TransferConflictPolicy.Overwrite, "覆盖原文件（危险）"),
+    ];
+
+    /// <summary>策略变更即热切换（照 <c>RequireKnownPeer</c> 的既有范式）；未启动服务时只改设置。</summary>
+    partial void OnConflictPolicyChanged(TransferConflictPolicy value)
+    {
+        if (IsTransferRunning)
+        {
+            _transfer.SetConflictPolicy(value);
+        }
+        _log($"[互传] 同名冲突策略：{TransferConflictResolver.Describe(value)}");
+    }
+
+    /// <summary>
+    /// 暂停超时（分钟；0 = 不限）。默认 30。
+    /// <para>
+    /// 为什么必须有上限：暂停是单方面意图，对端无法区分「对面在暂停」与「对面挂了」——
+    /// 没有上限，一次忘掉的暂停会让对端永久挂着、本机接收并发槽也一直被占。
+    /// 目前只从模块配置文件读（界面未加输入框），改它需要编辑
+    /// <c>%LOCALAPPDATA%\SystemToolkit\net\filetransfer.json</c> 的 <c>PauseTimeoutMinutes</c>。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private int _pauseTimeoutMinutes = 30;
+
+    /// <summary>确认门等待时长（秒）。**单一来源**：既传给传输服务，也用于对话框上的倒计时提示。</summary>
+    public int ReceiveConfirmTimeoutSeconds { get; } = 30;
 
     public string TransferPortText => _transferPort > 0 ? _transferPort.ToString() : "—";
 
@@ -241,6 +322,12 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 ReceiveDirectory = ReceiveDirectory,
                 RequireKnownPeer = RequireKnownPeer,
                 RequireReceiveConfirmation = RequireReceiveConfirmation,
+                // 同名策略与暂停上限必须随启动一起传：漏传会让界面上的选择"看起来生效了"
+                // 而实际仍走默认值（2026-09-13 用例先红抓住过同类缺陷）
+                ConflictPolicy = ConflictPolicy,
+                PauseTimeoutMinutes = PauseTimeoutMinutes,
+                // 与确认对话框显示给用户的秒数同源：两处各写一个 30，界面承诺的时间就会是假的
+                ReceiveConfirmTimeoutSeconds = ReceiveConfirmTimeoutSeconds,
             };
             // 审查 🟠-3 采纳（2026-09-09）：两步启动分别标注阶段——部分失败时用户能看出
             // 是传输服务还是设备发现服务没起来（原实现只有一条笼统异常）
@@ -409,6 +496,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                     ReceiveDirectory = config.ReceiveDirectory ?? "";
                     RequireKnownPeer = config.RequireKnownPeer;
                     RequireReceiveConfirmation = config.RequireReceiveConfirmation;
+                    ConflictPolicy = config.ConflictPolicy;
+                    PauseTimeoutMinutes = config.PauseTimeoutMinutes > 0 ? config.PauseTimeoutMinutes : 30;
                     KnownPeers.Clear();
                     foreach (KnownPeerEntry peer in config.KnownPeers)
                     {
@@ -433,6 +522,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 ReceiveDirectory = ReceiveDirectory,
                 RequireKnownPeer = RequireKnownPeer,
                 RequireReceiveConfirmation = RequireReceiveConfirmation,
+                ConflictPolicy = ConflictPolicy,
+                PauseTimeoutMinutes = PauseTimeoutMinutes,
                 KnownPeers = KnownPeers.Select(p => new KnownPeerEntry(p.Name, p.Ip, p.Port)).ToList(),
             };
             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
@@ -640,11 +731,17 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
 
             string direction = task.Direction == TransferDirection.Send ? "发送" : "接收";
+            // 四态各自措辞：已跳过既不是"完成"（目标目录里没有新文件）也不是"失败"（过程没出错），
+            // 混进任何一边都是状态欺骗
             _log(task.Status switch
             {
                 TransferStatus.Completed => $"[互传] ✅ {direction}完成：{task.FileName}",
-                TransferStatus.Cancelled => $"[互传] 已取消：{task.FileName}",
-                _ => $"[互传] ❌ {direction}失败：{task.FileName}（{task.ErrorMessage}）",
+                TransferStatus.Skipped => $"[互传] ⏭ {direction}已跳过：{task.FileName}（同名文件已存在，未写入）",
+                TransferStatus.Cancelled => $"[互传] 已取消：{task.FileName}"
+                    + (string.IsNullOrEmpty(task.ReasonCode) ? string.Empty : $"（{TransferReasonCodes.Describe(task.ReasonCode)}）"),
+                _ => $"[互传] ❌ {direction}失败：{task.FileName}"
+                    + $"（{task.ErrorMessage}"
+                    + (string.IsNullOrEmpty(task.ReasonCode) ? string.Empty : $" / {task.ReasonCode}") + "）",
             });
 
             _history.Append(new TransferHistoryEntry
@@ -658,6 +755,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 StartedAt = task.StartedAt,
                 FinishedAt = task.FinishedAt ?? DateTimeOffset.UtcNow,
                 TransferredBytes = task.TransferredBytes,
+                ErrorMessage = task.ErrorMessage,
+                ReasonCode = task.ReasonCode,
             });
             ReloadHistory();
         });
@@ -720,6 +819,52 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
     }
 
+    // ── 暂停 / 恢复（协议 §4.2，双向） ──
+
+    /// <summary>
+    /// 暂停或恢复任务（一个按钮位轮流承担：任务在跑就是"暂停"，已暂停就是"继续"）。
+    /// <para>
+    /// 受理结果**必须回话**：服务端对不可暂停的任务返回 false（状态不符/任务不存在），
+    /// 用户点了没反应时至少日志里有依据，不静默。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task TogglePauseAsync(TransferTaskRowVm? row)
+    {
+        TransferTaskRowVm? target = row ?? SelectedTask;
+        if (target is null)
+        {
+            _log("[互传] ⚠️ 请先选择要暂停/恢复的任务");
+            return;
+        }
+
+        bool resume = target.CanResume;
+        try
+        {
+            bool handled = resume
+                ? await _transfer.ResumeTaskAsync(target.Model.Id).ConfigureAwait(true)
+                : await _transfer.PauseTaskAsync(target.Model.Id).ConfigureAwait(true);
+            if (!handled)
+            {
+                _log($"[互传] ⚠️ {(resume ? "恢复" : "暂停")}未被受理：任务当前状态为 {target.StatusText}");
+            }
+            else
+            {
+                _log($"[互传] {(resume ? "已恢复" : "已暂停")}：{target.FileName}");
+                target.Refresh();
+            }
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            _log("[互传] ⚠ 操作已取消或超时。");
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ❌ {(resume ? "恢复" : "暂停")}任务失败：{ex.Message}");
+            _logger.Error($"{(resume ? "恢复" : "暂停")}传输任务失败（{target.Model.Id}）", ex);
+        }
+    }
+
     // ── 接收确认门 ──
 
     private void OnTransferRequested(object? sender, TransferRequestEventArgs e)
@@ -727,13 +872,25 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         // 事件来自 WatsonTcp 回调线程：确认弹窗必须在 UI 线程
         RunOnUi(() =>
         {
-            bool accept = ConfirmRequest?.Invoke(
-                "接收文件请求",
-                $"{e.PeerEndpoint} 想向你发送文件：\n\n「{e.FileName}」（{e.FileSize:N0} 字节）\n\n接受吗？"
-                + "\n\n（不做任何响应则自动超时拒绝）") == true;
+            // 首选富信息对话框（能看到存到哪、盘剩多少、同名会怎样）；View 未注入时退回简单确认，
+            // 保证"没有对话框也不能默默拒绝"——退回路径同样给出决定而非静默。
+            TransferDecision decision;
+            if (ConfirmTransferRequest is not null)
+            {
+                decision = ConfirmTransferRequest(e);
+            }
+            else
+            {
+                bool accept = ConfirmRequest?.Invoke(
+                    "接收文件请求",
+                    $"{e.PeerEndpoint} 想向你发送文件：\n\n「{e.FileName}」（{e.FileSize:N0} 字节）\n\n接受吗？"
+                    + "\n\n（不做任何响应则自动超时拒绝）") == true;
+                decision = accept ? TransferDecision.AcceptWith(TransferConflictPolicy.Rename) : TransferDecision.Reject;
+            }
+
             // 审查 🟠-2 采纳（2026-09-09）：fire-and-forget 的响应失败原本完全无痕——
             // 断网时用户点了「接受」但对面毫无反应，排查无从下手；补日志落地
-            _ = _transfer.RespondTransferAsync(e.TaskId, accept)
+            _ = _transfer.RespondTransferAsync(e.TaskId, decision)
                 .ContinueWith(t =>
                 {
                     if (t.IsFaulted)
@@ -779,8 +936,17 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
         public bool RequireReceiveConfirmation { get; set; } = true;
 
+        /// <summary>同名冲突策略（2026-09-13 批次 P1；缺省时按 Rename）。</summary>
+        public TransferConflictPolicy ConflictPolicy { get; set; } = TransferConflictPolicy.Rename;
+
+        /// <summary>暂停超时（分钟；0 或负 = 不限）。</summary>
+        public int PauseTimeoutMinutes { get; set; } = 30;
+
         public List<KnownPeerEntry> KnownPeers { get; set; } = new();
     }
 
     private sealed record KnownPeerEntry(string Name, string Ip, int Port);
+
+    /// <summary>同名冲突策略的下拉项（值 + 中文标签）。</summary>
+    public sealed record ConflictPolicyOption(TransferConflictPolicy Value, string Text);
 }

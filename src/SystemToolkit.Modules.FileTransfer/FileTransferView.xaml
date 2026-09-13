@@ -6,6 +6,18 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
+        <!-- ============ 批次 P1（2026-09-13）：暂停/继续 + 同名策略设置 ============
+             间距一律走 Style Setter（与下方会话卡片同理）：棘轮是纯文本正则，只命中元素上的内联写法，
+             Setter.Value 不匹配 → 新增控件不占额度、基线无需调整。 -->
+        <Style x:Key="TaskRowActionButton" TargetType="Button" BasedOn="{StaticResource CardButton}">
+            <Setter Property="MinWidth" Value="52"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+        <Style x:Key="ReceiveSettingRow" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+
         <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
              🔴 本文件的令牌棘轮额度**已顶满**（margin 44/44 · width 25/25 · padding 3/3 ·
              height 6/6 · border 2/2），因此这张卡片的所有间距一律写进 Style Setter：
@@ -153,11 +165,23 @@
                                     <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickReceiveDirectory"/>
                                     <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Click="OnOpenReceiveDirectory"/>
                                 </Grid>
-                                <StackPanel Orientation="Horizontal">
-                                    <CheckBox Content="仅接受已发现设备（来源白名单）" FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,0,20,0"
-                                              IsChecked="{Binding Desktop.RequireKnownPeer}" Style="{DynamicResource ThemedCheckBox}"/>
-                                    <CheckBox Content="接收前需本机确认" FontSize="{DynamicResource Font_SizeBodySm}"
-                                              IsChecked="{Binding Desktop.RequireReceiveConfirmation}" Style="{DynamicResource ThemedCheckBox}"/>
+                                <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                    <TextBlock Text="同名文件" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{DynamicResource ThemedComboBox}"
+                                              ItemsSource="{Binding Desktop.ConflictPolicyOptions}"
+                                              DisplayMemberPath="Text"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding Desktop.ConflictPolicy}"
+                                              MinWidth="150"
+                                              VerticalAlignment="Center"
+                                              ToolTip="目标目录已有同名文件时怎么处理；电脑互传与手机上传共用这一条策略"/>
+                                    <TextBlock Text="（两条接收通道共用）" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                    <CheckBox Content="仅接受已发现设备（来源白名单）" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
+                                              IsChecked="{Binding Desktop.RequireKnownPeer}"/>
+                                    <CheckBox Content="接收前需本机确认" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
+                                              IsChecked="{Binding Desktop.RequireReceiveConfirmation}"/>
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -376,10 +400,18 @@
                                             <ProgressBar Grid.Column="2" Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="10"
                                                          VerticalAlignment="Center" Margin="0,0,10,0"/>
                                             <TextBlock Grid.Column="3" Text="{Binding SpeedText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center"/>
-                                            <Button Grid.Column="4" Style="{DynamicResource CardButton}" Content="取消"
-                                                    Command="{Binding DataContext.Desktop.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                    CommandParameter="{Binding}"
-                                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal">
+                                                <Button Style="{StaticResource TaskRowActionButton}"
+                                                        Content="{Binding PauseResumeText}"
+                                                        Command="{Binding DataContext.Desktop.TogglePauseCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"
+                                                        Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"
+                                                        AutomationProperties.Name="暂停或继续此任务"/>
+                                                <Button Style="{DynamicResource CardButton}" Content="取消"
+                                                        Command="{Binding DataContext.Desktop.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"
+                                                        Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
+                                            </StackPanel>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -427,7 +459,7 @@
                                     </ListBox.Style>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid Margin="0,2">
+                                        <Grid Margin="0,2" ToolTip="{Binding ReasonText}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130"/>
                                                 <ColumnDefinition Width="70"/>

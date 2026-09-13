@@ -1,4 +1,5 @@
 using SystemToolkit.Core.FileTransfer.Models;
+using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Core.FileTransfer.Services;
 
@@ -18,7 +19,10 @@ public interface IFileTransferService : IAsyncDisposable
 
     /// <summary>
     /// 收到需要本机确认的传输请求时触发（仅当 <see cref="TransferSettings.RequireReceiveConfirmation"/>
-    /// 开启）。UI 必须响应——调用 <see cref="RespondTransferAsync"/>；超时未响应按拒绝处理。
+    /// 开启）。UI 必须响应——调用
+    /// <see cref="RespondTransferAsync(string, bool)"/> 或
+    /// <see cref="RespondTransferAsync(string, TransferDecision)"/>（带同名处理选择时用后者）；
+    /// 超时未响应按拒绝处理。
     /// </summary>
     event EventHandler<TransferRequestEventArgs>? TransferRequested;
 
@@ -27,6 +31,37 @@ public interface IFileTransferService : IAsyncDisposable
     /// 任务不存在或已超时/已处理时为安全空操作（记日志）。
     /// </summary>
     Task RespondTransferAsync(string taskId, bool accept);
+
+    /// <summary>
+    /// 回复接收确认（**带冲突处理选择**，2026-09-13 批次 P1）。
+    /// <para>
+    /// 当策略为「询问」时，弹窗必须让用户逐次选择处理方式，选择结果经此回复；
+    /// <see cref="TransferDecision.Conflict"/> 对**本次传输**生效，不改变全局策略设置。
+    /// </para>
+    /// </summary>
+    Task RespondTransferAsync(string taskId, TransferDecision decision);
+
+    /// <summary>
+    /// 运行时切换同名冲突策略（协议 §4.4；与 <see cref="SetRequireKnownPeer"/> 同款热切换）。
+    /// 仅影响之后到达的传输，进行中的落定按各自握手时解析的结果执行。
+    /// </summary>
+    void SetConflictPolicy(TransferConflictPolicy policy);
+
+    /// <summary>
+    /// 暂停任务（协议 §4.2，**双向**）。
+    /// <para>
+    /// 发送任务 → 挂起分片循环并通知对端；接收任务 → 通知对端停止发送并挂起本地状态。
+    /// 返回是否受理（任务不存在/非活跃/已终态一律 false 并记日志，**不静默**）。
+    /// </para>
+    /// <para>
+    /// 本机暂停超过 <see cref="TransferSettings.PauseTimeoutMinutes"/> 会自动取消（自动取消时
+    /// 原因码为 <see cref="TransferReasonCodes.PauseTimeout"/>）。
+    /// </para>
+    /// </summary>
+    Task<bool> PauseTaskAsync(string taskId);
+
+    /// <summary>恢复被暂停的任务（本机暂停与对端暂停都能恢复；返回是否受理）。</summary>
+    Task<bool> ResumeTaskAsync(string taskId);
 
     /// <summary>
     /// 启动传输服务端（监听 TCP 连接）。
@@ -72,5 +107,52 @@ public interface IFileTransferService : IAsyncDisposable
     void SetRequireKnownPeer(bool require);
 }
 
-/// <summary>接收确认请求事件参数（接收端 UI 收到后必须调用 <see cref="IFileTransferService.RespondTransferAsync"/>）。</summary>
-public sealed record TransferRequestEventArgs(string TaskId, string FileName, long FileSize, string PeerEndpoint);
+/// <summary>
+/// 接收确认请求事件参数（接收端 UI 收到后必须调用 <see cref="IFileTransferService.RespondTransferAsync(string, bool)"/>）。
+/// <para>
+/// 位置参数保持最小集（既有调用方兼容）；**确认门弹窗需要的信息**以 init 属性补充——
+/// 用户在 30 秒内要判断"接不接"，只给 IP 与文件名是不够的（协议 §4.2 TRANSFER_REQUEST 载荷）。
+/// </para>
+/// </summary>
+public sealed record TransferRequestEventArgs(
+    string TaskId, string FileName, long FileSize, string PeerEndpoint)
+{
+    /// <summary>接收目录（绝对路径）。</summary>
+    public string ReceiveDirectory { get; init; } = string.Empty;
+
+    /// <summary>接收目录所在卷的剩余空间（字节；null = 无法判定，例如 UNC 或卷未就绪）。</summary>
+    public long? AvailableFreeBytes { get; init; }
+
+    /// <summary>接收前磁盘预检结果（已含 <c>DiskSpaceUtil</c> 的安全余量判定）。</summary>
+    public DiskSpaceCheck DiskSpace { get; init; } = DiskSpaceCheck.Unknown;
+
+    /// <summary>目标目录是否已存在同名文件。</summary>
+    public bool TargetExists { get; init; }
+
+    /// <summary>按当前策略这一份**将会发生什么**（如实告知，不在落定时才反悔）。</summary>
+    public ConflictResolution ConflictAction { get; init; } = ConflictResolution.Fresh;
+
+    /// <summary>当前生效的冲突策略；为 <see cref="TransferConflictPolicy.Ask"/> 时弹窗需让用户选择。</summary>
+    public TransferConflictPolicy ConflictPolicy { get; init; } = TransferConflictPolicy.Rename;
+
+    /// <summary>发送方设备名（取自设备发现在线列表；查不到或对端不在列表时为空）。</summary>
+    public string PeerDeviceName { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// 接收确认的回复内容（2026-09-13 批次 P1）。
+/// <para>
+/// 为什么不是两个 bool：策略=「询问」时用户的选择有三个（改名/覆盖/跳过），而"接受/拒绝"只有两个；
+/// 用 bool 表达就得让 UI 侧去改全局策略——那是把"本次选择"写成"永久设置"，属越权。
+/// </para>
+/// </summary>
+/// <param name="Accept">是否接收。</param>
+/// <param name="Conflict">本次的同名处理方式（仅在 <paramref name="Accept"/> 为 true 时有意义）。</param>
+public sealed record TransferDecision(bool Accept, TransferConflictPolicy Conflict = TransferConflictPolicy.Rename)
+{
+    /// <summary>拒绝接收。</summary>
+    public static TransferDecision Reject { get; } = new(false);
+
+    /// <summary>接受并按指定方式处理同名。</summary>
+    public static TransferDecision AcceptWith(TransferConflictPolicy conflict) => new(true, conflict);
+}

@@ -1,0 +1,123 @@
+<Window x:Class="SystemToolkit.Modules.FileTransfer.ReceiveConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="接收文件请求"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{DynamicResource Brush_Background}"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
+    <!--
+      接收确认对话框（2026-09-13 批次 P1 ⑦）。
+
+      🔴 为什么换成真窗口而不是 MessageBox：用户在 30 秒内要判断"接不接、会不会覆盖东西"，
+      只给"IP + 文件名 + 字节数"是让人盲签。此窗口把**保存位置、目标盘剩余空间、
+      同名状态与即将执行的动作**摆在一起，并在策略为「询问」时让用户逐次选择处理方式。
+
+      令牌：FontSize / CornerRadius 一律走 DynamicResource（棘轮零容忍）；
+      Margin/Padding/Width 等尺寸优先写在 Style Setter 内（不触发棘轮正则）。
+    -->
+    <Window.Resources>
+        <Style x:Key="ConfirmLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <!-- 标签列宽走 MinWidth（Min* 前缀不匹配棘轮正则），比给 ColumnDefinition 写死 72 更省额度 -->
+            <Setter Property="MinWidth" Value="72"/>
+        </Style>
+        <Style x:Key="ConfirmValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="ConfirmMono" TargetType="TextBlock" BasedOn="{StaticResource ConfirmValue}">
+            <Setter Property="FontFamily" Value="{DynamicResource Font_Mono}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
+        </Style>
+        <Style x:Key="ConfirmSection" TargetType="Border">
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_SM}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+        </Style>
+        <Style x:Key="ConfirmSecondaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="MinWidth" Value="84"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="14,7"/>
+        </Style>
+        <Style x:Key="ConfirmPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="MinWidth" Value="84"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="ConflictChoice" TargetType="RadioButton" BasedOn="{StaticResource ThemedRadioButton}">
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="{DynamicResource Space_LG}">
+        <Grid>
+            <TextBlock Text="接收文件请求" Style="{DynamicResource CardTitle}"/>
+            <TextBlock x:Name="TimeoutHint" HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Style="{DynamicResource ConfirmMono}"/>
+        </Grid>
+
+        <Grid Margin="{DynamicResource Space_MD}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="发送方" Style="{StaticResource ConfirmLabel}"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PeerText" Style="{StaticResource ConfirmValue}"/>
+
+            <TextBlock Grid.Row="1" Text="文件" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="FileText" Style="{StaticResource ConfirmValue}" Margin="{DynamicResource Space_XXS}"/>
+
+            <TextBlock Grid.Row="2" Text="保存到" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DirText" Style="{StaticResource ConfirmMono}" Margin="{DynamicResource Space_XXS}"/>
+
+            <TextBlock Grid.Row="3" Text="目标盘" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="DiskText" Style="{StaticResource ConfirmValue}" Margin="{DynamicResource Space_XXS}"/>
+        </Grid>
+
+        <Border x:Name="ConflictSection" Style="{StaticResource ConfirmSection}" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock x:Name="ConflictTitle" Text="目标目录已有同名文件" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush_TextPrimary}"/>
+                <TextBlock x:Name="ConflictAutoText" Style="{DynamicResource ConfirmMono}"
+                           Margin="{DynamicResource Space_XS}"/>
+                <StackPanel x:Name="ConflictAskPanel" Visibility="Collapsed" Margin="{DynamicResource Space_XS}">
+                    <RadioButton x:Name="ChoiceRename" GroupName="ConflictChoice" IsChecked="True"
+                                 Style="{StaticResource ConflictChoice}" Content="改名保存（保留原文件）"/>
+                    <RadioButton x:Name="ChoiceOverwrite" GroupName="ConflictChoice"
+                                 Style="{StaticResource ConflictChoice}" Content="覆盖原文件（原内容不可恢复）"/>
+                    <RadioButton x:Name="ChoiceSkip" GroupName="ConflictChoice"
+                                 Style="{StaticResource ConflictChoice}" Content="跳过不接收（不留新文件）"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="{DynamicResource Space_MD}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="HintText" Style="{DynamicResource ConfirmMono}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="RejectButton" Content="拒绝" IsCancel="True" Margin="{DynamicResource Space_XS}"
+                        Style="{StaticResource ConfirmSecondaryButton}" Click="OnRejectClick"/>
+                <Button x:Name="AcceptButton" Content="接收" IsDefault="True"
+                        Style="{StaticResource ConfirmPrimaryButton}" Click="OnAcceptClick"/>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</Window>

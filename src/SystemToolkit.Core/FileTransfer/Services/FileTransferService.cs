@@ -54,11 +54,34 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     private readonly object _receiveSlotLock = new();
     // volatile：SetRequireKnownPeer 可在 UI 线程运行时修改，握手校验在 TCP 回调线程读取
     private volatile bool _requireKnownPeer = true;
+    // volatile：SetConflictPolicy 在 UI 线程改，握手期的同名解析在 TCP 回调线程读（2026-09-13 批次 P1）
+    private volatile TransferConflictPolicy _conflictPolicy = TransferConflictPolicy.Rename;
     private bool _requireReceiveConfirmation;
     private bool _requirePairing;
     private TimeSpan _receiveConfirmTimeout = TimeSpan.FromSeconds(30);
     private string _receiveDirectory = string.Empty;
     private readonly ConcurrentDictionary<string, PendingConfirm> _pendingConfirms = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 每个活跃任务的暂停闸（协议 §4.2 双向 PAUSE/RESUME，2026-09-13 批次 P1）。
+    /// 键 = 任务 ID；终态任务留下的条目由 <see cref="GetOrCreatePauseGate"/> 惰性回收。
+    /// </summary>
+    private readonly ConcurrentDictionary<string, PauseGate> _pauseGates = new(StringComparer.Ordinal);
+
+    /// <summary>本机暂停的自动取消计时器（键 = 任务 ID）；恢复/终态即取消。</summary>
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _pauseTimers = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 活跃发送任务的客户端连接（键 = 任务 ID）。
+    /// <para>
+    /// 为什么要登记：暂停/恢复**从 UI 线程发起**，而连接对象原本只活在发送方法栈里，
+    /// 外部拿不到 → 无法把「我停了」告知对端（对端继续等，两边界面不一致）。
+    /// </para>
+    /// </summary>
+    private readonly ConcurrentDictionary<string, WatsonTcpClient> _sendClients = new(StringComparer.Ordinal);
+
+    /// <summary>本机暂停超过该时长自动取消（<see cref="Timeout.InfiniteTimeSpan"/> = 不限）。</summary>
+    private TimeSpan _pauseTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>发送方等待握手确认的超时（含接收端确认门等待 + 人工点击延迟，2026-09-06 由 20s 放宽）。</summary>
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(120);
@@ -105,9 +128,16 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             _releasedReceiveSlots.Clear();
         }
         _requireKnownPeer = settings.RequireKnownPeer;
+        // 🔴 策略必须在这里读进来：漏了这一行，设置里选了「跳过/覆盖」也一律按默认改名走，
+        // 而用户以为自己选的动作生效了——这是 2026-09-13 实测踩到的（用例先红抓住）。
+        _conflictPolicy = settings.ConflictPolicy;
         _requireReceiveConfirmation = settings.RequireReceiveConfirmation;
         _requirePairing = settings.RequirePairing;
         _receiveConfirmTimeout = TimeSpan.FromSeconds(Math.Max(1, settings.ReceiveConfirmTimeoutSeconds));
+        // 0 或负数 = 不限时长（用户显式选择）；否则按分钟换算
+        _pauseTimeout = settings.PauseTimeoutMinutes > 0
+            ? TimeSpan.FromMinutes(settings.PauseTimeoutMinutes)
+            : Timeout.InfiniteTimeSpan;
         lock (_pairGate)
         {
             _pairedIps.Clear();
@@ -128,7 +158,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         _logger.Info($"文件传输服务已启动（TCP {settings.TransferPort}，分片 {_chunkSize / 1024}KB，" +
                      $"来源白名单={(_requireKnownPeer ? "开" : "关")}，接收确认门={(_requireReceiveConfirmation ? "开" : "关")}，" +
-                     $"配对码={(_requirePairing ? "开" : "关")}，并发接收上限 {_maxConcurrentReceives}）。");
+                     $"配对码={(_requirePairing ? "开" : "关")}，同名策略={TransferConflictResolver.Describe(_conflictPolicy)}，" +
+                     $"并发接收上限 {_maxConcurrentReceives}）。");
         await Task.CompletedTask;
     }
 
@@ -151,6 +182,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         foreach (PendingConfirm pc in _pendingConfirms.Values)
             pc.Cancel();
         _pendingConfirms.Clear();
+
+        // 暂停闸全部强制放行（2026-09-13 批次 P1）：停服务时若还有任务卡在暂停等待里，
+        // 取消信号不会被看见，StopAsync 会一直等到那 50ms 之后才发现任务还没收尾。
+        foreach (PauseGate gate in _pauseGates.Values)
+            gate.ForceRelease();
+
         lock (_pairGate)
         {
             _pairedIps.Clear();
@@ -223,6 +260,21 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// <inheritdoc/>
     public Task CancelAsync(string taskId)
     {
+        // 原因码：只在尚未打标时记「用户取消」——暂停超时自动取消已写好 PAUSE_TIMEOUT，
+        // 用 ??= 保证不把它覆盖成「用户取消」（否则用户看到的原因会指向错误的方向）
+        if (_tasks.TryGetValue(taskId, out TransferTask? known))
+        {
+            known.ReasonCode ??= TransferReasonCodes.UserCancel;
+        }
+
+        // 暂停中的任务被取消：先强制放行闸门。否则发送循环还卡在暂停等待里，
+        // 取消信号要等下一次分片才被看见——大分片下就是用户感知的"点了取消没反应"。
+        if (_pauseGates.TryGetValue(taskId, out PauseGate? pauseGate))
+        {
+            pauseGate.ForceRelease();
+        }
+        CancelPauseTimeout(taskId);
+
         if (_sendCts.TryRemove(taskId, out CancellationTokenSource? cts))
         {
             try
@@ -278,11 +330,17 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
     /// <inheritdoc/>
     public Task RespondTransferAsync(string taskId, bool accept)
+        => RespondTransferAsync(taskId, accept ? TransferDecision.AcceptWith(TransferConflictPolicy.Rename) : TransferDecision.Reject);
+
+    /// <inheritdoc/>
+    public Task RespondTransferAsync(string taskId, TransferDecision decision)
     {
         if (_pendingConfirms.TryRemove(taskId, out PendingConfirm? pc))
         {
-            pc.Gate.TrySetResult(accept);
-            _logger.Info($"接收确认已回复：任务 {taskId} → {(accept ? "接受" : "拒绝")}。");
+            pc.Gate.TrySetResult(decision);
+            _logger.Info(
+                $"接收确认已回复：任务 {taskId} → {(decision.Accept ? "接受" : "拒绝")}"
+                + (decision.Accept ? $"（同名处理：{TransferConflictResolver.Describe(decision.Conflict)}）" : string.Empty));
         }
         else
         {
@@ -291,6 +349,211 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public void SetConflictPolicy(TransferConflictPolicy policy)
+    {
+        _conflictPolicy = policy;
+        _logger.Info($"同名冲突策略已切换为「{TransferConflictResolver.Describe(policy)}」（仅影响之后到达的传输）。");
+    }
+
+    /// <summary>
+    /// 测试专用：直接设定暂停超时时长（生产路径由 <see cref="TransferSettings.PauseTimeoutMinutes"/> 决定）。
+    /// <para>
+    /// 为什么需要这个缝：配置单位是**分钟**（用户可理解的时间尺度），
+    /// 而验证「暂停超时自动取消」不能真等满一分钟——测试被拖慢到不可接受并不换来任何覆盖。
+    /// </para>
+    /// </summary>
+    internal void ConfigurePauseTimeoutForTest(TimeSpan timeout) => _pauseTimeout = timeout;
+
+    /// <inheritdoc/>
+    public async Task<bool> PauseTaskAsync(string taskId)
+    {
+        if (!_tasks.TryGetValue(taskId, out TransferTask? task))
+        {
+            _logger.Warn($"暂停被忽略：任务 {taskId} 不存在或已终态。");
+            return false;
+        }
+
+        if (task.Status is not (TransferStatus.Pending or TransferStatus.Transferring or TransferStatus.Negotiating))
+        {
+            _logger.Warn($"暂停被忽略：任务 {taskId} 当前状态为 {task.Status}，只有排队中/协商中/传输中的任务可暂停。");
+            return false;
+        }
+
+        PauseGate gate = GetOrCreatePauseGate(taskId);
+        gate.SetPaused(local: true, paused: true);
+        task.PausedAt = DateTimeOffset.UtcNow;
+        task.PausedByPeer = false;
+        task.Status = TransferStatus.Paused;
+        RaiseUpdated(task);
+
+        await NotifyPauseStateAsync(task, paused: true).ConfigureAwait(false);
+        StartPauseTimeout(task);
+        _logger.Info($"任务已暂停：{task.FileName}（{(task.Direction == TransferDirection.Send ? "发送" : "接收")}，任务 {taskId}）。");
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> ResumeTaskAsync(string taskId)
+    {
+        if (!_tasks.TryGetValue(taskId, out TransferTask? task))
+        {
+            _logger.Warn($"恢复被忽略：任务 {taskId} 不存在或已终态。");
+            return false;
+        }
+
+        if (task.Status != TransferStatus.Paused)
+        {
+            _logger.Warn($"恢复被忽略：任务 {taskId} 当前状态为 {task.Status}，并未暂停。");
+            return false;
+        }
+
+        PauseGate gate = GetOrCreatePauseGate(taskId);
+        gate.SetPaused(local: true, paused: false);
+        CancelPauseTimeout(taskId);
+        task.PausedAt = null;
+
+        // 双方都恢复才回到「传输中」：对端仍暂停时如实留在「已暂停」，不谎报开始
+        if (gate.IsPaused)
+        {
+            task.PausedByPeer = true;
+        }
+        else
+        {
+            task.PausedByPeer = false;
+            task.Status = TransferStatus.Transferring;
+        }
+        RaiseUpdated(task);
+
+        await NotifyPauseStateAsync(task, paused: false).ConfigureAwait(false);
+        _logger.Info($"任务已恢复：{task.FileName}（任务 {taskId}）。");
+        return true;
+    }
+
+    /// <summary>把本机的暂停/恢复意图告知对端（发送任务走客户端连接，接收任务走该任务所属的服务端连接）。</summary>
+    private async Task NotifyPauseStateAsync(TransferTask task, bool paused)
+    {
+        TransferMessageType type = paused ? TransferMessageType.Pause : TransferMessageType.Resume;
+        var message = new TransferMessage { Type = type, TaskId = task.Id };
+
+        if (task.Direction == TransferDirection.Send)
+        {
+            if (_sendClients.TryGetValue(task.Id, out WatsonTcpClient? client))
+            {
+                await TrySendControlToPeerAsync(client, message).ConfigureAwait(false);
+            }
+            return;
+        }
+
+        KeyValuePair<Guid, ReceiveContext> kv = _receiveContexts.FirstOrDefault(k => k.Value.Task?.Id == task.Id);
+        if (kv.Value is not null)
+        {
+            await SendControlAsync(kv.Key, message).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// 本机暂停的自动取消计时：到点仍停着就取消任务。
+    /// <para>
+    /// 为什么必须有：暂停是单方面意图，对端无法区分「对面在暂停」与「对面挂了」。
+    /// 没有上限，一次忘掉的暂停会让对端永久挂着，且本机接收并发槽也一直占着。
+    /// </para>
+    /// </summary>
+    private void StartPauseTimeout(TransferTask task)
+    {
+        CancelPauseTimeout(task.Id);
+        if (_pauseTimeout == Timeout.InfiniteTimeSpan)
+        {
+            return; // 用户显式选择「不限时长」
+        }
+
+        var cts = new CancellationTokenSource();
+        _pauseTimers[task.Id] = cts;
+        TimeSpan limit = _pauseTimeout;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(limit, cts.Token).ConfigureAwait(false);
+                if (_pauseGates.TryGetValue(task.Id, out PauseGate? gate)
+                    && gate.IsPaused && gate.Local
+                    && task.Status == TransferStatus.Paused)
+                {
+                    task.ReasonCode = TransferReasonCodes.PauseTimeout;
+                    task.ErrorMessage = TransferReasonCodes.Describe(TransferReasonCodes.PauseTimeout);
+                    _logger.Warn($"暂停超时自动取消：{task.FileName}（任务 {task.Id}，上限 {limit.TotalMinutes:0} 分钟）。");
+                    await CancelAsync(task.Id).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 已恢复或已终态——预期路径
+            }
+        });
+    }
+
+    private void CancelPauseTimeout(string taskId)
+    {
+        if (_pauseTimers.TryRemove(taskId, out CancellationTokenSource? cts))
+        {
+            try
+            { cts.Cancel(); }
+            catch { }
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 取（必要时建）任务的暂停闸，并顺手回收**已终态任务**遗留的闸与计时器。
+    /// <para>
+    /// 惰性清理的理由：终态路径有六七处，逐处插一行清理必然漏一处 = 长期缓慢泄漏；
+    /// 集中在这里回收则只需保证「下一次暂停/恢复时清一次」，增长天然有界。
+    /// </para>
+    /// </summary>
+    private PauseGate GetOrCreatePauseGate(string taskId)
+    {
+        foreach (string stale in _pauseGates.Keys.Where(id => !_tasks.ContainsKey(id)).ToArray())
+        {
+            _pauseGates.TryRemove(stale, out _);
+            CancelPauseTimeout(stale);
+        }
+
+        return _pauseGates.GetOrAdd(taskId, _ => new PauseGate());
+    }
+
+    /// <summary>
+    /// 分片循环里的暂停等待：返回是否真的等过（true 时调用方需重置速度基线，
+    /// 否则暂停时长会把速度摊薄成假低值）。等待期间以固定粒度轮询，
+    /// 保证「取消 / 服务停止」在暂停状态下依然立即生效。
+    /// </summary>
+    private async Task<bool> WaitWhilePausedAsync(string taskId, CancellationToken ct)
+    {
+        if (!_pauseGates.TryGetValue(taskId, out PauseGate? gate))
+        {
+            return false;
+        }
+
+        bool waited = false;
+        while (gate.IsPaused)
+        {
+            waited = true;
+            ct.ThrowIfCancellationRequested();
+            Task signal = gate.WaitAsync();
+            if (signal.IsCompleted)
+            {
+                break;
+            }
+            // ct 传入 Delay：取消/停服务时立即唤醒，不必等满一个轮询周期
+            await Task.WhenAny(signal, Task.Delay(PausePollIntervalMs, ct)).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+        }
+
+        return waited;
+    }
+
+    /// <summary>暂停等待的轮询粒度：取 1s —— 远小于人的操作尺度，又不会空转烧 CPU。</summary>
+    private const int PausePollIntervalMs = 1000;
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -340,12 +603,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             await gate.WaitAsync(ct).ConfigureAwait(false);
             gateAcquired = true;
 
-            task.Status = TransferStatus.Negotiating;
-            RaiseUpdated(task);
-
             client = new WatsonTcpClient(peerIp, peerPort);
             var handshakeTcs = new TaskCompletionSource<TransferMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
             var completeTcs = new TaskCompletionSource<TransferMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            // 暂停闸先建好再订阅消息（2026-09-13 批次 P1）：对端随时可能发 Pause，
+            // 处理器必须已持有同一个 gate 实例——后建会让先到的 Pause 落空，
+            // 表现为"对面点了暂停，这边还在灌数据"。
+            // ⚠️ 变量名不能叫 gate：本方法里 gate 已被并发信号量占用（见上方 gateAcquired）。
+            PauseGate pauseGate = GetOrCreatePauseGate(task.Id);
+            // 排队中被暂停的任务：直接以「已暂停」入场，别先亮一下「协商中」再变回去（视觉闪烁 = 状态不实）
+            task.Status = pauseGate.IsPaused ? TransferStatus.Paused : TransferStatus.Negotiating;
+            RaiseUpdated(task);
 
             client.Events.MessageReceived += (_, e) =>
             {
@@ -360,12 +629,31 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     case TransferMessageType.CompleteAck:
                         completeTcs.TrySetResult(tm);
                         break;
+                    case TransferMessageType.Pause:
+                        // 对端要求暂停：挂起本地闸门（发送循环会在下一次分片前看到）
+                        pauseGate.SetPaused(local: false, paused: true);
+                        task.PausedByPeer = true;
+                        task.Status = TransferStatus.Paused;
+                        RaiseUpdated(task);
+                        break;
+                    case TransferMessageType.Resume:
+                        pauseGate.SetPaused(local: false, paused: false);
+                        task.PausedByPeer = false;
+                        if (!pauseGate.IsPaused)
+                        {
+                            task.Status = TransferStatus.Transferring;
+                        }
+                        RaiseUpdated(task);
+                        break;
                     case TransferMessageType.Cancel:
                         task.ErrorMessage = "对端取消了传输。";
+                        task.ReasonCode = TransferReasonCodes.UserCancel;
                         handshakeTcs.TrySetCanceled();
                         completeTcs.TrySetCanceled();
                         break;
                     case TransferMessageType.Error:
+                        // 对端给的原因码是权威来源（例如「跳过」「磁盘不足」），本机不臆造
+                        task.ReasonCode = tm.ReasonCode;
                         var ex = new InvalidOperationException(tm.Error ?? "对端报告错误。");
                         handshakeTcs.TrySetException(ex);
                         completeTcs.TrySetException(ex);
@@ -374,6 +662,11 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             };
 
             client.Connect();
+            _sendClients[task.Id] = client; // 暂停/恢复需要从 UI 线程拿到这条连接（见字段注释）
+
+            // 对端在暂停期间掉线：放行闸门，让循环走到下一次 SendAsync 并由它抛出真实错误，
+            // 走既有失败路径收场。没有这一步，「暂停 + 对面消失」会一直挂到暂停超时（默认 30 分钟）。
+            client.Events.ServerDisconnected += (_, _) => pauseGate.ForceRelease();
 
             int totalChunks = (int)Math.Max(1, (task.FileSize + task.ChunkSize - 1) / task.ChunkSize);
             var handshake = new TransferMessage
@@ -396,7 +689,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             if (offset < 0 || offset > task.FileSize)
                 offset = 0;
 
-            task.Status = TransferStatus.Transferring;
+            task.Status = pauseGate.IsPaused ? TransferStatus.Paused : TransferStatus.Transferring;
             task.TransferredBytes = offset;
             RaiseUpdated(task);
 
@@ -436,6 +729,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             while (totalSent < task.FileSize)
             {
                 ct.ThrowIfCancellationRequested();
+
+                // 暂停闸（2026-09-13 批次 P1）：在**分片边界**挂起——已发出的分片不撤回，
+                // 对端按偏移继续落盘，恢复后从断点续上，无需重传任何已确认数据。
+                if (await WaitWhilePausedAsync(task.Id, ct).ConfigureAwait(false))
+                {
+                    // 暂停时长不计入速度/耗时口径：重置统计基线，否则速度被"暂停的几十分钟"摊薄成假低值
+                    sw.Restart();
+                    speedBase = totalSent;
+                    task.SpeedBytesPerSec = 0;
+                    RaiseUpdated(task);
+                }
+
                 int read = await fileStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
                 if (read <= 0)
                     break;
@@ -511,6 +816,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             { if (_sendCts.TryRemove(task.Id, out CancellationTokenSource? cts)) cts.Dispose(); }
             catch { }
             try
+            { _sendClients.TryRemove(task.Id, out _); } // 连接已不再需要（暂停/恢复入口随之失效）
+            catch { }
+            try
+            { CancelPauseTimeout(task.Id); }
+            catch { }
+            try
             { client?.Dispose(); }
             catch { /* 忽略释放异常 */ }
             try
@@ -561,8 +872,14 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 case TransferMessageType.Cancel:
                     HandleReceiveCancel(ctx);
                     break;
+                case TransferMessageType.Pause:
+                    HandleReceivePauseState(ctx, paused: true);
+                    break;
+                case TransferMessageType.Resume:
+                    HandleReceivePauseState(ctx, paused: false);
+                    break;
                 case TransferMessageType.Error:
-                    HandleReceiveError(ctx, tm.Error);
+                    HandleReceiveError(ctx, tm.Error, tm.ReasonCode);
                     break;
             }
         }
@@ -589,12 +906,13 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             pending.Cancel(); // 确认等待方立即退出（任务由下方断开路径终态化）
 
         TransferTask? task = ctx.Task;
-        if (task is not null
-            && task.Status is TransferStatus.Negotiating or TransferStatus.Transferring)
+        if (task is not null && HoldsReceiveResources(task.Status))
         {
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = "对端断开连接。";
+            task.ReasonCode = TransferReasonCodes.PeerDisconnected;
             task.FinishedAt = DateTimeOffset.UtcNow;
+            CancelPauseTimeout(task.Id); // 暂停计时器已无意义，顺手回收
             ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽（ctx 仍在册，守卫放行）
             RaiseUpdated(task);
             RaiseCompleted(task);
@@ -626,6 +944,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Type = TransferMessageType.Error,
                 TaskId = tm.TaskId,
                 Error = "来源设备未在设备发现列表中，拒绝接收。",
+                ReasonCode = TransferReasonCodes.PeerNotDiscovered,
             });
             return;
         }
@@ -642,6 +961,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     Type = TransferMessageType.Error,
                     TaskId = tm.TaskId,
                     Error = "配对码无效或已过期，请从接收端获取最新配对码。",
+                    ReasonCode = TransferReasonCodes.PairingInvalid,
                 });
                 return;
             }
@@ -661,13 +981,20 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         }
 
         // 关旧上下文资源 + 终态化旧任务（同连接二次握手产生僵尸任务，填占 activeReceives 配额 / 哈希泄漏）
-        if (ctx.Task is not null && ctx.Task.Status is TransferStatus.Negotiating or TransferStatus.Transferring)
+        if (ctx.Task is not null
+            && ctx.Task.Status is TransferStatus.Negotiating or TransferStatus.Transferring or TransferStatus.Paused)
         {
             TransferTask oldTask = ctx.Task;
             oldTask.Status = TransferStatus.Cancelled;
             ReleaseReceiveSlot(oldTask); // 审查 F-01：被替换的旧任务归还接收并发槽
             oldTask.ErrorMessage = "对端发起新握手，旧任务已被替换。";
+            oldTask.ReasonCode ??= TransferReasonCodes.UserCancel;
             oldTask.FinishedAt = DateTimeOffset.UtcNow;
+            CancelPauseTimeout(oldTask.Id);
+            if (_pauseGates.TryGetValue(oldTask.Id, out PauseGate? staleGate))
+            {
+                staleGate.ForceRelease(); // 任务已终结，别让任何等待方还挂在暂停上
+            }
             RaiseUpdated(oldTask);
             RaiseCompleted(oldTask);
             _tasks.TryRemove(oldTask.Id, out _);
@@ -690,6 +1017,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Type = TransferMessageType.Error,
                 TaskId = tm.TaskId,
                 Error = "接收端并发传输已达上限，请稍后重试。",
+                ReasonCode = TransferReasonCodes.ConcurrencyLimit,
             });
             return;
         }
@@ -718,6 +1046,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Type = TransferMessageType.Error,
                 TaskId = tm.TaskId,
                 Error = "文件大小非法。",
+                ReasonCode = TransferReasonCodes.InvalidFileSize,
             });
             return;
         }
@@ -747,6 +1076,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Type = TransferMessageType.Error,
                 TaskId = tm.TaskId,
                 Error = "接收端磁盘空间不足，请清理空间后重试。",
+                ReasonCode = TransferReasonCodes.InsufficientDisk,
             });
             return;
         }
@@ -756,6 +1086,53 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 $"无法判定接收目录剩余空间（目录 {ResolveReceiveDirectory()}，任务 {tm.TaskId}）"
                 + "——按放行处理；若传输中途失败请优先检查目标盘空间。");
         }
+
+        // 安全边界七（2026-09-13 批次 P1 ⑥）：**同名冲突策略在握手期解析**，不在落定时才反悔。
+        // 为什么必须提前：等到收完才发现"该跳过" = 白传一趟（大文件是分钟级浪费）；
+        // 而"覆盖"若到落定时才揭晓，用户在按「接收」时根本不知道自己会丢文件——那就是欺骗。
+        string receiveDir = ResolveReceiveDirectory();
+        TransferConflictPolicy effectivePolicy = _conflictPolicy;
+        bool askPending = false;
+        if (effectivePolicy == TransferConflictPolicy.Ask)
+        {
+            if (_requireReceiveConfirmation)
+            {
+                // 由确认门弹窗逐次询问；用户的选择（改名/覆盖/跳过）**只对本次生效**，
+                // 不改动全局设置——把"本次选择"写成"永久设置"是越权。
+                askPending = true;
+                effectivePolicy = TransferConflictPolicy.Rename; // 询问结果落地前的保守占位
+            }
+            else
+            {
+                // 用户裁定（2026-09-13）：无从询问时降级为「自动改名」——不弹窗、不阻断、不覆盖。
+                effectivePolicy = TransferConflictPolicy.Rename;
+                _logger.Warn(
+                    $"同名策略为「询问」但接收确认门未开启，本份降级为「自动改名」"
+                    + $"（原因码 {TransferReasonCodes.ConflictAskUnavailable}，任务 {tm.TaskId}）。");
+            }
+        }
+
+        string safeTargetName = SanitizeFileName(tm.FileName);
+        ConflictPlan conflict = TransferConflictResolver.Resolve(receiveDir, safeTargetName, effectivePolicy);
+        if (conflict.Kind == ConflictResolution.Skip)
+        {
+            Interlocked.Decrement(ref _activeReceives); // 与其它拒绝分支同款：归还已抢的接收槽
+            _logger.Info(
+                $"按同名策略「跳过」未接收：{safeTargetName}（目标已存在 {conflict.TargetPath}），"
+                + $"来源 {ipPort}，任务 {tm.TaskId}，原因码 {TransferReasonCodes.ConflictSkip}。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = "接收端已存在同名文件，按「跳过」策略未接收。",
+                ReasonCode = TransferReasonCodes.ConflictSkip,
+            });
+            return;
+        }
+
+        ctx.ConflictPolicy = effectivePolicy;
+        ctx.Conflict = conflict;
+        ctx.AskPending = askPending;
 
         // 任务对象统一在确认门前创建——待确认任务以 Negotiating 态出现在任务列表，
         // 并计入并发接收上限（防确认风暴占满配额）
@@ -788,12 +1165,25 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 if (_pendingConfirms.TryRemove(task.Id, out PendingConfirm? timedOut))
                 {
                     timedOut.TimedOut = true;
-                    timedOut.Gate.TrySetResult(false);
+                    timedOut.Gate.TrySetResult(TransferDecision.Reject);
                 }
             });
 
-            _logger.Info($"等待接收确认：{tm.FileName}（{tm.FileSize:N0} 字节）← {ipPort}，任务 {task.Id}。");
-            TransferRequested?.Invoke(this, new TransferRequestEventArgs(task.Id, tm.FileName, tm.FileSize, ipPort));
+            _logger.Info(
+                $"等待接收确认：{tm.FileName}（{tm.FileSize:N0} 字节）← {ipPort}，任务 {task.Id}"
+                + $"（同名：{TransferConflictResolver.Describe(conflict.Kind)}）。");
+            // 弹窗要能回答用户"接不接"的全部疑问（2026-09-13 批次 P1 ⑦）：
+            // 存到哪、盘还剩多少、是否已有同名、按当前策略会发生什么、对面是谁。
+            TransferRequested?.Invoke(this, new TransferRequestEventArgs(task.Id, tm.FileName, tm.FileSize, ipPort)
+            {
+                ReceiveDirectory = receiveDir,
+                AvailableFreeBytes = DiskSpaceUtil.TryGetAvailableFreeBytes(receiveDir),
+                DiskSpace = space,
+                TargetExists = conflict.Kind != ConflictResolution.Fresh,
+                ConflictAction = conflict.Kind,
+                ConflictPolicy = _conflictPolicy,
+                PeerDeviceName = ResolvePeerDeviceName(ipPort),
+            });
 
             _ = Task.Run(() => AwaitConfirmationAndCompleteAsync(guid, ipPort, tm, ctx, task, pending));
             return;
@@ -806,10 +1196,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     private async Task AwaitConfirmationAndCompleteAsync(
         Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx, TransferTask task, PendingConfirm pending)
     {
-        bool accepted;
+        TransferDecision decision;
         try
         {
-            accepted = await pending.Gate.Task.ConfigureAwait(false);
+            decision = await pending.Gate.Task.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -821,17 +1211,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             pending.TimeoutCts = null;
         }
 
-        if (!accepted)
+        if (!decision.Accept)
         {
             string reason = pending.TimedOut ? "接收端未响应确认，已自动拒绝。" : "接收端拒绝接收。";
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = reason;
+            task.ReasonCode = pending.TimedOut ? TransferReasonCodes.ConfirmTimeout : TransferReasonCodes.UserReject;
             task.FinishedAt = DateTimeOffset.UtcNow;
             ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             RaiseUpdated(task);
             RaiseCompleted(task);
             _tasks.TryRemove(task.Id, out _);
-            _logger.Info($"接收请求已拒绝：{tm.FileName}（任务 {task.Id}）——{reason}");
+            _logger.Info($"接收请求已拒绝：{tm.FileName}（任务 {task.Id}）——{reason}（原因码 {task.ReasonCode}）。");
             // 审查 v5（🟡-3）：fire-and-forget Task 内的发送失败会静默逃逸——兜底记日志，避免未观察异常
             try
             {
@@ -840,6 +1231,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     Type = TransferMessageType.Error,
                     TaskId = tm.TaskId,
                     Error = reason,
+                    ReasonCode = task.ReasonCode,
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -847,6 +1239,46 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 _logger.Warn($"拒绝回执发送失败（任务 {task.Id}）：{ex.Message}");
             }
             return;
+        }
+
+        // 策略=「询问」：用户的本次选择只对本份生效（不改全局设置），据此重算落定计划
+        if (ctx.AskPending)
+        {
+            ctx.AskPending = false;
+            ctx.ConflictPolicy = decision.Conflict;
+            ctx.Conflict = TransferConflictResolver.Resolve(
+                ResolveReceiveDirectory(), SanitizeFileName(tm.FileName), decision.Conflict);
+            _logger.Info(
+                $"用户在确认门选择了同名处理方式「{TransferConflictResolver.Describe(decision.Conflict)}」"
+                + $"（任务 {task.Id} → {TransferConflictResolver.Describe(ctx.Conflict.Kind)}）。");
+
+            if (ctx.Conflict.Kind == ConflictResolution.Skip)
+            {
+                // 用户在弹窗里选了「跳过」：如实按跳过收场，**不落盘、不改名、不覆盖**
+                task.Status = TransferStatus.Skipped;
+                task.ReasonCode = TransferReasonCodes.ConflictSkip;
+                task.ErrorMessage = TransferReasonCodes.Describe(TransferReasonCodes.ConflictSkip);
+                task.FinishedAt = DateTimeOffset.UtcNow;
+                ReleaseReceiveSlot(task);
+                RaiseUpdated(task);
+                RaiseCompleted(task);
+                _tasks.TryRemove(task.Id, out _);
+                try
+                {
+                    await SendControlAsync(guid, new TransferMessage
+                    {
+                        Type = TransferMessageType.Error,
+                        TaskId = tm.TaskId,
+                        Error = "接收方选择「跳过」（已存在同名文件），未接收。",
+                        ReasonCode = TransferReasonCodes.ConflictSkip,
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"跳过回执发送失败（任务 {task.Id}）：{ex.Message}");
+                }
+                return;
+            }
         }
 
         if (ctx.Task != task)
@@ -983,8 +1415,9 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         TransferTask? task = ctx.Task;
         if (task is null)
             return;
-        // 已被取消/失败的任务不再处理 Complete，回 Error 通知对端立即终止（否则发送方等 10 分钟超时）
-        if (task.Status is TransferStatus.Cancelled or TransferStatus.Failed)
+        // 已终态的任务不再处理 Complete，回 Error 通知对端立即终止（否则发送方等 10 分钟超时）
+        // （含 Skipped：跳过也是定论，不能因为迟到的一条 Complete 就把结论翻过来）
+        if (IsTerminal(task.Status))
         {
             ctx.CloseStream();
             ctx.Hash?.Dispose();
@@ -1015,12 +1448,60 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         if (hashOk)
         {
-            // 校验通过后原子落定：.part → 最终文件名；目标名已存在则自动加序号，绝不覆盖已有文件
+            // 校验通过后原子落定：.part → 最终文件名。
+            // 动作由**握手期算好的冲突计划**决定（2026-09-13 批次 P1 ⑥）；
+            // 但「全新/改名」在落定前**重新哨探一次唯一名**——接收期间目标目录可能又冒出同名文件，
+            // 若沿用握手时的判断，就会静默覆盖别人刚放进来的文件（那不是用户选过的"覆盖"）。
             // （hashOk 为真蕴含 TargetPath 非空；Complete 消息不带 FileName，须取接收任务里的文件名）
             string targetPath = ctx.TargetPath!;
-            string finalPath = GetUniqueDestination(
-                Path.GetDirectoryName(targetPath)!, SanitizeFileName(task.FileName));
-            File.Move(targetPath, finalPath);
+            string finalDir = Path.GetDirectoryName(targetPath)!;
+            string safeName = SanitizeFileName(task.FileName);
+            ConflictPlan plan = ctx.Conflict.Kind switch
+            {
+                ConflictResolution.Overwrite => ctx.Conflict,
+                ConflictResolution.Skip => ctx.Conflict,
+                _ => new ConflictPlan(
+                    ConflictResolution.Fresh,
+                    TransferConflictResolver.GetUniqueDestination(finalDir, safeName)),
+            };
+
+            if (plan.Kind == ConflictResolution.Skip)
+            {
+                // 竞态路径：握手时目标不存在、收完才出现同名 → 按策略跳过（保留对方的文件，丢弃本次 .part）
+                task.Status = TransferStatus.Skipped;
+                task.ReasonCode = TransferReasonCodes.ConflictSkip;
+                task.ErrorMessage = TransferReasonCodes.Describe(TransferReasonCodes.ConflictSkip);
+                task.FinishedAt = DateTimeOffset.UtcNow;
+                ReleaseReceiveSlot(task);
+                RaiseUpdated(task);
+                RaiseCompleted(task);
+                _tasks.TryRemove(task.Id, out _);
+                try
+                { File.Delete(targetPath); }
+                catch { /* 被占用等忽略，孤儿清理兜底 */ }
+                ctx.Hash?.Dispose();
+                ctx.Hash = null;
+                if (_receiveContexts.TryRemove(guid, out ReceiveContext? skippedCtx))
+                    skippedCtx.Dispose();
+                _ = SendControlAsync(guid, new TransferMessage
+                {
+                    Type = TransferMessageType.Error,
+                    TaskId = tm.TaskId,
+                    Error = "接收端在接收期间出现同名文件，按「跳过」策略未写入。",
+                    ReasonCode = TransferReasonCodes.ConflictSkip,
+                });
+                _logger.Warn(
+                    $"接收完成但按「跳过」策略未写入：{task.FileName}（目标 {plan.TargetPath} 已存在，"
+                    + $"任务 {task.Id}，原因码 {TransferReasonCodes.ConflictSkip}）。");
+                return;
+            }
+
+            string finalPath = plan.TargetPath;
+            File.Move(targetPath, finalPath, overwrite: plan.Kind == ConflictResolution.Overwrite);
+            if (plan.Kind == ConflictResolution.Overwrite)
+            {
+                _logger.Warn($"按「覆盖」策略替换了同名文件：{finalPath}（任务 {task.Id}）——原文件已不可恢复。");
+            }
             if (ctx.FileModifiedAt > 0)
             {
                 // 时间属性还原（2026-09-06 协议扩展）：失败不影响交付（文件本身已校验通过）
@@ -1061,6 +1542,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             task.Status = TransferStatus.Failed;
             task.ErrorMessage = "文件 SHA-256 校验失败。";
+            task.ReasonCode = TransferReasonCodes.HashMismatch;
             ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
             task.FinishedAt = DateTimeOffset.UtcNow;
             RaiseUpdated(task);
@@ -1095,8 +1577,19 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         ctx.CloseStream();
         if (task is null)
             return;
+        if (IsTerminal(task.Status))
+        {
+            _logger.Info($"忽略迟到的取消消息：{task.FileName}（任务 {task.Id}）已终态 {task.Status}，不覆盖结论。");
+            return;
+        }
         task.Status = TransferStatus.Cancelled;
+        task.ReasonCode ??= TransferReasonCodes.UserCancel; // 对端取消（本机此前若已打标则保留）
         task.FinishedAt = DateTimeOffset.UtcNow;
+        CancelPauseTimeout(task.Id);
+        if (_pauseGates.TryGetValue(task.Id, out PauseGate? gate))
+        {
+            gate.ForceRelease(); // 已终止，别让发送循环还挂着等恢复
+        }
         ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
         RaiseUpdated(task);
         RaiseCompleted(task);
@@ -1106,22 +1599,58 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         _logger.Info($"对端取消传输：{task.FileName}（任务 {task.Id}），断点保留在 .part 文件。");
     }
 
-    private void HandleReceiveError(ReceiveContext ctx, string? error)
+    /// <summary>
+    /// 对端暂停/恢复：本端**只如实跟随状态**——不释放流、不丢哈希、不动断点。
+    /// 恢复所需的全部上下文都还在 <see cref="ReceiveContext"/> 里，所以"恢复"就是改一个状态。
+    /// </summary>
+    private void HandleReceivePauseState(ReceiveContext ctx, bool paused)
+    {
+        TransferTask? task = ctx.Task;
+        if (task is null || task.Status is not (TransferStatus.Transferring or TransferStatus.Paused))
+        {
+            return; // 未开始/已终态的任务不理会暂停请求
+        }
+
+        PauseGate gate = GetOrCreatePauseGate(task.Id);
+        gate.SetPaused(local: false, paused: paused);
+        task.PausedByPeer = paused;
+        task.Status = paused ? TransferStatus.Paused : TransferStatus.Transferring;
+        RaiseUpdated(task);
+        _logger.Info($"对端{(paused ? "暂停" : "恢复")}传输：{task.FileName}（任务 {task.Id}）。");
+    }
+
+    private void HandleReceiveError(ReceiveContext ctx, string? error, string? reasonCode = null)
     {
         TransferTask? task = ctx.Task;
         ctx.CloseStream();
         if (task is null)
             return;
+        if (IsTerminal(task.Status))
+        {
+            // 终态冻结：一条迟到的 Error 不许改写已有结论（否则会把「确认超时」改写成"对端报错"，
+            // 或把已成功的传输改成失败）。日志留痕，便于排查"为什么原因码不是我预期那个"。
+            // 反向验证：把本守卫收窄为仅 Completed → ReasonCode_ConfirmTimeout 立即变红。
+            _logger.Info(
+                $"忽略迟到的错误消息：{task.FileName}（任务 {task.Id}）已终态 {task.Status}"
+                + $"（对端原因码 {reasonCode ?? "无"}），不覆盖结论。");
+            return;
+        }
         task.Status = TransferStatus.Failed;
         task.ErrorMessage = error ?? "对端报告错误。";
-        ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
+        task.ReasonCode = reasonCode; // 对端给的原因码优先（它是权威来源），本机不臆造
         task.FinishedAt = DateTimeOffset.UtcNow;
+        CancelPauseTimeout(task.Id);
+        if (_pauseGates.TryGetValue(task.Id, out PauseGate? gate))
+        {
+            gate.ForceRelease();
+        }
+        ReleaseReceiveSlot(task); // 审查 F-01：归还接收并发槽
         RaiseUpdated(task);
         RaiseCompleted(task);
         _tasks.TryRemove(task.Id, out _);
         if (_pendingConfirms.TryRemove(task.Id, out PendingConfirm? pending))
             pending.Cancel(); // 确认等待方立即退出
-        _logger.Warn($"对端报告接收错误：{task.FileName}（任务 {task.Id}）：{error}。");
+        _logger.Warn($"对端报告接收错误：{task.FileName}（任务 {task.Id}）：{error}（原因码 {reasonCode}）。");
     }
 
     private void FailReceiveContext(Guid guid, ReceiveContext ctx, string error)
@@ -1130,7 +1659,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         TransferTask? task = ctx.Task;
         if (task is not null)
         {
-            if (task.Status is not (TransferStatus.Completed or TransferStatus.Cancelled))
+            if (!IsTerminal(task.Status))
             {
                 task.Status = TransferStatus.Failed;
                 task.ErrorMessage = error;
@@ -1138,6 +1667,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 RaiseUpdated(task);
                 RaiseCompleted(task);
                 _logger.Warn($"接收失败：{task.FileName}（任务 {task.Id}）：{error}。");
+            }
+            else
+            {
+                _logger.Info($"接收上下文清理（任务已终态 {task.Status}）：{task.FileName}（任务 {task.Id}）。");
             }
             _tasks.TryRemove(task.Id, out _);
             ReleaseReceiveSlot(task); // 审查 R2（2026-09-10）：终态后归还并发槽（幂等，防槽泄漏锁死接收端）
@@ -1149,11 +1682,37 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         _ = SendControlAsync(guid, new TransferMessage { Type = TransferMessageType.Error, Error = error });
     }
 
+    /// <summary>
+    /// 该状态是否**仍持有接收资源**（断点 .part 文件 + 接收并发槽）——单一来源。
+    /// <para>
+    /// 🔴 为什么提成一个方法：这条判据此前在两处**各写一遍**（孤儿断点清理的"活跃"判据、
+    /// 对端断开时的终态化判据），2026-09-13 加入 Paused 时两处都漏了，意味着
+    /// 「暂停中的断点被当孤儿删掉」与「暂停中掉线留僵尸任务 + 泄漏并发槽」同时发生。
+    /// 判据只留一份，就不会再有一处改了一处没改。
+    /// </para>
+    /// </summary>
+    internal static bool HoldsReceiveResources(TransferStatus status)
+        => status is TransferStatus.Negotiating or TransferStatus.Transferring or TransferStatus.Paused;
+
+    /// <summary>
+    /// 是否已终态——**终态即冻结**：任何后续消息都不得再改动这个任务。
+    /// <para>
+    /// 🔴 为什么需要：任务对象是引用，终态事件（<c>TaskCompleted</c>）把它交给 UI 之后，
+    /// 一条迟到的对端消息还能改写它的 Status/ReasonCode。2026-09-13 实测踩中：
+    /// 接收端因确认超时判 <c>CONFIRM_TIMEOUT</c>，随后发送方失败又回了一条**不带原因码**的 Error，
+    /// 接收端照单全收把自己的原因码覆盖成 null——用户看到的原因指向了错误的真相。
+    /// 「首个终态即定论」是不变量，不是优化。
+    /// </para>
+    /// </summary>
+    internal static bool IsTerminal(TransferStatus status)
+        => status is TransferStatus.Completed or TransferStatus.Skipped
+            or TransferStatus.Failed or TransferStatus.Cancelled;
+
     /// <summary>目标路径是否正被某个活跃接收上下文使用（孤儿清理时跳过，防误删并发传输的断点）。</summary>
     private bool IsTargetOfActiveReceive(string fullPath)
         => _receiveContexts.Values.Any(c =>
             c.Task is not null
-            && c.Task.Status is TransferStatus.Negotiating or TransferStatus.Transferring
+            && HoldsReceiveResources(c.Task.Status)
             && c.TargetPath is not null
             && string.Equals(Path.GetFullPath(c.TargetPath), fullPath, StringComparison.OrdinalIgnoreCase));
 
@@ -1165,6 +1724,27 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             return _pairedIps.Contains(colon > 0 ? ipPort[..colon] : ipPort);
         }
+    }
+
+    /// <summary>
+    /// 取对端设备名（确认门弹窗要显示"是谁在发"，只给 IP 用户判断不了）。
+    /// 查不到（对端不在发现列表 / 未接入发现服务）返回空串——界面据此隐藏该行，不编造。
+    /// </summary>
+    private string ResolvePeerDeviceName(string ipPort)
+    {
+        if (_discovery is null)
+        {
+            return string.Empty;
+        }
+
+        int colon = ipPort.LastIndexOf(':');
+        string ipText = colon > 0 ? ipPort[..colon] : ipPort;
+        if (!IPAddress.TryParse(ipText, out IPAddress? peerIp))
+        {
+            return string.Empty;
+        }
+
+        return _discovery.Devices.FirstOrDefault(d => d.IPAddress.Equals(peerIp))?.Name ?? string.Empty;
     }
 
     /// <summary>对端 IP 是否在设备发现在线列表中。</summary>
@@ -1179,22 +1759,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         return _discovery.Devices.Any(d => d.IsOnline && d.IPAddress.Equals(peerIp));
     }
 
-    /// <summary>目标目录内取不冲突的落定路径：同名时追加 " (n)" 序号，绝不覆盖已有文件。</summary>
-    private static string GetUniqueDestination(string dir, string fileName)
-    {
-        string candidate = Path.Combine(dir, fileName);
-        if (!File.Exists(candidate))
-            return candidate;
-
-        string ext = Path.GetExtension(fileName);
-        string stem = Path.GetFileNameWithoutExtension(fileName);
-        for (int i = 1; ; i++)
-        {
-            candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
-            if (!File.Exists(candidate))
-                return candidate;
-        }
-    }
+    // 落定命名（"同名追加 (n) 序号、绝不覆盖"）已于 2026-09-13 收敛到 TransferConflictResolver：
+    // 本包与手机通道 FileWebServer 曾是两份独立实现，冲突策略只改一处就会让两台设备结果不同。
 
     /// <summary>
     /// 向指定连接回送控制消息（metadata 通道，无文件数据）。
@@ -1221,9 +1787,11 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// </summary>
     private void ReleaseReceiveSlot(TransferTask task)
     {
-        if (task.Status is TransferStatus.Negotiating or TransferStatus.Transferring)
+        if (task.Status is TransferStatus.Negotiating or TransferStatus.Transferring or TransferStatus.Paused)
         {
-            return; // 防御：调用点必须已置终态
+            // 防御：调用点必须已置终态。Paused 也**不是**终态——断点还在、槽还得占着，
+            // 误在暂停中归还槽会让上限计数比真实活跃数少（并发闸形同虚设）。
+            return;
         }
 
         if (!_receiveContexts.Values.Any(c => c.Task == task))
@@ -1280,7 +1848,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         AppLog.Write(LogEntry.Create(
             level, _logger.Source,
             $"传输结束：{dir}「{task.FileName}」→ {task.Status}"
-                + (string.IsNullOrEmpty(task.ErrorMessage) ? string.Empty : $"（{task.ErrorMessage}）"),
+                + (string.IsNullOrEmpty(task.ErrorMessage) ? string.Empty : $"（{task.ErrorMessage}）")
+                + (string.IsNullOrEmpty(task.ReasonCode) ? string.Empty : $" [原因码 {task.ReasonCode}]"),
             action: task.Direction == TransferDirection.Send ? "SendFile" : "ReceiveFile",
             outcome: outcome,
             durationMs: durationMs));
@@ -1394,6 +1963,15 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         /// <summary>上次进度上报的 Tick（-1 = 未上报过；进度节流用，性能审查 P0-1）。</summary>
         public long LastReportTick = -1;
 
+        /// <summary>本次传输生效的同名冲突策略（已在握手期把「询问」解析掉，2026-09-13 批次 P1）。</summary>
+        public TransferConflictPolicy ConflictPolicy = TransferConflictPolicy.Rename;
+
+        /// <summary>握手期算好的落定计划（落定时可能因竞态重算，见 HandleComplete）。</summary>
+        public ConflictPlan Conflict;
+
+        /// <summary>策略为「询问」且确认门开启 → 等用户在弹窗里选本次处理方式。</summary>
+        public bool AskPending;
+
         public void CloseStream()
         {
             Stream?.Dispose();
@@ -1408,10 +1986,112 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         }
     }
 
-    /// <summary>接收确认门的待确认条目：Gate 完成（true=接受 / false=拒绝或超时）或取消（被替换/断开/停止）。</summary>
+    /// <summary>
+    /// 可重臂的异步暂停闸（协议 §4.2 PAUSE/RESUME 的本地实现）。
+    /// <para>
+    /// 语义：<see cref="Local"/> = 本机用户暂停；<see cref="Remote"/> = 对端要求暂停。
+    /// 任一为真即「已暂停」——**两个标志分开记**是因为只有本机暂停才该跑自动取消计时
+    /// （对端何时恢复由对端决定，本机无权超时取消别人的传输）。
+    /// </para>
+    /// <para>
+    /// 实现要点：用一个「已完成」的 <see cref="TaskCompletionSource"/> 表示"通行"；
+    /// 一旦暂停就换成新的未完成 TCS（重臂），恢复时完成它唤醒等待方。
+    /// 判断与替换全程持同一把锁，避免"检查完 IsPaused 就被恢复、于是永远等一个已完成信号"的竞态。
+    /// </para>
+    /// </summary>
+    private sealed class PauseGate
+    {
+        private readonly object _lock = new();
+        private TaskCompletionSource _signal = CreateCompletedSignal();
+
+        public bool Local { get; private set; }
+
+        public bool Remote { get; private set; }
+
+        public bool IsPaused
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return Local || Remote;
+                }
+            }
+        }
+
+        /// <summary>设置暂停/恢复；两标志都为假时唤醒等待方。</summary>
+        public void SetPaused(bool local, bool paused)
+        {
+            lock (_lock)
+            {
+                if (local)
+                {
+                    Local = paused;
+                }
+                else
+                {
+                    Remote = paused;
+                }
+
+                if (Local || Remote)
+                {
+                    if (_signal.Task.IsCompleted)
+                    {
+                        // 🔴 必须换成**未完成**的信号：暂停期间任何"已完成"的信号都会让等待方
+                        // 立刻放行——那样暂停只改了状态、数据照流（2026-09-13 探针实测踩中：
+                        // 界面显示「已暂停」，而 8MB 照样一路传完）。
+                        // 反向验证：改回 CreateCompletedSignal() → Pause_* 三条用例立即变红。
+                        _signal = CreatePendingSignal();
+                    }
+                }
+                else
+                {
+                    _signal.TrySetResult();
+                }
+            }
+        }
+
+        /// <summary>取「恢复后完成」的信号（可能已完成 = 当前未暂停）。</summary>
+        public Task WaitAsync()
+        {
+            lock (_lock)
+            {
+                return _signal.Task;
+            }
+        }
+
+        /// <summary>
+        /// 强制放行（对端断开时用）：清两个标志并唤醒等待方，让发送循环继续走到下一次
+        /// <c>SendAsync</c>——由它抛出真实错误，走既有失败路径收场；
+        /// 否则「暂停中 + 对端消失」会一直挂到暂停超时才有结果。
+        /// </summary>
+        public void ForceRelease()
+        {
+            lock (_lock)
+            {
+                Local = false;
+                Remote = false;
+                _signal.TrySetResult();
+            }
+        }
+
+        /// <summary>未完成的信号 = 「暂停中，等恢复」。</summary>
+        private static TaskCompletionSource CreatePendingSignal()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>已完成的信号 = 「未暂停，可通行」（初始态）。</summary>
+        private static TaskCompletionSource CreateCompletedSignal()
+        {
+            TaskCompletionSource tcs = CreatePendingSignal();
+            tcs.SetResult();
+            return tcs;
+        }
+    }
+
+    /// <summary>接收确认门的待确认条目：Gate 完成（携带用户决定）或取消（被替换/断开/停止）。</summary>
     private sealed class PendingConfirm
     {
-        public TaskCompletionSource<bool> Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<TransferDecision> Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public CancellationTokenSource? TimeoutCts { get; set; }
 

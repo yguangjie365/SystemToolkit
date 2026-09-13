@@ -39,6 +39,18 @@ public partial class FileTransferView : UserControl
                 System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
                 == MessageBoxResult.OK;
             Vm.Desktop.ConfirmRequest = Vm.ConfirmRequest;
+            // 接收确认走**信息完整的专用对话框**（2026-09-13 批次 P1 ⑦）：
+            // 用户要判断"接不接、会不会覆盖东西"，只给 IP + 文件名是让人盲签。
+            // 窗口在 View 里创建（VM 不弹窗，便于无 UI 单测）；Owner 指向当前窗口保证居中与模态归属。
+            Vm.Desktop.ConfirmTransferRequest = request =>
+            {
+                var dialog = new ReceiveConfirmWindow(request, Vm.Desktop.ReceiveConfirmTimeoutSeconds)
+                {
+                    Owner = Window.GetWindow(this),
+                };
+                dialog.ShowDialog();
+                return dialog.Decision; // 关窗/Esc 都收场为「拒绝」（窗口默认值）
+            };
             Vm.Desktop.PickFiles = PickFiles;
             await Vm.LoadAsync().ConfigureAwait(true);
         }

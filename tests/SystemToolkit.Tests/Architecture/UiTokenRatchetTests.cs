@@ -21,6 +21,7 @@ public class UiTokenRatchetTests
         "src/SystemToolkit.Shell/MainWindow.xaml",
         "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml",
         "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml",
+        "src/SystemToolkit.Modules.FileTransfer/ReceiveConfirmWindow.xaml",
         "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml",
         "src/SystemToolkit.Modules.GameManager/SteamApiKeyWindow.xaml",
         "src/SystemToolkit.Modules.FileBackup/FileBackupView.xaml",

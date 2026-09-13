@@ -55,6 +55,14 @@
     "border": 2,
     "stroke": 0
   },
+  "src/SystemToolkit.Modules.FileTransfer/ReceiveConfirmWindow.xaml": {
+    "margin": 0,
+    "padding": 0,
+    "width": 1,
+    "height": 0,
+    "border": 0,
+    "stroke": 0
+  },
   "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml": {
     "margin": 34,
     "padding": 7,

@@ -26,7 +26,8 @@ namespace SystemToolkit.Infrastructure.FileTransfer;
 /// </para>
 /// <para>安全边界：除配对端点、证书信息与静态外壳资源外，所有请求必须携带**会话令牌**（<c>?t=</c>）；
 /// 文件路径一律先做穿越校验，
-/// 目标必须落在共享根目录之内；上传写入只取安全相对路径且同名不覆盖（自动追加序号）；
+/// 目标必须落在共享根目录之内；上传写入只取安全相对路径，同名按**冲突策略**落定（默认自动追加序号；
+/// 2026-09-13 起与电脑通道共用 <c>TransferConflictResolver</c>，可选覆盖/跳过）；
 /// 上传走<b>原始 body 流式直写</b>，单文件上限 10GB。</para>
 /// <para>配对模型：二维码只携带 6 位短期配对码（<see cref="LanUrl"/> 的 <c>?c=</c>），
 /// 手机提交配对码换长期令牌（<see cref="PairingService"/>，一次性消费、10 分钟轮换），
@@ -100,6 +101,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
 
     private WebApplication? _app;
     private string _shareDirectory = string.Empty;
+
+    /// <summary>
+    /// 同名文件冲突策略（2026-09-13 批次 P1 ⑥）——与电脑通道**同一份设置**。
+    /// <para>
+    /// 手机端没有逐次询问的界面，故 <see cref="TransferConflictPolicy.Ask"/> 在此按「自动改名」降级
+    /// （与"确认门关闭时的降级口径"一致）。改名/覆盖/跳过三种则照常执行。
+    /// </para>
+    /// </summary>
+    private TransferConflictPolicy _conflictPolicy = TransferConflictPolicy.Rename;
     private int _port;
     private bool _httpsEnabled;
     private int _httpsPort;
@@ -286,6 +296,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         _shareDirectory = shareDirectory;
         _port = settings.WebPort;
         _httpsEnabled = settings.UseHttps;
+        // 询问在手机端无法交互 → 记下已降级的实际策略，别把"用户的意向"当成"会发生的事"
+        _conflictPolicy = settings.ConflictPolicy == TransferConflictPolicy.Ask
+            ? TransferConflictPolicy.Rename
+            : settings.ConflictPolicy;
         string lanIp = DetectLanIp();
         _lanIp = lanIp;
 
@@ -648,9 +662,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                     // 重传同一文件（rel/size/mtime 相同）会命中同一 uploadId 与 .part，可直接定稿、免二次上传。
                     // 故此处分歧于"失败即删"的直觉做法，只补一条可诊断的日志说明文件去向。
                     string finalName;
+                    bool skipped;
                     try
                     {
-                        finalName = FinalizeUpload(root, partPath, rel, mtime);
+                        (finalName, skipped) = FinalizeUpload(root, partPath, rel, mtime, _conflictPolicy);
                     }
                     catch (Exception ex)
                     {
@@ -658,14 +673,34 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                         throw;
                     }
 
-                    _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
+                    if (skipped)
+                    {
+                        // 如实告知「没写入」。报「上传完成」而目标目录里没有文件，就是状态欺骗。
+                        _logger.Info(
+                            $"[Web] 按同名策略「跳过」未写入：{finalName}（{size:N0} 字节），"
+                            + $"原因码 {TransferReasonCodes.ConflictSkip}。");
+                    }
+                    else
+                    {
+                        _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
+                    }
 
                     // 传输结束后顺手清一次超期断点（协议 §4.3 🟠）。刚定稿的 .part 已在
                     // FinalizeUpload 里被改名/删除，故这里通常什么都不做——只在目录里
                     // 确实躺着过期残片时才真删（单目录 glob，代价可忽略）。
                     CleanupOrphanUploadParts("上传定稿");
 
-                    return Results.Ok(new { received, total = size, done = true, name = finalName, hash });
+                    return Results.Ok(new
+                    {
+                        received,
+                        total = size,
+                        done = true,
+                        name = finalName,
+                        // 跳过时 done 仍为 true（这次上传流程本身是成功的），
+                        // 但 skipped 明确告诉前端"目标目录里没有新增文件"
+                        skipped,
+                        hash,
+                    });
                 }
                 finally
                 {
@@ -859,7 +894,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             throw new InvalidOperationException("非法的上传文件名。");
         }
 
-        // 同名不覆盖：临时名写入 + Move(overwrite:false) 原子落定，避免半截文件残留与并发竞态
+        // 落定动作由同名冲突策略决定（2026-09-13 批次 P1 ⑥）——与分块上传、与电脑通道同一裁决处。
+        // ⚠️ 本入口是接口级测试挂点（无 HTTP 端点调用它），没有向调用方回报"跳过"的通道，
+        // 故只把结果写进日志；有端点接入时须仿照 upload-chunk 返回 skipped，不能默认已写入。
         string tmpPath = Path.Combine(root, $".upload_{Guid.NewGuid():N}.part");
         string finalPath = Path.Combine(root, safeName);
         try
@@ -870,20 +907,37 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 await content.CopyToAsync(fs, ct);
             }
 
-            // 原子落定：同名追加序号（a.txt → a (1).txt）；并发竞态时重试（GetUniqueDestination→Move 之间时间窗）
-            int retry = 0;
-            while (true)
+            ConflictPlan plan = TransferConflictResolver.Resolve(root, safeName, _conflictPolicy);
+            if (plan.Kind == ConflictResolution.Skip)
             {
-                finalPath = GetUniqueDestination(root, safeName);
-                try
+                File.Delete(tmpPath);
+                _logger.Info(
+                    $"Web 上传按同名策略「跳过」未写入：{safeName}（原因码 {TransferReasonCodes.ConflictSkip}）。");
+                return;
+            }
+
+            if (plan.Kind == ConflictResolution.Overwrite)
+            {
+                File.Move(tmpPath, plan.TargetPath, overwrite: true);
+                finalPath = plan.TargetPath;
+            }
+            else
+            {
+                // 改名（含"目标此刻不存在"）：定名前再探一次唯一名，避开探测→Move 之间被抢先的窗口
+                int retry = 0;
+                while (true)
                 {
-                    File.Move(tmpPath, finalPath, overwrite: false);
-                    break;
-                }
-                catch (IOException) when (retry < 3)
-                {
-                    // 并发上传同名竞态：换个序号重试
-                    retry++;
+                    finalPath = TransferConflictResolver.GetUniqueDestination(root, safeName);
+                    try
+                    {
+                        File.Move(tmpPath, finalPath, overwrite: false);
+                        break;
+                    }
+                    catch (IOException) when (retry < 3)
+                    {
+                        // 并发上传同名竞态：换个序号重试
+                        retry++;
+                    }
                 }
             }
             _logger.Info($"Web 上传完成：{Path.GetFileName(finalPath)}（{new FileInfo(finalPath).Length:N0} 字节）。");
@@ -1465,11 +1519,20 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     }
 
     /// <summary>
-    /// 定稿：把 <c>.part</c> 原子改名为最终文件（同名追加序号，不覆盖已有文件）。
+    /// 定稿：把 <c>.part</c> 原子改名为最终文件，动作由**同名冲突策略**决定（2026-09-13 批次 P1 ⑥）。
+    /// <para>
+    /// 裁决走两条通道共用的 <see cref="TransferConflictResolver"/>：改名（追加序号）/ 覆盖 / 跳过
+    /// 与电脑通道口径完全一致——否则"同一次操作、两台设备结果不同"，用户无从理解。
+    /// </para>
     /// <para><paramref name="relPath"/> 可含子目录（目录上传场景），会自动创建缺失的中间目录；
     /// 落定目录先用 <see cref="PathUtil.IsUnder"/> 复核（纵深防御）。</para>
     /// </summary>
-    private static string FinalizeUpload(string root, string partPath, string relPath, long mtime = 0)
+    /// <returns>
+    /// <c>Name</c> = 最终文件名（跳过时为**被跳过的那个已存在文件名**），
+    /// <c>Skipped</c> = 是否按策略未写入（调用方须如实回报给手机端）。
+    /// </returns>
+    private static (string Name, bool Skipped) FinalizeUpload(
+        string root, string partPath, string relPath, long mtime, TransferConflictPolicy policy)
     {
         string relDir = Path.GetDirectoryName(relPath) ?? string.Empty;
         string targetDir = string.IsNullOrEmpty(relDir) ? root : Path.Combine(root, relDir);
@@ -1479,15 +1542,35 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         }
         Directory.CreateDirectory(targetDir);
 
+        string fileName = Path.GetFileName(relPath);
+        ConflictPlan plan = TransferConflictResolver.Resolve(targetDir, fileName, policy);
+
+        if (plan.Kind == ConflictResolution.Skip)
+        {
+            // 跳过：丢弃已上传的 .part，**保留**目标目录里既有的那份文件
+            try
+            { File.Delete(partPath); }
+            catch { /* 被占用等忽略，孤儿清理会兜底 */ }
+            return (fileName, Skipped: true);
+        }
+
+        if (plan.Kind == ConflictResolution.Overwrite)
+        {
+            File.Move(partPath, plan.TargetPath, overwrite: true);
+            ApplyOriginalMtime(plan.TargetPath, mtime);
+            return (fileName, Skipped: false);
+        }
+
         int retry = 0;
         while (true)
         {
-            string finalPath = GetUniqueDestination(targetDir, Path.GetFileName(relPath));
+            // 改名（含"目标此刻不存在"）：定名前再探一次唯一名，避开探测→Move 之间被抢先的窗口
+            string finalPath = TransferConflictResolver.GetUniqueDestination(targetDir, fileName);
             try
             {
                 File.Move(partPath, finalPath, overwrite: false);
                 ApplyOriginalMtime(finalPath, mtime);
-                return Path.GetFileName(finalPath);
+                return (Path.GetFileName(finalPath), Skipped: false);
             }
             catch (IOException) when (retry < 3)
             {
@@ -1768,25 +1851,9 @@ button:active{background:#334D63}
     }
 
     /// <summary>目标目录内取不冲突的落定路径：同名时追加 " (n)" 序号，绝不覆盖已有文件。</summary>
-    private static string GetUniqueDestination(string dir, string fileName)
-    {
-        string candidate = Path.Combine(dir, fileName);
-        if (!File.Exists(candidate))
-        {
-            return candidate;
-        }
-
-        string ext = Path.GetExtension(fileName);
-        string stem = Path.GetFileNameWithoutExtension(fileName);
-        for (int i = 1; ; i++)
-        {
-            candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
-            if (!File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-    }
+    // 落定命名已收敛到 TransferConflictResolver（2026-09-13 批次 P1 ⑥）：
+    // 本类与电脑通道 FileTransferService 曾是两份独立实现，冲突策略只改一处就会让
+    // 手机上传与电脑互传出现不同结果。
 
     /// <summary>
     /// 探测本机局域网 IPv4：借助 UDP connect 让系统选出默认路由的源地址（不实际发包）。

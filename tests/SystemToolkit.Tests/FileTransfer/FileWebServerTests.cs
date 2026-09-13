@@ -245,6 +245,52 @@ public class FileWebServerTests
     }
 
     /// <summary>
+    /// 手机通道也遵守同名冲突策略（2026-09-13 批次 P1 ⑥）：跳过则**一份新文件都不留**、
+    /// 覆盖则替换原文件。两条通道口径必须一致——否则"同一次操作、两台设备结果不同"。
+    /// </summary>
+    [Fact]
+    public async Task WriteUploadedFile_RespectsConflictPolicy_SkipAndOverwrite()
+    {
+        string skipDir = NewTempDir();
+        string overwriteDir = NewTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(skipDir, "a.txt"), "keep-me");
+            File.WriteAllText(Path.Combine(overwriteDir, "a.txt"), "old");
+
+            await using (var skipServer = new FileWebServer())
+            {
+                TransferSettings skipSettings = MakeSettings(FreeTcpPort());
+                skipSettings.ConflictPolicy = SystemToolkit.Core.FileTransfer.Models.TransferConflictPolicy.Skip;
+                await skipServer.StartAsync(skipSettings, skipDir);
+                await skipServer.WriteUploadedFileAsync("a.txt", new MemoryStream(Encoding.UTF8.GetBytes("new")));
+            }
+
+            Assert.Equal("keep-me", await File.ReadAllTextAsync(Path.Combine(skipDir, "a.txt")));
+            Assert.False(File.Exists(Path.Combine(skipDir, "a (1).txt")), "跳过策略不得留下任何新文件");
+            Assert.False(
+                Directory.EnumerateFiles(skipDir, ".upload_*.part").Any(),
+                "跳过策略应丢弃已上传的临时断点，不留在共享目录里");
+
+            await using (var overwriteServer = new FileWebServer())
+            {
+                TransferSettings overwriteSettings = MakeSettings(FreeTcpPort());
+                overwriteSettings.ConflictPolicy = SystemToolkit.Core.FileTransfer.Models.TransferConflictPolicy.Overwrite;
+                await overwriteServer.StartAsync(overwriteSettings, overwriteDir);
+                await overwriteServer.WriteUploadedFileAsync("a.txt", new MemoryStream(Encoding.UTF8.GetBytes("new")));
+            }
+
+            Assert.Equal("new", await File.ReadAllTextAsync(Path.Combine(overwriteDir, "a.txt")));
+            Assert.False(File.Exists(Path.Combine(overwriteDir, "a (1).txt")), "覆盖策略不该再产生序号副本");
+        }
+        finally
+        {
+            DeleteTempDir(skipDir);
+            DeleteTempDir(overwriteDir);
+        }
+    }
+
+    /// <summary>
     /// 🟡 审查 2026-09-10（🟡-12）：非法文件名必须在写盘前被拒——覆盖 Windows 保留设备名
     /// （含带扩展名形式）与非法字符（NUL 字节）。反向验证：去掉 WriteUploadedFileAsync 中
     /// <c>IsWindowsReservedDeviceName</c> / <c>Path.GetInvalidFileNameChars</c> 两个判定 → 本用例变红。

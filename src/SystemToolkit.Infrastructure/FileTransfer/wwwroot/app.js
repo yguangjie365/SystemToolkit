@@ -806,6 +806,8 @@
         const pendingKey = uploadKey(relName, file.size, mtime);
         const fromDir = !!file.webkitRelativePath;
         let lastOffset = 0;
+        // 服务端按同名冲突策略「跳过」时置真：进度条仍是满格，但状态文案必须如实写"已跳过"
+        let skippedByPolicy = false;
         let lastPersist = 0;
         taskEl.dataset.uploadKey = pendingKey;
         state.activeKeys.add(pendingKey);
@@ -869,10 +871,11 @@
                 const blob = file.slice(offset, end);
                 const chunkBase = offset;
 
-                const ok = await postChunkWithRetry(blob, meta, chunkBase, (loaded) => {
+                const res = await postChunkWithRetry(blob, meta, chunkBase, (loaded) => {
                     setProgress(chunkBase + loaded);
                 }, fail);
-                if (!ok) return;
+                if (!res) return;
+                skippedByPolicy = res === "skipped";
 
                 offset = end;
                 lastOffset = offset;
@@ -881,8 +884,14 @@
             // ③ 完成
             barEl.classList.remove("is-active");
             barEl.style.width = "100%";
-            statusEl.textContent = "完成";
-            statusEl.className = "upload-task__status is-done";
+            if (skippedByPolicy) {
+                // 服务端按「跳过」策略未写入：进度条满格但明确标注"已跳过"，不让用户以为文件已在电脑上
+                statusEl.textContent = "已跳过（同名）";
+                statusEl.className = "upload-task__status is-skipped";
+            } else {
+                statusEl.textContent = "完成";
+                statusEl.className = "upload-task__status is-done";
+            }
             removePending(pendingKey); // 定稿成功 → 待续传记录出清
             settle();
             refreshUploadSummary();
@@ -903,7 +912,8 @@
      * @param {number} offset 本块在文件中的起始偏移
      * @param {(loaded:number)=>void} onProgress
      * @param {(msg:string)=>void} onFail
-     * @returns {Promise<boolean>} 是否成功（false 表示已放弃并提示过用户）
+     * @returns {Promise<"ok"|"skipped"|false>} "ok" 成功写入；"skipped" 服务端按同名策略跳过未写入；
+     *          false 表示已放弃并提示过用户
      */
     function postChunkWithRetry(blob, meta, offset, onProgress, onFail) {
         const maxRetry = 3;
@@ -924,10 +934,16 @@
                         let j = null;
                         try { j = JSON.parse(xhr.responseText); } catch (e) { /* 忽略 */ }
                         if (j && j.done) {
+                            if (j.skipped) {
+                                // 同策略兜底：服务端按「跳过」未写入 → 如实说"跳过"，不报"完成"
+                                showToast("已跳过：" + meta.name + "（电脑上已有同名文件）", "info");
+                                resolve("skipped");
+                                return;
+                            }
                             showToast("上传完成：" + meta.name
                                 + (j.hash ? "（校验 " + String(j.hash).slice(0, 12) + "…）" : ""), "success");
                         }
-                        resolve(true);
+                        resolve("ok");
                         return;
                     }
 

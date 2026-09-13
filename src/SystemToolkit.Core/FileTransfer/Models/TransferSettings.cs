@@ -62,6 +62,28 @@ public sealed class TransferSettings
     /// <summary>接收文件保存目录（空则使用「下载\Received」；2026-09-02 起不再是桌面）。</summary>
     public string? ReceiveDirectory { get; set; }
 
+    /// <summary>
+    /// 同名文件冲突策略（协议 §4.4 第 3 条，接收端预选）。
+    /// <para>
+    /// 默认 <see cref="TransferConflictPolicy.Rename"/>：本项目对已有文件的一贯口径是「绝不覆盖」，
+    /// 覆盖必须由用户显式选择。
+    /// </para>
+    /// <para>
+    /// 作用范围：**两条接收通道共用**——电脑↔电脑的落定，以及手机上传的定稿（协议 §6.4）。
+    /// 手机端无逐次询问能力，故 <see cref="TransferConflictPolicy.Ask"/> 在那里按「自动改名」降级。
+    /// </para>
+    /// </summary>
+    public TransferConflictPolicy ConflictPolicy { get; set; } = TransferConflictPolicy.Rename;
+
+    /// <summary>
+    /// 暂停超时（分钟）：**本机**暂停超过该时长即自动取消，释放接收并发槽并通知对端（0 = 不限）。
+    /// <para>
+    /// 为什么需要：暂停是用户意图，但它会让对端无限等待（对端无法区分"对面在暂停"与"对面挂了"）。
+    /// 默认 30 分钟——足够覆盖"换个网络/挪个位置"这类正常中断，又不至于让对端僵尸般挂着。
+    /// </para>
+    /// </summary>
+    public int PauseTimeoutMinutes { get; set; } = 30;
+
     /// <summary>设备显示名称（空则使用机器名）。</summary>
     public string? DeviceName { get; set; }
 
