@@ -1,0 +1,122 @@
+<Window x:Class="SystemToolkit.Modules.GameManager.SteamApiKeyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Steam Web API Key"
+        AutomationProperties.Name="Steam Web API Key 录入"
+        Width="440" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
+
+    <!-- 无边框 + 主题化小窗（2026-09-13 主人确认形态）：形态对齐 MiniPlayerWindow（本仓唯一无边框先例），
+         区别是它是**模态录入窗**——故 Owner/CenterOwner/ShowDialog 走既有模态窗范式（SoftwareEditWindow 等 4 个），
+         仅"系统边框"换成"自绘标题行 + 拖动 + ✕"。
+         🔴 UiTokenRatchet 把本文件纳入 ScannedViews：除 Window 的 Width 与根 Border 的 BorderThickness
+         （各 1，已在 baseline 登记）外**零裸尺寸值**——其余尺寸全写在 Style Setter 内，颜色/圆角/字号全走令牌。 -->
+    <Window.Resources>
+        <Style x:Key="ApiKeyInput" TargetType="PasswordBox">
+            <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush_TextPrimary}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource Font_Mono}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="TitleBar" TargetType="Border">
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_DarkSurface}"/>
+        </Style>
+        <Style x:Key="TitleBarCloseButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="MinWidth" Value="26"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="DialogButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="DialogPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="HintPanel" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_SM}"/>
+            <Setter Property="Padding" Value="10,8"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource Brush_Surface}"
+            BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1"
+            CornerRadius="{DynamicResource Radius_LG}">
+        <StackPanel>
+            <!-- 标题行：整行可拖动（MouseLeftButtonDown 在 code-behind 调 DragMove） -->
+            <Border Style="{StaticResource TitleBar}" MouseLeftButtonDown="OnTitleBarDrag">
+                <Grid>
+                    <TextBlock Text="Steam Web API Key" FontSize="{DynamicResource Font_SizeBodyLg}"
+                               FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="CloseButton" Style="{StaticResource TitleBarCloseButton}"
+                            Content="✕" HorizontalAlignment="Right"
+                            AutomationProperties.Name="关闭"
+                            Click="OnCancelClick"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Margin="{DynamicResource Space_LG}">
+                <TextBlock Text="粘贴你的 API Key（32 位字母数字）"
+                           Foreground="{DynamicResource Brush_TextSecondary}"
+                           FontSize="{DynamicResource Font_SizeBodySm}"/>
+
+                <PasswordBox x:Name="KeyBox" Style="{StaticResource ApiKeyInput}"
+                             Margin="{DynamicResource Space_SM}"
+                             AutomationProperties.Name="Steam Web API Key"/>
+
+                <!-- 校验提示（默认折叠；不弹 MessageBox——同一窗内就地反馈） -->
+                <TextBlock x:Name="ErrorText" Visibility="Collapsed"
+                           Foreground="{DynamicResource Brush_DangerText}"
+                           FontSize="{DynamicResource Font_SizeCaption}"
+                           TextWrapping="Wrap"
+                           Margin="{DynamicResource Space_SM}"/>
+
+                <Border Style="{StaticResource HintPanel}">
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush_TextSecondary}"
+                               FontSize="{DynamicResource Font_SizeCaption}">Key 只保存在本机（DPAPI 加密，仅当前 Windows 账户可解密），用于向官方 API 查询你的游戏库，不上传任何其它信息。
+需要在 Steam「隐私设置 → 游戏详情」设为公开；否则官方接口返回空列表，页面会自动退回本地数据并说明原因。</TextBlock>
+                </Border>
+
+                <Grid Margin="{DynamicResource Space_SM}">
+                    <TextBlock Foreground="{DynamicResource Brush_TextMuted}"
+                               FontSize="{DynamicResource Font_SizeCaption}"
+                               VerticalAlignment="Center">
+                        <Run Text="获取地址："/>
+                        <Run Text="steamcommunity.com/dev/apikey" FontFamily="{DynamicResource Font_Mono}"/>
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="ClearButton" Style="{StaticResource DialogButton}"
+                                Margin="{DynamicResource Space_XS}"
+                                Content="清除" Click="OnClearClick"
+                                ToolTipService.ShowOnDisabled="True"
+                                ToolTip="清除本机保存的 Key（点击后立即生效）"
+                                AutomationProperties.Name="清除 API Key"/>
+                        <Button Style="{StaticResource DialogButton}"
+                                Margin="{DynamicResource Space_XS}"
+                                Content="取消" Click="OnCancelClick" IsCancel="True"
+                                AutomationProperties.Name="取消"/>
+                        <Button Style="{StaticResource DialogPrimaryButton}"
+                                Content="保存" Click="OnSaveClick" IsDefault="True"
+                                AutomationProperties.Name="保存"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.GameManager.Models;
+using SystemToolkit.Core.GameManager.Online;
 using SystemToolkit.Core.GameManager.Services;
 
 namespace SystemToolkit.Modules.GameManager;
@@ -291,14 +292,21 @@ public partial class GameManagerViewModel : ObservableObject
 {
     private readonly SteamService _steam;
     private readonly ILogger _logger;
+    private readonly ISteamApiKeyStore? _apiKeyStore;
 
     private readonly System.Windows.Threading.Dispatcher? _dispatcher;
 
-    public GameManagerViewModel(SteamService steam, ILogger? logger = null, System.Windows.Threading.Dispatcher? dispatcher = null)
+    public GameManagerViewModel(
+        SteamService steam,
+        ILogger? logger = null,
+        System.Windows.Threading.Dispatcher? dispatcher = null,
+        ISteamApiKeyStore? apiKeyStore = null)
     {
         _steam = steam;
         _logger = logger ?? NullLogger.Instance;
         _dispatcher = dispatcher;
+        _apiKeyStore = apiKeyStore;
+        ApiKeyConfigured = apiKeyStore?.Get() is not null;
         GamesView = new ListCollectionView(Games)
         {
             Filter = FilterGame,
@@ -325,6 +333,55 @@ public partial class GameManagerViewModel : ObservableObject
     public ObservableCollection<GameCardVm> Games { get; } = new();
 
     public ICollectionView GamesView { get; }
+
+    // ================= A4 API Key（批次 4 在线库存，2026-09-13） =================
+
+    /// <summary>
+    /// 是否已配置 Steam Web API Key（驱动页头按钮文案）。
+    /// <para>🔴 只暴露**是否已设置**，不把 Key 本身放到可绑定属性上——避免明文进入绑定/日志/诊断导出。</para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _apiKeyConfigured;
+
+    partial void OnApiKeyConfiguredChanged(bool value) => OnPropertyChanged(nameof(ApiKeyButtonText));
+
+    /// <summary>页头入口按钮文案（状态化，未设置时明确告知而不是留空白按钮）。</summary>
+    public string ApiKeyButtonText => ApiKeyConfigured ? "API Key 已设置" : "API Key 未设置";
+
+    /// <summary>
+    /// 保存或清除 API Key（由 View 在录入小窗返回后调用），随后**重载一次**以应用在线增强。
+    /// <para>
+    /// 🔴 VM **不弹窗**：小窗由 View 负责（审查纪律：VM 直弹对话框属反模式）。
+    /// 传入 <c>null</c>/空白 = 清除。
+    /// </para>
+    /// </summary>
+    /// <param name="apiKey">用户填写的 Key；空白表示清除。</param>
+    public async Task ApplyApiKeyAsync(string? apiKey)
+    {
+        if (_apiKeyStore is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _apiKeyStore.Clear();
+            _logger.Info("已清除 Steam Web API Key");
+        }
+        else
+        {
+            _apiKeyStore.Set(apiKey);
+            // 🔴 日志只记"已保存"，绝不记 Key 本身（诊断导出会带走日志）
+            _logger.Info("已保存 Steam Web API Key（DPAPI 加密落盘）");
+        }
+
+        ApiKeyConfigured = _apiKeyStore.Get() is not null;
+        await LoadCommand.ExecuteAsync(null).ConfigureAwait(true); // 走命令 → 自动尊重 CanExecute（加载中不重入）
+    }
+
+    /// <summary>当前激活账户的 SteamID64（在线库存在线请求按账号查；无则 null 走退化为本地）。</summary>
+    private static string? ActiveSteamId64(SteamAllData data) =>
+        (data.Users.FirstOrDefault(u => u.MostRecent) ?? data.Users.FirstOrDefault())?.SteamId64;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -604,6 +661,14 @@ public partial class GameManagerViewModel : ObservableObject
         {
             SteamAllData data = await Task.Run(_steam.GetAllData).ConfigureAwait(true);
 
+            // 批次 4（二）在线增强：**本地为底、在线可选**。未装 Steam / 未配置 Key → 原样返回、零外呼；
+            // 失败 → 保留本地结果并回填 Error（页面如实标注来源，绝不把本地数据当完整库）。
+            data = data with
+            {
+                Inventory = await _steam.EnhanceInventoryAsync(
+                    data.Inventory, _apiKeyStore?.Get(), ActiveSteamId64(data)).ConfigureAwait(true),
+            };
+
             SteamInstalled = data.InstallInfo.Installed;
             SteamRunning = data.InstallInfo.IsRunning;
 
@@ -697,13 +762,16 @@ public partial class GameManagerViewModel : ObservableObject
             // CDN 封面兜底：只为**当前可见**且缺封面的卡片补（见 StartCoverFetch 注释）
             StartCoverFetch();
             GamesView.Refresh();
-            StatusLevel = 0;
-            SteamInventoryStats stats = data.Inventory.Stats;
+            // 数据来源如实标注（批次 4）：在线成功/本地降级/未配置 Key 三种措辞互不混淆。
+            // 在线降级不是"加载失败"，但必须让用户看见 → 状态栏转警示色（Level 1）。
+            StatusLevel = data.Inventory.Error is null ? 0 : 1;
             StatusText = SteamInstalled
-                ? BuildInventoryStatusText(stats, data.Libraries.Count)
+                ? BuildInventoryStatusText(data.Inventory, data.Libraries.Count, ApiKeyConfigured)
                 : "未检测到 Steam 客户端";
+            SteamInventoryStats stats = data.Inventory.Stats;
             _logger.Info(
-                $"游戏库加载完成：库存 {stats.Total} 款（已安装 {stats.Installed} / 未安装 {stats.NotInstalled}）"
+                $"游戏库加载完成：库存 {stats.Total} 款（来源 {data.Inventory.Source}，"
+                + $"已安装 {stats.Installed} / 未安装 {stats.NotInstalled}）"
                 + $"，当前展示 {VisibleGameCount} 款，SteamInstalled={SteamInstalled}");
             if (data.Inventory.Error is not null)
             {
@@ -758,16 +826,42 @@ public partial class GameManagerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 状态栏文案：**如实交代还有多少未安装的游戏**。
-    /// 只报「找到 N 款」会让用户以为库里就这些——那是最容易被忽略的状态欺骗。
+    /// 状态栏文案：**如实交代来源 + 还有多少未安装的游戏**。
+    /// 只报「找到 N 款」会让用户以为库里就这些——那是最容易被忽略的状态欺骗；
+    /// 同理，在线失败时必须写明"本地缓存"与原因，否则用户会以为看到的是完整库存（批次 4）。
     /// </summary>
-    private static string BuildInventoryStatusText(SteamInventoryStats stats, int libraryCount)
+    /// <param name="inventory">库存快照（含来源与降级原因）。</param>
+    /// <param name="libraryCount">库目录数。</param>
+    /// <param name="apiKeyConfigured">是否已配置 API Key（未配置时给中性提示，不是错误）。</param>
+    private static string BuildInventoryStatusText(
+        SteamInventorySnapshot inventory,
+        int libraryCount,
+        bool apiKeyConfigured)
     {
+        SteamInventoryStats stats = inventory.Stats;
+        bool online = inventory.Source == SteamInventorySource.Online;
+        string origin = online ? "在线" : "本地缓存";
         string head = stats.NotInstalled > 0
-            ? $"库存 {stats.Total} 款：已安装 {stats.Installed} · 另有 {stats.NotInstalled} 款未安装（勾选「显示未安装」查看）"
-            : $"库存 {stats.Total} 款（全部已安装）";
-        return $"{head} · 库 {libraryCount} 个";
+            ? $"库存 {stats.Total} 款（{origin}）：已安装 {stats.Installed}"
+                + $" · 另有 {stats.NotInstalled} 款未安装（勾选「显示未安装」查看）"
+            : $"库存 {stats.Total} 款（{origin}）：全部已安装";
+
+        string note = inventory.Error is not null
+            ? $" · 在线数据不可用：{inventory.Error}"
+            : (online || apiKeyConfigured) ? string.Empty : " · 未设置 API Key（仅显示本机数据）";
+
+        return $"{head}{note} · 库 {libraryCount} 个";
     }
+
+    /// <summary>
+    /// 单轮封面补全上限（批次 4 在线扩容后的保护）。在线库存可能带来上百条无封面条目，
+    /// 勾选「显示未安装」后全量外呼 = 上百次 CDN 请求（每张 10s 超时、并发 3）。
+    /// <para>
+    /// 🔴 只对"在线扩充后"生效：纯本地场景最多三四十条，永远碰不到 → 既有行为不变。
+    /// 剩余部分由用户**下次刷新**继续补（不做自动续轮——那等于变相取消上限）。
+    /// </para>
+    /// </summary>
+    private const int MaxCoverFetchPerPass = 40;
 
     /// <summary>
     /// 为「当前可见且缺封面」的卡片后台补封面（限并发 3、10s/张、失败静默保留占位）。
@@ -778,16 +872,26 @@ public partial class GameManagerViewModel : ObservableObject
     /// <para>
     /// 只取**可见**项：勾选关闭时不为几十上百款不显示的未安装游戏发外呼；
     /// 用户勾选「显示未安装」时由 <see cref="OnShowNotInstalledChanged"/> 再触发一次。
+    /// 单轮数量另受 <see cref="MaxCoverFetchPerPass"/> 约束。
     /// </para>
     /// </summary>
     private void StartCoverFetch()
     {
-        var coverless = Games
+        var candidates = Games
             .Where(g => !g.HasCover && (g.IsInstalled || ShowNotInstalled))
             .ToList();
+        var coverless = candidates.Take(MaxCoverFetchPerPass).ToList();
+        int deferred = candidates.Count - coverless.Count;
         if (coverless.Count == 0)
         {
             return;
+        }
+
+        if (deferred > 0)
+        {
+            _logger.Info(
+                $"封面补全：本轮处理 {coverless.Count} 张，另有 {deferred} 张待下次刷新继续"
+                + $"（单轮上限 {MaxCoverFetchPerPass}）");
         }
 
         string cacheDir = Path.Combine(

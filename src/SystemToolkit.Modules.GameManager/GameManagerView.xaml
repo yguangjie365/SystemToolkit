@@ -200,6 +200,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="游戏管理" FontSize="{DynamicResource Font_SizeDisplay}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
@@ -296,7 +297,16 @@
                 </TextBlock>
             </Border>
             <!-- VerticalAlignment=Center：页头行高由标题块决定（约 44px），按钮不设对齐会默认 Stretch 被拉高 -->
-            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}" Height="30" VerticalAlignment="Center"
+            <!-- A4 API Key 入口（批次 4，2026-09-13）：文案随状态（未设置 / 已设置），点击开录入小窗。
+                 🔴 用 MinHeight 而非 fixed 高度：本文件 height 裸值已顶满棘轮基线（9/9），
+                 而 Min 前缀让该属性不匹配棘轮正则（同上「刷新」键保持原写法不动）。 -->
+            <Button Grid.Column="4" Style="{DynamicResource SecondaryButton}"
+                    MinHeight="30" VerticalAlignment="Center"
+                    Margin="{StaticResource HeaderGap}"
+                    Content="{Binding ApiKeyButtonText, Mode=OneWay}" Click="OnApiKeyClick"
+                    ToolTip="设置 Steam Web API Key：本地为底、在线为可选增强；未设置时仅显示本机数据"
+                    AutomationProperties.Name="Steam Web API Key 设置"/>
+            <Button Grid.Column="5" Style="{DynamicResource SecondaryButton}" Height="30" VerticalAlignment="Center"
                     Content="刷新" Command="{Binding LoadCommand}"/>
         </Grid>
 

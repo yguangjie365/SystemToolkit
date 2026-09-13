@@ -34,6 +34,42 @@ public partial class GameManagerView : UserControl
     }
 
     /// <summary>
+    /// 页头「API Key」按钮 → 打开录入小窗（批次 4，2026-09-13）。
+    /// <para>
+    /// 🔴 窗口由 **View** 创建（VM 不弹窗——审查纪律）；小窗只回采文本/清除意图，
+    /// 落盘与随后重载交给 VM（<see cref="GameManagerViewModel.ApplyApiKeyAsync"/>）。
+    /// </para>
+    /// </summary>
+    private async void OnApiKeyClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var window = new SteamApiKeyWindow(_vm.ApiKeyConfigured);
+            if (Window.GetWindow(this) is Window owner)
+            {
+                window.Owner = owner;
+            }
+
+            if (window.ShowDialog() != true)
+            {
+                return; // 取消 / 关闭：保存与清除都不做
+            }
+
+            // 清除 → 传 null；保存 → 传用户输入（窗口已做非空校验）
+            await _vm.ApplyApiKeyAsync(window.ClearRequested ? null : window.ApiKey).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // 事件处理器不能用 await 之外的兜底，这里必须自收异常（VM 侧已记日志，此处只告知用户）
+            MessageBox.Show(
+                "API Key 保存失败：" + ex.Message,
+                "游戏管理",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
     /// 账户区按钮 → 左键弹出账户下拉（A1，2026-09-13）。与卡片 ⋯ 菜单同款手法：
     /// WPF 的 ContextMenu 默认只响应右键，左键呼出须手动置 <c>PlacementTarget</c> 并 <c>IsOpen</c>。
     /// 菜单的 DataContext 经 <c>PlacementTarget.Tag</c> 桥接（XAML 内注释），

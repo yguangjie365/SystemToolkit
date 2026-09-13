@@ -236,6 +236,12 @@ public partial class App : Application
         services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.DpapiOnlineCredentialStore>();
         services.AddSingleton<SystemToolkit.Core.Music.Online.IOnlineCredentialStore>(
             sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.DpapiOnlineCredentialStore>());
+        // 游戏管理（批次 4）：Steam Web API Key 存储（DPAPI 加密落盘，形状对齐音乐在线凭据）。
+        // 与在线流组件同款：模块侧用 GetService **可选**解析——缺席时在线库存整体降级为本地，
+        // 本地功能零影响（本方法同时服务于各模块守卫容器，不能依赖 Shell 的完整注册）。
+        services.AddSingleton<SystemToolkit.Infrastructure.Steam.DpapiSteamApiKeyStore>();
+        services.AddSingleton<SystemToolkit.Core.GameManager.Online.ISteamApiKeyStore>(
+            sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Steam.DpapiSteamApiKeyStore>());
         services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>();
         services.AddSingleton<SystemToolkit.Core.Music.Online.IAudioProxyService>(
             sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>());

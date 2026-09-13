@@ -31,10 +31,12 @@ public sealed class GameManagerModule : ModuleBase
         // Steam 全栈服务（Core/Game 域，旧工程 1:1 移植）
         services.AddSingleton(sp => new SteamService(sp.GetRequiredKeyedService<ILogger>("gamemanager")));
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger）+ UI Dispatcher（审查 🔴-5）
+        // 批次 4：API Key 存储经 GetService **可选**解析（组合根缺席时在线库存整体降级为本地，不抛）
         services.AddSingleton(sp => new GameManagerViewModel(
             sp.GetRequiredService<SteamService>(),
             sp.GetRequiredKeyedService<ILogger>("gamemanager"),
-            System.Windows.Application.Current?.Dispatcher));
+            System.Windows.Application.Current?.Dispatcher,
+            sp.GetService<SystemToolkit.Core.GameManager.Online.ISteamApiKeyStore>()));
         services.AddSingleton<GameManagerView>();
     }
 }
