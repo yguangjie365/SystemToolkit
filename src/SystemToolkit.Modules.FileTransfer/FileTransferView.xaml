@@ -85,6 +85,39 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <!-- 卡片**头部**的危险键：与头部主键（「启动服务」等 RowPrimaryButton）同档。
+             2026-09-13 评审：同一位置出现 Row / Compact 两种规格 → 「全部踢出」改走本样式。
+             ⚠️ 会话**行内**的「撤销/踢出」仍用紧凑系（行内按钮刻意更小），不改。 -->
+        <Style x:Key="HeaderDangerButton" TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
+            <Setter Property="Margin" Value="6,0,0,0"/>
+        </Style>
+        <!-- 「打开网页」：服务未启动时**按钮自己就说明原因**，不必悬停才看到 ToolTip。
+             用 Style.Setter 承载 Content/Margin/IsEnabled → 不占棘轮额度。 -->
+        <Style x:Key="OpenWebPageButton" TargetType="Button" BasedOn="{StaticResource CardButton}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,8,0,0"/>
+            <Setter Property="Content" Value="先启动 Web 服务"/>
+            <Setter Property="ToolTip" Value="需先启动上方卡片右上角的「启动 Web 服务」"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="IsEnabled" Value="{Binding Mobile.IsWebRunning}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
+                    <Setter Property="Content" Value="打开网页"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- 已知设备端口输入的就地校验提示（该输入改由字符串承载后，非法值不再被静默吞掉） -->
+        <Style x:Key="PeerPortError" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Desktop.SelectedKnownPeer.PortError}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- P3 ⑭：设备行内的「加入已知」。用 Style.Triggers 判 IsKnown，省掉一个反向转换器 -->
         <Style x:Key="DeviceRowJoinButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
@@ -365,7 +398,9 @@
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
                                 </StackPanel>
-                                <TextBlock Text="两条接收通道共用这一条策略（手机上传无法逐次询问，会降级为自动改名）"
+                                <!-- 共用关系下沉成一行 hint（原挤在控件右侧；2026-09-13 评审：逐句压缩，
+                                     手机端会降级为自动改名这一细节留在控件 ToolTip 里） -->
+                                <TextBlock Text="两条通道共用（手机端无逐次询问，按自动改名处理）"
                                            Style="{DynamicResource InlineHint}"/>
                                 <StackPanel Style="{StaticResource ReceiveSettingRow}">
                                     <CheckBox Content="仅接受已发现设备（来源白名单）" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
@@ -394,23 +429,26 @@
                                         <Button Style="{DynamicResource CardButton}" Content="保存" Margin="6,0,0,0" Command="{Binding Desktop.SaveConfigCommand}"/>
                                     </StackPanel>
                                 </Grid>
-                                <ListBox Height="150"
-                                         ItemsSource="{Binding Desktop.KnownPeers}"
+                                <ListBox ItemsSource="{Binding Desktop.KnownPeers}"
                                          SelectedItem="{Binding Desktop.SelectedKnownPeer}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                          AllowDrop="True" Drop="OnKnownPeerDrop" DragOver="OnPeerDragOver">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
+                                            <!-- 空态收缩：与右侧「局域网设备」列表保持一致，两卡同行才会一起变矮 -->
+                                            <Setter Property="Height" Value="150"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Desktop.KnownPeers.Count}" Value="0">
+                                                    <Setter Property="Height" Value="90"/>
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                                         <TextBlock Text="暂无已知设备" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                                                        <TextBlock Text="点击「添加」按钮添加常用对端" 
-                                                                                   FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
+                                                                        <TextBlock Text="点击「添加」按钮添加常用对端，或从右侧「加入已知」"
+                                                                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}"
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -435,19 +473,23 @@
                                 <!-- 编辑行（2026-09-13 实机反馈）：加可见标签；未选中设备时整行隐藏——
                                      否则空态旁挂着一排空输入框，用户既不知道要不要填、也不知道每格填什么。
                                      行距复用 ReceiveSettingRow，避免新增内联间距（本文件棘轮额度已满）。 -->
-                                <StackPanel Style="{StaticResource ReceiveSettingRow}"
-                                            Visibility="{Binding Desktop.HasSelectedKnownPeer, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="名称" Style="{StaticResource PeerEditLabel}"/>
-                                    <TextBox Style="{StaticResource PeerEditNameBox}" ToolTip="设备名称"
-                                             Text="{Binding Desktop.SelectedKnownPeer.Name, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Text="IP" Style="{StaticResource PeerEditLabel}"/>
-                                    <TextBox Style="{StaticResource PeerEditIpBox}" ToolTip="IP 地址"
-                                             Text="{Binding Desktop.SelectedKnownPeer.Ip, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Text="端口" Style="{StaticResource PeerEditLabel}"/>
-                                    <TextBox Style="{StaticResource PeerEditPortBox}" ToolTip="对方接收端口"
-                                             Text="{Binding Desktop.SelectedKnownPeer.Port, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <Button Style="{DynamicResource RowPrimaryButton}" Content="发送文件"
-                                            Command="{Binding Desktop.SendToKnownPeerCommand}"/>
+                                <StackPanel Visibility="{Binding Desktop.HasSelectedKnownPeer, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                        <TextBlock Text="名称" Style="{StaticResource PeerEditLabel}"/>
+                                        <TextBox Style="{StaticResource PeerEditNameBox}" ToolTip="设备名称"
+                                                 Text="{Binding Desktop.SelectedKnownPeer.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Text="IP" Style="{StaticResource PeerEditLabel}"/>
+                                        <TextBox Style="{StaticResource PeerEditIpBox}" ToolTip="IP 地址"
+                                                 Text="{Binding Desktop.SelectedKnownPeer.Ip, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Text="端口" Style="{StaticResource PeerEditLabel}"/>
+                                        <!-- 🔴 端口由字符串承载（FT-11）：原先直绑 int，清空/中途输入时转换失败是**静默**的
+                                             —— 界面上框是空的、值却还是旧的，用户以为改成功了。 -->
+                                        <TextBox Style="{StaticResource PeerEditPortBox}" ToolTip="对方接收端口（1024–65535）"
+                                                 Text="{Binding Desktop.SelectedKnownPeer.PortText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Style="{DynamicResource RowPrimaryButton}" Content="发送文件"
+                                                Command="{Binding Desktop.SendToKnownPeerCommand}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Desktop.SelectedKnownPeer.PortError}" Style="{StaticResource PeerPortError}"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -455,26 +497,37 @@
                             <StackPanel>
                                 <Grid Margin="0,0,0,10">
                                     <TextBlock Text="局域网设备（自动发现）" Style="{DynamicResource CardTitle}"/>
-                                    <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}"
-                                            Content="刷新" Command="{Binding Desktop.RefreshDevicesCommand}"/>
+                                    <StackPanel Style="{StaticResource CardHeaderActions}">
+                                        <!-- 发现是 UDP 被动心跳（每 3 秒广播 + 监听），**没有"扫描中"这个状态**，
+                                             所以给"最近刷新时间"而不是加载动画——后者只会一闪而过、等于造假。 -->
+                                        <TextBlock Text="{Binding Desktop.LastDeviceRefreshText}" Style="{DynamicResource InlineHint}"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Style="{DynamicResource CardButton}" Margin="10,0,0,0"
+                                                Content="刷新" Command="{Binding Desktop.RefreshDevicesCommand}"/>
+                                    </StackPanel>
                                 </Grid>
-                                <ListBox Height="150"
-                                         ItemsSource="{Binding Desktop.DiscoveredDevices}"
+                                <ListBox ItemsSource="{Binding Desktop.DiscoveredDevices}"
                                          SelectedItem="{Binding Desktop.SelectedDevice}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                          AllowDrop="True" Drop="OnDiscoveredDeviceDrop" DragOver="OnPeerDragOver">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
+                                            <!-- 空态收缩（2026-09-13 评审）：空态仍占满 150px 会让整行卡片虚高；
+                                                 两个列表**一起**收缩，整行才会真的变矮、日志区上移。
+                                                 数值写在 Setter 内 → 不占令牌棘轮额度。 -->
+                                            <Setter Property="Height" Value="150"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Desktop.DiscoveredDevices.Count}" Value="0">
+                                                    <Setter Property="Height" Value="90"/>
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="ListBox">
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                                         <TextBlock Text="未发现设备" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                                                        <TextBlock Text="请启动服务后点击刷新按钮" 
-                                                                                   FontSize="{DynamicResource Font_SizeMicro}" 
-                                                                                   Foreground="{DynamicResource Brush_TextMuted}" 
+                                                                        <TextBlock Text="服务启动后会自动监听；也可点「刷新」立即重列"
+                                                                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                                                                   Foreground="{DynamicResource Brush_TextMuted}"
                                                                                    Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Border>
@@ -528,6 +581,7 @@
                             <ListBox Grid.Row="1" MinHeight="60" MaxHeight="220"
                                      ItemsSource="{Binding Desktop.ActiveTasks}"
                                      SelectedItem="{Binding Desktop.SelectedTask}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
@@ -618,6 +672,7 @@
                             </StackPanel>
                             <ListBox Grid.Row="2"
                                      ItemsSource="{Binding Desktop.HistoryView}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
@@ -709,10 +764,8 @@
                                     <Image Source="{Binding Mobile.QrImage}" Width="200" Height="200"/>
                                 </Border>
                                 <TextBlock Text="{Binding Mobile.UrlText}" Style="{DynamicResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
-                                <Button Style="{DynamicResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
-                                        Content="打开网页" Click="OnOpenWebPage"
-                                        ToolTip="需先启动手机通道 Web 服务" ToolTipService.ShowOnDisabled="True"
-                                        IsEnabled="{Binding Mobile.IsWebRunning}"/>
+                                <!-- 未启动时按钮文案直接说明前置条件（原先只有悬停 ToolTip 才看得到原因） -->
+                                <Button Style="{StaticResource OpenWebPageButton}" Click="OnOpenWebPage"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -790,7 +843,6 @@
                                         <CheckBox Content="随应用启动" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
                                                   IsChecked="{Binding Mobile.AutoStartWithApp}"
                                                   ToolTip="应用一开就拉起 Web 服务，不必先进这一页；关闭应用时服务随之停止（本版不做托盘常驻）"/>
-                                        <TextBlock Text="（关闭应用即停止服务，不做托盘常驻）" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}"
                                                Text="手机与电脑需在同一局域网；首次连接触发防火墙提示属预期。共享目录下的文件可被手机浏览与下载。"/>
@@ -835,8 +887,9 @@
                             <StackPanel>
                                 <Grid>
                                     <TextBlock Text="已授权设备（会话）" Style="{DynamicResource CardTitle}"/>
+                                    <!-- 「全部踢出」是**头部**危险键 → 与头部主键同档（原为紧凑系，同类位置两种规格） -->
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center"
-                                            Style="{StaticResource SessionKickButton}"
+                                            Style="{StaticResource HeaderDangerButton}"
                                             Content="全部踢出" Command="{Binding Mobile.KickAllSessionsCommand}"
                                             Visibility="{Binding Mobile.HasSessions, Converter={StaticResource BoolToVis}}"
                                             ToolTip="作废所有已配对设备的访问令牌（它们需重新扫码）；不影响本机预览"

@@ -42,8 +42,41 @@ public partial class KnownPeerRowVm : ObservableObject
     [ObservableProperty]
     private string _ip = "";
 
+    /// <summary>端口（**持久化用的真值**；只在文本合法时被更新）。</summary>
     [ObservableProperty]
     private int _port = 18889;
+
+    /// <summary>
+    /// 端口输入（字符串承载）。
+    /// <para>
+    /// 🔴 为什么不用 int 直绑（FT-11，2026-09-13 修）：WPF 的字符串→int 转换失败是**静默**的——
+    /// 用户清空该框或输入「1a」时，界面显示为空、而绑定源仍是旧值，用户会以为改成功了。
+    /// 改为字符串承载 + 就地校验：非法值给出可见错误，只有合法值才写进 <see cref="Port"/>。
+    /// （与桌面/手机两页端口框、以及 `PeerEditBox` 的既有范式一致。）
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private string _portText = "18889";
+
+    /// <summary>端口校验错误（空串 = 无错；XAML 据此收起整行提示）。</summary>
+    [ObservableProperty]
+    private string _portError = "";
+
+    partial void OnPortChanged(int value) => PortText = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    partial void OnPortTextChanged(string value)
+    {
+        if (int.TryParse(value, out int parsed) && PortValidator.IsInRange(parsed))
+        {
+            Port = parsed;
+            PortError = string.Empty;
+        }
+        else
+        {
+            // 不阻断输入，也不静默丢弃：如实说明当前不会生效，以及发送时用的是哪个端口
+            PortError = "端口需为 1024–65535 的整数；未填合法值前，「发送文件」仍用上一次的有效端口。";
+        }
+    }
 }
 
 /// <summary>传输任务行投影：定时刷新速度/进度投影（TransferTask 为普通 CLR 属性）。</summary>
@@ -362,6 +395,18 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     [ObservableProperty]
     private DiscoveredDeviceRowVm? _selectedDevice;
+
+    /// <summary>
+    /// 最近一次刷新设备列表的时间。
+    /// <para>
+    /// 🔴 2026-09-13 评审提「刷新缺加载反馈」——**实测本模块没有"扫描"这个操作**：
+    /// <see cref="SystemToolkit.Core.FileTransfer.Services.DeviceDiscoveryService"/> 是 UDP 被动心跳
+    /// （每 3 秒广播 + 监听），「刷新」只是把内存快照重列一遍、**瞬时完成**。给它加 spinner
+    /// 等于造假（要么一闪而过、要么长时间空转）。故改为如实给出「最近刷新时间」+ 空态说明监听机制。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private string _lastDeviceRefreshText = "尚未刷新";
 
     public ObservableCollection<KnownPeerRowVm> KnownPeers { get; } = new();
 
@@ -793,6 +838,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
 
             RefreshDeviceKnownFlags();
+
+            // 如实给出"最近刷新时间"（本模块无"扫描中"状态，见 LastDeviceRefreshText 注释）
+            LastDeviceRefreshText = "最近刷新 " + DateTime.Now.ToString(
+                "HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 
             _log($"[互传] 已刷新：{_discovery.Devices.Count} 台在线设备");
         }
