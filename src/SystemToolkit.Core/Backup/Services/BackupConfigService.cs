@@ -30,6 +30,24 @@ public sealed class BackupAppSettings
     public int VerifyAfterBackupSampleSize { get; set; } = 200;
 
     /// <summary>
+    /// 未变文件跳过（B5b-③）：**默认 false（关闭）**。
+    /// <para>
+    /// 开启后：源文件的「字节数 + 修改时间」都与上一份**成功**快照完全一致时，
+    /// **不再读取源文件**，改为把上一份快照里的副本**硬链接**进本次快照
+    /// （同卷零拷贝；硬链接失败则自动回退为真实复制）。
+    /// </para>
+    /// <para>
+    /// 🔴 **为什么默认关**：<c>mtime + size</c> 是**预判**而不是校验——存在"内容变了但时间戳
+    /// 被改回"的误判，此时会**静默漏备份**。备份工具的信任属性高于速度。
+    /// </para>
+    /// <para>
+    /// 🔴 **一经开启、且本次确有复用条目，校验状态一律记 <c>skipped</c>**（本次没读源文件，
+    /// 不写 <c>passed</c>；见 <c>BackupService</c> 的状态诚实化）。
+    /// </para>
+    /// </summary>
+    public bool SkipUnchangedFiles { get; set; }
+
+    /// <summary>
     /// 恢复时的默认冲突处理策略（2026-09-07 新增，对齐旧版 AppSettings.RestoreConflictPolicy）。
     /// 取值见 <see cref="SystemToolkit.Core.Backup.Contracts.ConflictPolicy"/>：
     /// ask / overwrite / rename / skip；非法值一律钳回 rename。

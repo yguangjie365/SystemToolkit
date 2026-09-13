@@ -17,3 +17,9 @@ MIB_TCPTABLE_OWNER_PID
 MIB_TCPROW_OWNER_PID
 TCP_TABLE_CLASS
 ADDRESS_FAMILY
+
+// ── 备份域（B5b-③ 未变文件复用）────────────────────────────────────────────
+// 用途：把上一份快照里**未变文件**的副本「硬链接」进本次快照 —— 同卷零拷贝，
+// 且旧快照被保留策略删除后数据依然存活（.NET 10 **没有** CreateHardLink，
+// 只有 CreateSymbolicLink，而符号链接在旧快照被删后会指向空洞 = 静默丢数据）。
+CreateHardLink

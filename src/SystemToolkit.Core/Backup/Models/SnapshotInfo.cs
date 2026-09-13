@@ -39,6 +39,14 @@ public sealed class SnapshotInfo
     /// <summary>校验状态常量（取值见 Models.ChecksumStatuses：passed/failed/skipped）。</summary>
     public string ChecksumStatus { get; set; } = "passed";
 
+    /// <summary>
+    /// 本次快照中**复用上一份快照**（未重新读取源文件）的文件数（B5b-③）。
+    /// 该功能默认关闭，未开启时恒为 0；旧版清单无此字段，反序列化后同为 0。
+    /// 🔴 它 &gt; 0 意味着本快照的 <see cref="ChecksumStatus"/> **不可能**是 <c>passed</c>：
+    /// 那些文件的"源内容就是这些字节"在本快照里**没有证据**（本次根本没读源）。
+    /// </summary>
+    public int ReusedFileCount { get; set; }
+
     /// <summary>文件清单明细（manifest 专用；meta.json 轻量版不含此内容）。</summary>
     public List<FileEntry> Files { get; set; } = new List<FileEntry>();
 

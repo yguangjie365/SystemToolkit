@@ -197,13 +197,26 @@ public sealed class SnapshotManager
     }
 
     /// <summary>取最新的可读快照（按新→旧顺序返回首个 manifest 可解析者）；无快照返回 null。</summary>
-    public SnapshotInfo? LatestSnapshot()
+    public SnapshotInfo? LatestSnapshot() => LatestSnapshotWithDir()?.Info;
+
+    /// <summary>
+    /// 取最新的可读快照**及其目录**（新→旧首个 manifest 可解析者）；无快照返回 null。
+    /// <para>
+    /// 🔴 需要目录的场景（B5b-③ 未变文件复用要把上一份的副本硬链接进本次快照）**不能**用
+    /// <see cref="SnapshotInfo.BackupPath"/> —— 那是清单里记录的**历史绝对路径**，
+    /// 换过备份根目录或迁移过数据后即不可信；目录必须从当前磁盘结构取。
+    /// </para>
+    /// <para>
+    /// 单一判据：<see cref="LatestSnapshot"/> 直接复用本方法，避免"最新快照"两处各写一遍。
+    /// </para>
+    /// </summary>
+    public (string Dir, SnapshotInfo Info)? LatestSnapshotWithDir()
     {
         foreach (string d in AllSnapshotDirs())
         {
             SnapshotInfo? info = ReadSnapshot(d);
             if (info is not null)
-                return info;
+                return (d, info);
         }
         return null;
     }
@@ -243,6 +256,7 @@ public sealed class SnapshotManager
             TotalSize = info.TotalSize,
             Status = info.Status,
             ChecksumStatus = info.ChecksumStatus,
+            ReusedFileCount = info.ReusedFileCount,
         };
         WriteJsonAtomic(Path.Combine(snapDir, MetaName), light);
     }

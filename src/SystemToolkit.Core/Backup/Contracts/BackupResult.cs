@@ -37,6 +37,13 @@ public sealed class BackupResult
     /// </summary>
     public SnapshotVerifyReport? VerifyReport { get; init; }
 
+    /// <summary>
+    /// 本次备份中**复用上一份快照**（未重读源文件）的文件数（B5b-③；默认关时恒为 0）。
+    /// 🔴 &gt; 0 时 <see cref="ChecksumStatus"/> 必为 <c>skipped</c> —— 本次没读源文件，
+    /// 不能声称"源内容已校验"。
+    /// </summary>
+    public int ReusedFileCount { get; init; }
+
     /// <summary>失败条目明细列表（相对路径 + 失败原因）。</summary>
     public List<string> Failures { get; init; } = new List<string>();
 

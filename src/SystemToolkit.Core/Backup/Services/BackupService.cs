@@ -166,13 +166,53 @@ public sealed class BackupService : IBackupService
 
             // 并发复制 + 校验（MaxWorkers 调用时读取，设置变更后下次备份即生效）
             int maxWorkers = _maxWorkersOverride ?? _config.Settings.MaxWorkers;
+
+            // 🔴 B5b-③：未变文件复用（**默认关**）的复用源 = 上一份**成功**快照。
+            //    部分成功的快照清单本身不完整（缺的文件不在里面），不适合当基准。
+            IReadOnlyDictionary<string, FileEntry>? reuseEntries = null;
+            string? reuseFilesDir = null;
+            if (_config.Settings.SkipUnchangedFiles)
+            {
+                (string Dir, SnapshotInfo Info)? baseline = snapMgr.LatestSnapshotWithDir();
+                if (baseline is { } b && b.Info.Status == SnapshotStatuses.Success && b.Info.Files.Count > 0)
+                {
+                    // 按相对路径索引；多源扫描已保证相对路径唯一（带源前缀），此处仅做防御性去重
+                    reuseEntries = b.Info.Files
+                        .Where(f => !string.IsNullOrEmpty(f.RelativePath))
+                        .GroupBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                    reuseFilesDir = Path.Combine(b.Dir, SnapshotManager.FilesDir);
+                    log?.Invoke($"未变文件跳过已开启：以「{Path.GetFileName(b.Dir)}」为复用源"
+                        + "（仅当字节数与修改时间都一致时才复用；不一致一律重新复制）");
+                }
+                else
+                {
+                    log?.Invoke("未变文件跳过已开启，但没有可作为基准的成功快照 → 本次全部重新复制");
+                }
+            }
+
             reporter?.OnPhase("正在备份文件（复制 + SHA-256 校验）…");
-            (List<FileEntry>? entries, List<string>? failures) = await CopyAndVerifyAsync(
-                scan.Files, filesDir, reporter, maxWorkers, shadowMap, ct);
+            CopyOutcome copy = await CopyAndVerifyAsync(
+                scan.Files, filesDir, reporter, maxWorkers, shadowMap, reuseEntries, reuseFilesDir, ct);
+            List<FileEntry> entries = copy.Entries;
+            List<string> failures = copy.Failures;
+            if (copy.LinkFallbackCount > 0)
+            {
+                // 让"硬链接不可用"**可见**：否则现象是"开了未变跳过却还是那么慢"= 静默失效
+                log?.Invoke($"⚠️ 有 {copy.LinkFallbackCount} 个文件判定为未变，但硬链接失败"
+                    + "（目标盘可能不支持硬链接，或上一份快照的副本已不在）→ 已回退为重新复制");
+            }
             filesCopied = true;
 
             // 部分成功模式：有失败文件时仍写入快照，标记为 failed
             bool isPartial = failures.Count > 0;
+
+            // 🔴 B5b-③：只要本次存在"复用上一份快照"的条目，本次就**没有读过那些文件的源**。
+            //    这既决定校验状态不得写 passed（见下方），也必须在文案里说清。
+            bool reusedAny = copy.ReusedCount > 0;
+            string reuseText = reusedAny
+                ? $"（其中 {copy.ReusedCount} 个与上一份快照一致、未重读源文件；校验状态记为未完整校验）"
+                : "";
 
             // 写快照元数据；失败时保留已复制数据供人工处理（不删目录）
             var info = new SnapshotInfo
@@ -187,6 +227,7 @@ public sealed class BackupService : IBackupService
                 FileCount = entries.Count,
                 TotalSize = totalSize,
                 Status = isPartial ? SnapshotStatuses.Failed : SnapshotStatuses.Success,
+                ReusedFileCount = copy.ReusedCount,
                 Files = entries,
                 EmptyDirs = scan.EmptyDirs,
             };
@@ -198,11 +239,16 @@ public sealed class BackupService : IBackupService
 
             // 状态诚实化：**只有全量通过才写 passed**；抽样通过 / 未校验写 skipped（不谎报）；
             // 复制有失败或校验未通过一律 failed。
+            // 🔴 B5b-③：本次有"复用上一份快照"的条目时**一律不得写 passed** —— 那些文件本次
+            //    根本没读源；即便全量读回校验通过，也只证明"快照内的字节与继承来的哈希一致"，
+            //    证明不了"源文件当时就是这些字节"。把这种情况报成通过就是状态欺骗。
             string checksumStatus = isPartial || verify is { Success: false }
                 ? ChecksumStatuses.Failed
-                : verify is { Success: true, IsSampled: false }
-                    ? ChecksumStatuses.Passed
-                    : ChecksumStatuses.Skipped;
+                : reusedAny
+                    ? ChecksumStatuses.Skipped
+                    : verify is { Success: true, IsSampled: false }
+                        ? ChecksumStatuses.Passed
+                        : ChecksumStatuses.Skipped;
             info.ChecksumStatus = checksumStatus;
             try
             {
@@ -260,13 +306,14 @@ public sealed class BackupService : IBackupService
                     FileCount = entries.Count,
                     TotalSize = totalSize,
                     ChecksumStatus = checksumStatus,
-                    Message = $"备份部分成功：成功 {entries.Count} 个，失败 {failures.Count} 个",
+                    Message = $"备份部分成功：成功 {entries.Count} 个，失败 {failures.Count} 个{reuseText}",
                     VerifyReport = verify,
+                    ReusedFileCount = copy.ReusedCount,
                     Failures = failures,
                 };
             }
 
-            log?.Invoke($"【备份完成】规则「{rule.RuleName}」备份成功：{entries.Count} 个文件");
+            log?.Invoke($"【备份完成】规则「{rule.RuleName}」备份成功：{entries.Count} 个文件{reuseText}");
             return new BackupResult
             {
                 RuleId = rule.RuleId,
@@ -277,7 +324,8 @@ public sealed class BackupService : IBackupService
                 TotalSize = totalSize,
                 ChecksumStatus = checksumStatus,
                 VerifyReport = verify,
-                Message = $"备份成功：{entries.Count} 个文件",
+                Message = $"备份成功：{entries.Count} 个文件{reuseText}",
+                ReusedFileCount = copy.ReusedCount,
             };
         }
         catch (OperationCanceledException)
@@ -380,19 +428,33 @@ public sealed class BackupService : IBackupService
         }
     }
 
-    /// <summary>并发复制文件并边算 SHA-256。返回 (manifest 条目, 失败列表)。</summary>
-    private async Task<(List<FileEntry> Entries, List<string> Failures)> CopyAndVerifyAsync(
+    /// <summary>
+    /// 并发复制文件并边算 SHA-256；B5b-③ 起支持「未变文件复用」（命中则硬链接上一份快照的副本）。
+    /// </summary>
+    /// <param name="files">待备份文件。</param>
+    /// <param name="filesDir">本次快照的 files 目录。</param>
+    /// <param name="reporter">进度回调。</param>
+    /// <param name="maxWorkers">并行度。</param>
+    /// <param name="shadowMap">VSS：活动路径 → 卷影设备路径。</param>
+    /// <param name="reuseEntries">上一份快照的清单（按相对路径索引）；null = 不做复用。</param>
+    /// <param name="reuseFilesDir">上一份快照的 files 目录；null = 不做复用。</param>
+    /// <param name="ct">取消令牌。</param>
+    private async Task<CopyOutcome> CopyAndVerifyAsync(
         List<ScannedFile> files,
         string filesDir,
         IProgressReporter? reporter,
         int maxWorkers,
         IReadOnlyDictionary<string, string> shadowMap,
+        IReadOnlyDictionary<string, FileEntry>? reuseEntries,
+        string? reuseFilesDir,
         CancellationToken ct)
     {
         int total = files.Count;
         int done = 0;
         var failures = new List<string>();
         var entries = new List<FileEntry>();
+        int reusedCount = 0;
+        int linkFallbackCount = 0;
         object lockObj = new object();
         // 目录创建缓存：同一目录下大量文件并发复制时，避免重复 CreateDirectory 系统调用。
         // 关键实现：用 ConcurrentDictionary.GetOrAdd，其 valueFactory 在 key 真正加入字典前
@@ -424,9 +486,41 @@ public sealed class BackupService : IBackupService
                         return 0;
                     });
 
-                    // 流式复制时已对写入的数据计算源哈希；写入字节即源字节，
-                    // 故不再整文件重读目标做二次校验（去掉双倍 I/O）。记录该哈希作为文件指纹。
-                    (long size, string? hSrc) = Sha256Hasher.CopyAndHash(src, dst);
+                    // 🔴 B5b-③ 未变文件复用：先**只看元数据**（不读内容）判断能否复用。
+                    //    命中 → 不读源，直接把上一份的副本硬链接过来（同卷零拷贝）；
+                    //    硬链接失败（跨卷 / 文件系统不支持 / 旧副本已被删）→ 落到下面的真实复制。
+                    //    无论如何都**不留下"清单里有、快照里没有"的条目**。
+                    long size = 0;
+                    string hSrc = "";
+                    bool reused = false;
+                    if (reuseEntries is not null && reuseFilesDir is not null
+                        && reuseEntries.TryGetValue(rel, out FileEntry? prev) && prev is not null)
+                    {
+                        var srcInfo = new FileInfo(src);
+                        if (srcInfo.Exists
+                            && UnchangedFileReuse.IsReusable(prev, item.SourcePath, srcInfo.Length, srcInfo.LastWriteTime))
+                        {
+                            if (FileLinker.TryCreateHardLink(dst, Path.Combine(reuseFilesDir, rel)))
+                            {
+                                // 复用：硬链接与上一份共享同一份数据，故清单沿用它记录的哈希——
+                                // 这正是"未变"的含义（该文件本次**没有**被读取）。
+                                size = prev.Size;
+                                hSrc = prev.Sha256;
+                                reused = true;
+                            }
+                            else
+                            {
+                                Interlocked.Increment(ref linkFallbackCount);
+                            }
+                        }
+                    }
+
+                    if (!reused)
+                    {
+                        // 流式复制时已对写入的数据计算源哈希；写入字节即源字节，
+                        // 故不再整文件重读目标做二次校验（去掉双倍 I/O）。记录该哈希作为文件指纹。
+                        (size, hSrc) = Sha256Hasher.CopyAndHash(src, dst);
+                    }
 
                     int currentDone;
                     lock (lockObj)
@@ -450,6 +544,10 @@ public sealed class BackupService : IBackupService
                         });
                         done++;
                         currentDone = done;
+                        if (reused)
+                        {
+                            reusedCount++;
+                        }
                     }
                     // 回调移出锁外：UiProgressReporter 经 Dispatcher 封送，避免锁内跨线程
                     reporter?.OnProgress(currentDone, total, "备份中");
@@ -471,7 +569,7 @@ public sealed class BackupService : IBackupService
             throw;
         }
 
-        return (entries, failures);
+        return new CopyOutcome(entries, failures, reusedCount, linkFallbackCount);
     }
 
     /// <summary>VSS 设备路径 → 活动路径反查（manifest 语义）；非设备路径原样返回。</summary>
