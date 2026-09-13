@@ -14,6 +14,11 @@
       只给"IP + 文件名 + 字节数"是让人盲签。此窗口把**保存位置、目标盘剩余空间、
       同名状态与即将执行的动作**摆在一起，并在策略为「询问」时让用户逐次选择处理方式。
 
+      FT-3（B8b）：同一窗口按 Kind 分两态。**文本模式**只显示全文与字数，
+      文件语义的「保存到 / 目标盘 / 同名冲突」整块隐藏——文本既不落盘也没有同名问题，
+      留着那几行只会让人以为"要存到某个目录"。主按钮文案也换成「接收并复制」，
+      明确告诉用户会发生什么（写剪贴板），而不是含糊的「确定」。
+
       令牌：FontSize / CornerRadius 一律走 DynamicResource（棘轮零容忍）；
       Margin/Padding/Width 等尺寸优先写在 Style Setter 内（不触发棘轮正则）。
     -->
@@ -58,7 +63,7 @@
 
     <StackPanel Margin="{DynamicResource Space_LG}">
         <Grid>
-            <TextBlock Text="接收文件请求" Style="{DynamicResource CardTitle}"/>
+            <TextBlock x:Name="HeaderText" Text="接收文件请求" Style="{DynamicResource CardTitle}"/>
             <TextBlock x:Name="TimeoutHint" HorizontalAlignment="Right" VerticalAlignment="Center"
                        Style="{DynamicResource ConfirmMono}"/>
         </Grid>
@@ -79,15 +84,32 @@
             <TextBlock Grid.Row="0" Text="发送方" Style="{StaticResource ConfirmLabel}"/>
             <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PeerText" Style="{StaticResource ConfirmValue}"/>
 
-            <TextBlock Grid.Row="1" Text="文件" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock x:Name="FileLabel" Grid.Row="1" Text="文件" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
             <TextBlock Grid.Row="1" Grid.Column="1" x:Name="FileText" Style="{StaticResource ConfirmValue}" Margin="{DynamicResource Space_XXS}"/>
 
-            <TextBlock Grid.Row="2" Text="保存到" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock x:Name="DirLabel" Grid.Row="2" Text="保存到" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
             <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DirText" Style="{StaticResource ConfirmMono}" Margin="{DynamicResource Space_XXS}"/>
 
-            <TextBlock Grid.Row="3" Text="目标盘" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
+            <TextBlock x:Name="DiskLabel" Grid.Row="3" Text="目标盘" Style="{StaticResource ConfirmLabel}" Margin="{DynamicResource Space_XXS}"/>
             <TextBlock Grid.Row="3" Grid.Column="1" x:Name="DiskText" Style="{StaticResource ConfirmValue}" Margin="{DynamicResource Space_XXS}"/>
         </Grid>
+
+        <!-- 文本模式（FT-3）：全文可选中/可滚动。限高用 MinLines/MaxLines（行数，不是像素）——
+             既不写"魔法数字"尺寸、也不碰令牌棘轮的 Margin/Width/Height 额度。 -->
+        <Border x:Name="TextSection" Style="{StaticResource ConfirmSection}"
+                Visibility="Collapsed" Margin="{DynamicResource Space_MD}">
+            <StackPanel>
+                <TextBlock x:Name="TextMeta" Style="{DynamicResource ConfirmMono}"/>
+                <TextBox x:Name="TextBody" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                         MinLines="3" MaxLines="12"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                         Background="Transparent"
+                         Foreground="{DynamicResource Brush_TextPrimary}"
+                         FontFamily="{DynamicResource Font_Mono}"
+                         FontSize="{DynamicResource Font_SizeMicro}"
+                         Margin="{DynamicResource Space_XS}"/>
+            </StackPanel>
+        </Border>
 
         <Border x:Name="ConflictSection" Style="{StaticResource ConfirmSection}" Visibility="Collapsed">
             <StackPanel>

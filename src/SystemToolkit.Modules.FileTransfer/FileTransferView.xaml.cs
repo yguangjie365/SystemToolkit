@@ -51,6 +51,21 @@ public partial class FileTransferView : UserControl
                 dialog.ShowDialog();
                 return dialog.Decision; // 关窗/Esc 都收场为「拒绝」（窗口默认值）
             };
+            // 文本通道的交付动作（FT-3 / B8b）：剪贴板只能在 UI 线程写，故由 View 注入；
+            // 写失败返回 false —— VM 据此如实回 "剪贴板写入失败" 而不是假报送达。
+            Vm.Desktop.WriteClipboard = text =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(text);
+                    return true;
+                }
+                catch
+                {
+                    // 剪贴板被其它进程占用 / 打开失败（COMException 等）：一律按失败回报
+                    return false;
+                }
+            };
             Vm.Desktop.PickFiles = PickFiles;
             // 历史导出（P3 ⑮）：保存路径由 View 选，VM 只负责生成内容与写盘
             Vm.Desktop.PickExportPath = PickExportPath;

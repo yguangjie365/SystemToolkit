@@ -247,6 +247,20 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     /// </summary>
     public Func<TransferRequestEventArgs, TransferDecision>? ConfirmTransferRequest { get; set; }
 
+    /// <summary>
+    /// 把一段文本写入本机剪贴板（View 注入；返回是否成功）。
+    /// <para>
+    /// 为什么由 View 注入而不是 VM 直接调 <c>Clipboard</c>：与 <see cref="ConfirmRequest"/> /
+    /// <see cref="ConfirmTransferRequest"/> 同款约定（VM 不碰 UI 资源）；注入后还可被替换成
+    /// "必定失败"以验证诚实性判据。
+    /// </para>
+    /// <para>
+    /// ⚠️ 收到**文本**时它必须可用：没有它就没有交付。此时按**写入失败**处理（而非默认成功）
+    /// —— 缺能力时宁可如实报失败，也不假报送达。
+    /// </para>
+    /// </summary>
+    public Func<string, bool>? WriteClipboard { get; set; }
+
     /// <summary>文件选择对话框回调（View 注入；返回 null 表示用户取消）。</summary>
     public Func<IReadOnlyList<string>?>? PickFiles { get; set; }
 
@@ -1102,21 +1116,9 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         // 事件来自 WatsonTcp 回调线程：确认弹窗必须在 UI 线程
         RunOnUi(() =>
         {
-            // 首选富信息对话框（能看到存到哪、盘剩多少、同名会怎样）；View 未注入时退回简单确认，
-            // 保证"没有对话框也不能默默拒绝"——退回路径同样给出决定而非静默。
-            TransferDecision decision;
-            if (ConfirmTransferRequest is not null)
-            {
-                decision = ConfirmTransferRequest(e);
-            }
-            else
-            {
-                bool accept = ConfirmRequest?.Invoke(
-                    "接收文件请求",
-                    $"{e.PeerEndpoint} 想向你发送文件：\n\n「{e.FileName}」（{e.FileSize:N0} 字节）\n\n接受吗？"
-                    + "\n\n（不做任何响应则自动超时拒绝）") == true;
-                decision = accept ? TransferDecision.AcceptWith(TransferConflictPolicy.Rename) : TransferDecision.Reject;
-            }
+            TransferDecision decision = e.Kind == TransferKind.Text
+                ? ConfirmIncomingText(e)
+                : ConfirmIncomingFile(e);
 
             // 审查 🟠-2 采纳（2026-09-09）：fire-and-forget 的响应失败原本完全无痕——
             // 断网时用户点了「接受」但对面毫无反应，排查无从下手；补日志落地
@@ -1131,6 +1133,79 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                     }
                 }, TaskScheduler.Default);
         });
+    }
+
+    /// <summary>
+    /// 文件通道：首选富信息对话框（能看到存到哪、盘剩多少、同名会怎样）；
+    /// View 未注入时退回简单确认——保证"没有对话框也不能默默拒绝"。
+    /// </summary>
+    private TransferDecision ConfirmIncomingFile(TransferRequestEventArgs e)
+    {
+        if (ConfirmTransferRequest is not null)
+        {
+            return ConfirmTransferRequest(e);
+        }
+
+        bool accept = ConfirmRequest?.Invoke(
+            "接收文件请求",
+            $"{e.PeerEndpoint} 想向你发送文件：\n\n「{e.FileName}」（{e.FileSize:N0} 字节）\n\n接受吗？"
+            + "\n\n（不做任何响应则自动超时拒绝）") == true;
+        return accept ? TransferDecision.AcceptWith(TransferConflictPolicy.Rename) : TransferDecision.Reject;
+    }
+
+    /// <summary>
+    /// 文本通道：先问用户 → 再**写剪贴板** → 据实回执。
+    /// <para>
+    /// 🔴 写剪贴板成功与否直接决定回执（见 <see cref="ReceiveTextDecision"/>）：
+    /// 「接收文本」就是「写剪贴板」，写不进去必须回 <c>CLIPBOARD_WRITE_FAILED</c>，
+    /// 绝不能让对端收到"已送达"而用户剪贴板里什么都没有。
+    /// </para>
+    /// </summary>
+    private TransferDecision ConfirmIncomingText(TransferRequestEventArgs e)
+    {
+        bool accepted;
+        if (ConfirmTransferRequest is not null)
+        {
+            // 富对话框已按 Kind 切成文本形态（全文 + 字数），这里只取"用户是否同意"
+            accepted = ConfirmTransferRequest(e).Accept;
+        }
+        else
+        {
+            accepted = ConfirmRequest?.Invoke(
+                "收到一条文本",
+                $"{e.PeerEndpoint} 想向你发送一条文本（{e.TextLength} 字）：\n\n"
+                + $"{TransferText.Preview(e.Text)}\n\n"
+                + "接收后会写入你的剪贴板（会覆盖当前内容）。接受吗？\n\n（不做任何响应则自动超时拒绝）") == true;
+        }
+
+        if (!accepted)
+        {
+            return ReceiveTextDecision.Resolve(accepted: false, clipboardWritten: false);
+        }
+
+        bool wrote = false;
+        if (WriteClipboard is null || e.Text is null)
+        {
+            _logger.Warn($"[互传] 文本无法交付（未注入剪贴板写入能力或内容为空，task={e.TaskId}）——按写入失败处理。");
+        }
+        else
+        {
+            try
+            {
+                wrote = WriteClipboard(e.Text);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"[互传] 写剪贴板抛异常（task={e.TaskId}）：{ex.Message}");
+            }
+        }
+
+        if (!wrote)
+        {
+            _log("[互传] ⚠️ 剪贴板写入失败，本次文本未接收（已如实告知对方原因）。");
+        }
+
+        return ReceiveTextDecision.Resolve(accepted: true, clipboardWritten: wrote);
     }
 
     // ── 历史 ──

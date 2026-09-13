@@ -45,6 +45,52 @@ public partial class ReceiveConfirmWindow : Window
             ? request.PeerEndpoint
             : $"{request.PeerEndpoint} · {request.PeerDeviceName}";
 
+        if (request.Kind == TransferKind.Text)
+        {
+            RenderText(request);
+            return;
+        }
+
+        RenderFile(request);
+    }
+
+    /// <summary>
+    /// 文本模式：只显示**全文**与字数。
+    /// <para>
+    /// 🔴 全文，不做 120 字预览截断：用户要判断"接不接"必须看到全貌（方案 §5.2），
+    /// 只给开头等于让人在信息不全的情况下点头。
+    /// </para>
+    /// <para>
+    /// 本窗口**只负责问，不负责交付**：写剪贴板由 VM 在拿到"用户同意"之后做
+    /// （见 <see cref="ReceiveTextDecision"/>）——这样"回执"与"实际交付"是同一个事实。
+    /// </para>
+    /// </summary>
+    private void RenderText(TransferRequestEventArgs request)
+    {
+        Title = "收到一条文本";
+        HeaderText.Text = "收到一条文本";
+
+        // 文件专属信息行整块收起（Grid 行高为 Auto，全部收起即不占高度）
+        FileLabel.Visibility = Visibility.Collapsed;
+        FileText.Visibility = Visibility.Collapsed;
+        DirLabel.Visibility = Visibility.Collapsed;
+        DirText.Visibility = Visibility.Collapsed;
+        DiskLabel.Visibility = Visibility.Collapsed;
+        DiskText.Visibility = Visibility.Collapsed;
+        ConflictSection.Visibility = Visibility.Collapsed;
+
+        string text = request.Text ?? string.Empty;
+        TextSection.Visibility = Visibility.Visible;
+        TextBody.Text = text;
+        TextMeta.Text = $"共 {request.TextLength} 字（UTF-8 {TransferText.GetByteCount(text)} 字节）";
+
+        AcceptButton.Content = "接收并复制";
+        HintText.Text = "接收后文本会写入你的剪贴板（会覆盖当前剪贴板内容）。";
+    }
+
+    /// <summary>文件模式：既有行为，逐字保持（含同名冲突区与提示文案）。</summary>
+    private void RenderFile(TransferRequestEventArgs request)
+    {
         FileText.Text = $"{request.FileName} · {FormatUtil.FormatSize(request.FileSize)}";
 
         DirText.Text = string.IsNullOrEmpty(request.ReceiveDirectory) ? "—" : request.ReceiveDirectory;
