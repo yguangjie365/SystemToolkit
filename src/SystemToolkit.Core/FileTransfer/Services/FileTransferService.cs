@@ -86,6 +86,27 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// <summary>发送方等待握手确认的超时（含接收端确认门等待 + 人工点击延迟，2026-09-06 由 20s 放宽）。</summary>
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// 报文头（metadata）字节预算，**收发两侧都必须显式设置**。
+    /// <para>
+    /// 🔴 为什么必须改：文本走 metadata 通道，而 WatsonTcp 的 <c>MaxHeaderSize</c> 默认是
+    /// <b>262144 字节（256 KB）</b> —— 与 <see cref="TransferText.MaxBytes"/> **同值**，
+    /// 等于"正好写满就发不出去"。这不是推断：B8a-2 的边界用例实测在 15 s 内收不到任何回执，
+    /// 逐层排查后从 WatsonTcp 的 API 文档坐实默认值（"Default is 262144 (256KB)"）。
+    /// </para>
+    /// <para>
+    /// 取 1 MB 的依据：文本序列化进 JSON 时，非 ASCII 会被转义（CJK 1 码元 → 6 字节，
+    /// emoji 2 码元 → 12 字节），最坏膨胀约 3 倍 —— 262144 字节上限的 emoji 文本
+    /// 序列化后约 768 KB，1 MB 留有余量。
+    /// </para>
+    /// <para>
+    /// 代价是这条 DoS 防护（"防止畸形/恶意头耗尽内存"）被放宽了 4 倍：
+    /// 单连接最坏 1 MB × 最大连接数。仅发送文本的连接需要它，**文件路径的报文头始终只有几百字节**，
+    /// 所以实际暴露面没有变化。
+    /// </para>
+    /// </summary>
+    internal const int MaxHeaderBytes = 1024 * 1024;
+
     /// <inheritdoc/>
     public IReadOnlyList<TransferTask> ActiveTasks => _tasks.Values
         .Where(t => t.Status is TransferStatus.Pending
@@ -152,6 +173,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         // ip 传 null 表示监听任意 IP（WatsonTcpServer 文档约定）
         _server = new WatsonTcpServer(null!, settings.TransferPort);
+        // 报文头预算：默认 256 KB 装不下"写满上限"的文本（见 MaxHeaderBytes 的说明与实测）
+        _server.Settings.MaxHeaderSize = MaxHeaderBytes;
         _server.Events.MessageReceived += OnServerMessageReceived;
         _server.Events.ClientDisconnected += OnClientDisconnected;
         _server.Start();
@@ -254,6 +277,47 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         // 队列限流下的实际发送在后台进行，进度经事件上报
         _ = SendFileCoreAsync(task, peerIp, peerPort, linkedCts.Token, pairCode);
+        return await Task.FromResult(task).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<TransferTask> SendTextAsync(
+        string text, string peerIp, int peerPort, string? pairCode = null, CancellationToken ct = default)
+    {
+        if (_sendGate is null)
+            throw new InvalidOperationException("传输服务未启动，请先调用 StartAsync。");
+
+        // 🔴 本地判据先行，且**不碰网络**：不合规的文本不是一次传输尝试，
+        // 抛出去让调用方立刻看到（而不是造一个"传过但失败"的假任务污染任务列表与历史）。
+        TextValidation validation = TransferText.Validate(text);
+        if (!validation.IsValid)
+        {
+            _logger.Warn($"拒绝发送文本：{validation.ErrorText}（UTF-8 {validation.ByteCount} 字节）。");
+            throw new ArgumentException(validation.ErrorText, nameof(text));
+        }
+
+        var task = new TransferTask
+        {
+            Kind = TransferKind.Text,
+            // 文本没有文件名，用预览充当任务/历史的显示名（与历史条目同一口径）
+            FileName = TransferText.Preview(text),
+            FileSize = validation.ByteCount,
+            Direction = TransferDirection.Send,
+            PeerEndpoint = $"{peerIp}:{peerPort}",
+            Status = TransferStatus.Pending,
+            StartedAt = DateTimeOffset.UtcNow,
+        };
+        _tasks[task.Id] = task;
+        RaiseUpdated(task);
+
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _sendCts[task.Id] = linkedCts;
+
+        _logger.Info(
+            $"入队发送文本：{validation.CharCount} 字（UTF-8 {validation.ByteCount} 字节）"
+            + $"→ {peerIp}:{peerPort}，任务 {task.Id}。");
+
+        _ = SendTextCoreAsync(task, text, peerIp, peerPort, linkedCts.Token, pairCode);
         return await Task.FromResult(task).ConfigureAwait(false);
     }
 
@@ -833,6 +897,116 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         }
     }
 
+    /// <summary>
+    /// 文本发送核心：建一条短连接 → 发 <c>Text</c> → 等 <c>TextAck</c> → 终态。
+    /// <para>
+    /// 与 <see cref="SendFileCoreAsync"/> 的差别：**没有分片循环、没有哈希、没有暂停语义**。
+    /// 文本只占一条 metadata 消息，谈不上"暂停到一半"——所以这里对 <c>Pause</c>/<c>Resume</c>
+    /// **不做任何状态表演**（假装把一条已发完的消息"暂停"就是状态欺骗）。
+    /// </para>
+    /// </summary>
+    private async Task SendTextCoreAsync(
+        TransferTask task, string text, string peerIp, int peerPort, CancellationToken ct, string? pairCode)
+    {
+        WatsonTcpClient? client = null;
+        bool gateAcquired = false;
+        SemaphoreSlim gate = _sendGate
+            ?? throw new InvalidOperationException("传输服务未启动，无法发送。");
+        try
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            gateAcquired = true;
+
+            client = new WatsonTcpClient(peerIp, peerPort);
+            // 文本要装进报文头 → 与接收端对称地抬高这一侧的预算（文件路径无需，其头只有几百字节）
+            client.Settings.MaxHeaderSize = MaxHeaderBytes;
+            var ackTcs = new TaskCompletionSource<TransferMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            client.Events.MessageReceived += (_, e) =>
+            {
+                TransferMessage? tm = ParseMessage(e.Metadata);
+                if (tm is null)
+                {
+                    return;
+                }
+
+                switch (tm.Type)
+                {
+                    case TransferMessageType.TextAck:
+                        ackTcs.TrySetResult(tm);
+                        break;
+                    case TransferMessageType.Cancel:
+                        task.ErrorMessage = "对端取消了传输。";
+                        task.ReasonCode = TransferReasonCodes.UserCancel;
+                        ackTcs.TrySetCanceled();
+                        break;
+                    case TransferMessageType.Error:
+                        // 对端给的原因码是权威来源（例如「剪贴板写入失败」「被拒绝」），本机不臆造
+                        task.ReasonCode = tm.ReasonCode;
+                        ackTcs.TrySetException(new InvalidOperationException(tm.Error ?? "对端报告错误。"));
+                        break;
+                }
+            };
+
+            client.Connect();
+
+            task.Status = TransferStatus.Transferring;
+            RaiseUpdated(task);
+
+            var message = new TransferMessage
+            {
+                Type = TransferMessageType.Text,
+                TaskId = task.Id,
+                Text = text,
+                PairCode = pairCode,
+            };
+            await client.SendAsync(string.Empty, BuildMetadata(message), ct).ConfigureAwait(false);
+
+            // 超时含接收端确认门的人工等待（与文件握手同一上限，口径一致）
+            await AwaitWithTimeout(ackTcs.Task, HandshakeTimeout, ct).ConfigureAwait(false);
+
+            task.Status = TransferStatus.Completed;
+            task.TransferredBytes = task.FileSize;
+            task.FinishedAt = DateTimeOffset.UtcNow;
+            RaiseUpdated(task);
+            RaiseCompleted(task);
+            _logger.Info($"文本已送达：{task.FileName}（{task.FileSize} 字节 → {peerIp}，任务 {task.Id}）。");
+        }
+        catch (OperationCanceledException)
+        {
+            await TrySendControlToPeerAsync(client, new TransferMessage { Type = TransferMessageType.Cancel, TaskId = task.Id })
+                .ConfigureAwait(false);
+            FinalizeTerminal(task, TransferStatus.Cancelled, null);
+            _logger.Info($"文本发送已取消：任务 {task.Id}。");
+        }
+        catch (Exception ex)
+        {
+            await TrySendControlToPeerAsync(client, new TransferMessage { Type = TransferMessageType.Error, TaskId = task.Id, Error = ex.Message })
+                .ConfigureAwait(false);
+            FinalizeTerminal(task, TransferStatus.Failed, ex.Message);
+            // 对端若已给出原因码（拒绝 / 剪贴板失败），FinalizeTerminal 不会覆盖它
+            _logger.Warn($"文本发送失败：任务 {task.Id} → {peerIp}:{peerPort}：{ex.Message}（原因码 {task.ReasonCode ?? "无"}）。");
+        }
+        finally
+        {
+            try
+            { if (gateAcquired) gate.Release(); }
+            catch (ObjectDisposedException) { /* StopAsync 竞态 */ }
+            try
+            { if (_sendCts.TryRemove(task.Id, out CancellationTokenSource? cts)) cts.Dispose(); }
+            catch { }
+            try
+            { client?.Dispose(); }
+            catch { /* 忽略释放异常 */ }
+            try
+            {
+                if (task.Status is TransferStatus.Completed or TransferStatus.Failed or TransferStatus.Cancelled)
+                    _tasks.TryRemove(task.Id, out _);
+            }
+            catch { }
+        }
+    }
+
     private static async Task TrySendControlToPeerAsync(WatsonTcpClient? client, TransferMessage tm)
     {
         if (client is null)
@@ -852,7 +1026,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     {
         TransferMessage? tm = ParseMessage(e.Metadata);
         if (tm is null)
+        {
+            // 反序列化失败（含"对端版本更新、消息类型本端不认识"）——**不得静默丢弃**：
+            // 能认出类型名时明确回一个 Error，让对端立刻知道原因，而不是傻等到超时。
+            HandleUnparsableMessage(e.Client.Guid, e.Client.IpPort, e.Metadata);
             return;
+        }
 
         Guid guid = e.Client.Guid;
         ReceiveContext ctx = _receiveContexts.GetOrAdd(guid, _ => new ReceiveContext());
@@ -862,6 +1041,9 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             {
                 case TransferMessageType.Handshake:
                     HandleHandshake(guid, e.Client.IpPort, tm, ctx);
+                    break;
+                case TransferMessageType.Text:
+                    HandleText(guid, e.Client.IpPort, tm, ctx);
                     break;
                 case TransferMessageType.Chunk:
                     HandleChunk(tm, e.Data ?? Array.Empty<byte>(), ctx);
@@ -933,12 +1115,25 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// 握手处理：来源白名单 → 配对码 → 并发上限 → 分片大小 / 文件大小校验 → **磁盘空间预检**
     /// → 建临时 .part 文件（断点续传）→ 回确认。
     /// </summary>
-    private void HandleHandshake(Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx)
+    /// <summary>
+    /// 接收准入的两道**共同**安全边界（协议 §2）：来源白名单 + 配对码。文件与文本共用同一份判据。
+    /// <para>
+    /// 🔴 为什么提成一个方法：文本能直接进本机剪贴板，敏感度**不低于**文件（可能是一条密码、
+    /// 验证码或带 token 的链接）。若只给文件路径设白名单而让文本自己再写一遍，两处判据迟早漂移，
+    /// 而漂移的方向总是"某一类悄悄放宽"——本仓已经吃过"同一判据两处各写"的亏。
+    /// </para>
+    /// </summary>
+    /// <param name="guid">对端连接标识（回错误用）。</param>
+    /// <param name="ipPort">对端 IP:Port。</param>
+    /// <param name="tm">收到的消息（取配对码与任务 ID）。</param>
+    /// <param name="subject">日志里"这是什么"的描述（文件「名，任务号」或文本「字数，任务号」）。</param>
+    /// <returns>true = 放行；false = 已回带原因码的 Error，调用方直接返回。</returns>
+    private bool TryPassAdmissionGates(Guid guid, string ipPort, TransferMessage tm, string subject)
     {
-        // 安全边界一：只接受设备发现在线的对端（防止任意主机投递文件）
+        // 安全边界一：只接受设备发现在线的对端（防止任意主机投递）
         if (_requireKnownPeer && !IsKnownPeer(ipPort))
         {
-            _logger.Warn($"拒绝来自未知设备的传输握手：{ipPort}（{tm.FileName}，任务 {tm.TaskId}）——不在已发现在线列表。");
+            _logger.Warn($"拒绝来自未知设备的传输请求：{ipPort}（{subject}）——不在已发现在线列表。");
             _ = SendControlAsync(guid, new TransferMessage
             {
                 Type = TransferMessageType.Error,
@@ -946,16 +1141,16 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Error = "来源设备未在设备发现列表中，拒绝接收。",
                 ReasonCode = TransferReasonCodes.PeerNotDiscovered,
             });
-            return;
+            return false;
         }
 
         // 安全边界一·b：配对码校验（2026-09-06 批次二）——首个携带有效码的发送方 IP
-        // 记入已配对列表（服务运行期内免码，覆盖多文件批次）；一次性消费防重放
+        // 记入已配对列表（服务运行期内免码，覆盖多文件/多文本批次）；一次性消费防重放
         if (_requirePairing && !IsPairedIp(ipPort))
         {
             if (_pairing is null || string.IsNullOrEmpty(tm.PairCode) || !_pairing.TryConsume(tm.PairCode))
             {
-                _logger.Warn($"拒绝传输握手：配对码无效或缺失（{ipPort}，{tm.FileName}，任务 {tm.TaskId}）。");
+                _logger.Warn($"拒绝传输请求：配对码无效或缺失（{ipPort}，{subject}）。");
                 _ = SendControlAsync(guid, new TransferMessage
                 {
                     Type = TransferMessageType.Error,
@@ -963,12 +1158,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     Error = "配对码无效或已过期，请从接收端获取最新配对码。",
                     ReasonCode = TransferReasonCodes.PairingInvalid,
                 });
-                return;
+                return false;
             }
 
             // 🟠 审查 2026-09-10（🟠-5）：补冒号守卫（与 IsPairedIp/IsKnownPeer 同款）——
             // 无冒号时 LastIndexOf 返回 -1，ipPort[..-1] 抛 ArgumentOutOfRangeException，
-            // 被外层 catch 记成"接收处理异常"，把本可正常完成的握手记成故障。
+            // 被外层 catch 记成"接收处理异常"，把本可正常完成的传输记成故障。
             int colon = ipPort.LastIndexOf(':');
             if (colon > 0)
             {
@@ -978,6 +1173,16 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 }
             }
             _logger.Info($"配对成功：{ipPort} 已加入本运行期已配对列表（后续传输免码）。");
+        }
+
+        return true;
+    }
+
+    private void HandleHandshake(Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx)
+    {
+        if (!TryPassAdmissionGates(guid, ipPort, tm, $"{tm.FileName}，任务 {tm.TaskId}"))
+        {
+            return;
         }
 
         // 关旧上下文资源 + 终态化旧任务（同连接二次握手产生僵尸任务，填占 activeReceives 配额 / 哈希泄漏）
@@ -1292,6 +1497,202 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             _logger.Error("接收握手处理异常（确认通过后）。", ex);
             FailReceiveContext(guid, ctx, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 文本接收（FT-3，B8a）。与文件路径的差别：**不落盘、不分片、无同名冲突、无磁盘预检**。
+    /// <para>
+    /// 🔴 **文本恒走确认门**，与 <see cref="TransferSettings.RequireReceiveConfirmation"/> 无关。
+    /// 理由有二：①「接收一条文本」这个动作**就是**「写进本机剪贴板」，而写剪贴板必须由 UI 完成
+    /// （Core 不依赖 WPF）——没有 UI 就没有交付，此时若照旧静默回 <c>TextAck</c>，
+    /// 等于告诉发送方"已送达"而实际什么都没发生（状态欺骗）；② 剪贴板是**全局单例**，
+    /// 不打招呼就覆盖用户正在用的内容，本身就是一种打扰（剪贴板劫持）。
+    /// </para>
+    /// <para>
+    /// 确认通过后由 <see cref="AwaitTextConfirmationAsync"/> 回 <c>TextAck</c>；
+    /// 拒绝/超时回 <c>Error</c> + 原因码（**用户拒绝**与**剪贴板写失败**是两个不同的码）。
+    /// </para>
+    /// </summary>
+    private void HandleText(Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx)
+    {
+        TextValidation validation = TransferText.Validate(tm.Text);
+        if (!TryPassAdmissionGates(guid, ipPort, tm, $"{validation.CharCount} 字文本，任务 {tm.TaskId}"))
+        {
+            return;
+        }
+
+        // 同一连接上已有活跃接收（例如正在进行文件传输）：拒绝，**绝不以"新请求替换旧任务"处理**。
+        // 文件握手那样做是合理的（同一份文件重发起），但让一条文本去取消别人正在传的文件是破坏性的。
+        if (ctx.Task is not null && HoldsReceiveResources(ctx.Task.Status))
+        {
+            _logger.Warn(
+                $"拒绝接收文本：连接 {ipPort} 上已有进行中的接收任务（{ctx.Task.FileName}，任务 {ctx.Task.Id}）"
+                + "——不得用一条文本替换进行中的文件传输。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = "接收端该连接上已有进行中的传输，请稍后重试。",
+                ReasonCode = TransferReasonCodes.ConcurrencyLimit,
+            });
+            return;
+        }
+
+        // 并发接收上限：与文件同一条闸（文本虽小，但"文本可以无限灌"同样是攻击面）
+        int nowActive = Interlocked.Increment(ref _activeReceives);
+        if (nowActive > _maxConcurrentReceives)
+        {
+            Interlocked.Decrement(ref _activeReceives);
+            _logger.Warn($"拒绝接收文本：并发接收已达上限 {_maxConcurrentReceives}（来源 {ipPort}）。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = "接收端并发传输已达上限，请稍后重试。",
+                ReasonCode = TransferReasonCodes.ConcurrencyLimit,
+            });
+            return;
+        }
+
+        // 长度校验：对端未校验时（旧版本 / 非本工具实现）本端必须拦下，**绝不截断后当成功**
+        if (!validation.IsValid)
+        {
+            Interlocked.Decrement(ref _activeReceives);
+            bool tooLong = validation.Kind == TextValidationKind.TooLong;
+            string reason = tooLong ? "文本超出单条上限，已拒绝接收。" : "收到空文本，已拒绝接收。";
+            _logger.Warn($"拒绝接收文本：{reason}（来源 {ipPort}，任务 {tm.TaskId}，UTF-8 {validation.ByteCount} 字节）。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = reason,
+                // 空文本是本工具自己就不允许发的情况，没有独立成因码；超限有专码
+                ReasonCode = tooLong ? TransferReasonCodes.TextTooLong : null,
+            });
+            return;
+        }
+
+        var task = new TransferTask
+        {
+            Id = tm.TaskId, // 与发送方任务 ID 关联
+            Kind = TransferKind.Text,
+            FileName = TransferText.Preview(tm.Text),
+            FileSize = validation.ByteCount,
+            Direction = TransferDirection.Receive,
+            PeerEndpoint = ipPort,
+            Status = TransferStatus.Negotiating,
+            StartedAt = DateTimeOffset.UtcNow,
+        };
+        ctx.Task = task; // 必须挂上：ReleaseReceiveSlot 以「任务仍登记在 ctx」为归还并发槽的前提
+        _tasks[task.Id] = task;
+        RaiseUpdated(task);
+
+        var pending = new PendingConfirm();
+        _pendingConfirms[task.Id] = pending;
+        pending.TimeoutCts = new CancellationTokenSource(_receiveConfirmTimeout);
+        pending.TimeoutCts.Token.Register(() =>
+        {
+            if (_pendingConfirms.TryRemove(task.Id, out PendingConfirm? timedOut))
+            {
+                timedOut.TimedOut = true;
+                timedOut.Gate.TrySetResult(TransferDecision.Reject);
+            }
+        });
+
+        _logger.Info($"等待接收确认（文本）：{validation.CharCount} 字 ← {ipPort}，任务 {task.Id}。");
+        TransferRequested?.Invoke(this, new TransferRequestEventArgs(task.Id, task.FileName, task.FileSize, ipPort)
+        {
+            Kind = TransferKind.Text,
+            // 🔴 全文，不做 120 字预览截断：用户要判断"接不接"必须看到全貌
+            Text = tm.Text,
+            TextLength = validation.CharCount,
+            PeerDeviceName = ResolvePeerDeviceName(ipPort),
+        });
+
+        _ = Task.Run(() => AwaitTextConfirmationAsync(guid, ipPort, tm, ctx, task, pending));
+    }
+
+    /// <summary>
+    /// 文本确认门等待方：接受 → 回 <c>TextAck</c>；拒绝/超时 → 失败并回带原因码的错误；被替换/断开/停止 → 静默退出。
+    /// <para>
+    /// 🔴 刻意**不在这里写剪贴板**：交付由 UI 在回复确认门**之前**完成（写成功才回 Accept）。
+    /// 这样"回执"与"实际交付"是同一个事实，不存在"先说成功、失败再改口"的窗口。
+    /// </para>
+    /// </summary>
+    private async Task AwaitTextConfirmationAsync(
+        Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx, TransferTask task, PendingConfirm pending)
+    {
+        TransferDecision decision;
+        try
+        {
+            decision = await pending.Gate.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // 连接断开 / 对端取消 / 服务停止——任务已由相应路径终态化
+        }
+        finally
+        {
+            pending.TimeoutCts?.Dispose();
+            pending.TimeoutCts = null;
+        }
+
+        if (!decision.Accept)
+        {
+            // 原因码优先级：超时 → CONFIRM_TIMEOUT；UI 给了具体码（如剪贴板写失败）→ 用它；否则 → USER_REJECT
+            string reasonCode = pending.TimedOut
+                ? TransferReasonCodes.ConfirmTimeout
+                : decision.ReasonCode ?? TransferReasonCodes.UserReject;
+            string reason = pending.TimedOut
+                ? "接收端未响应确认，已自动拒绝。"
+                : TransferReasonCodes.Describe(reasonCode);
+            task.Status = TransferStatus.Failed;
+            task.ErrorMessage = reason;
+            task.ReasonCode = reasonCode;
+            task.FinishedAt = DateTimeOffset.UtcNow;
+            ReleaseReceiveSlot(task);
+            RaiseUpdated(task);
+            RaiseCompleted(task);
+            _tasks.TryRemove(task.Id, out _);
+            _logger.Info($"文本接收被拒绝：任务 {task.Id}——{reason}（原因码 {reasonCode}）。");
+            try
+            {
+                await SendControlAsync(guid, new TransferMessage
+                {
+                    Type = TransferMessageType.Error,
+                    TaskId = tm.TaskId,
+                    Error = reason,
+                    ReasonCode = reasonCode,
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"文本拒绝回执发送失败（任务 {task.Id}）：{ex.Message}");
+            }
+            return;
+        }
+
+        // 接受：交付（写剪贴板）已由 UI 完成，这里只负责如实回执
+        task.Status = TransferStatus.Completed;
+        task.TransferredBytes = task.FileSize;
+        task.FinishedAt = DateTimeOffset.UtcNow;
+        ReleaseReceiveSlot(task);
+        RaiseUpdated(task);
+        RaiseCompleted(task);
+        _tasks.TryRemove(task.Id, out _);
+        _logger.Info($"文本已接收并交付：{task.FileName}（{task.FileSize} 字节 ← {ipPort}，任务 {task.Id}）。");
+        try
+        {
+            await SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.TextAck,
+                TaskId = tm.TaskId,
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"文本回执发送失败（任务 {task.Id}）：{ex.Message}");
         }
     }
 
@@ -1844,13 +2245,17 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         long? durationMs = task.FinishedAt is { } finished && task.StartedAt != default
             ? (long)(finished - task.StartedAt).TotalMilliseconds
             : null;
+        bool isText = task.Kind == TransferKind.Text;
         string dir = task.Direction == TransferDirection.Send ? "发送" : "接收";
         AppLog.Write(LogEntry.Create(
             level, _logger.Source,
-            $"传输结束：{dir}「{task.FileName}」→ {task.Status}"
+            $"{(isText ? "文本" : "传输")}结束：{dir}「{task.FileName}」→ {task.Status}"
                 + (string.IsNullOrEmpty(task.ErrorMessage) ? string.Empty : $"（{task.ErrorMessage}）")
                 + (string.IsNullOrEmpty(task.ReasonCode) ? string.Empty : $" [原因码 {task.ReasonCode}]"),
-            action: task.Direction == TransferDirection.Send ? "SendFile" : "ReceiveFile",
+            // 动作名按方向 × 种类四分（文本若记成 SendFile，日志检索会把两种完全不同的行为混在一起）
+            action: task.Direction == TransferDirection.Send
+                ? (isText ? "SendText" : "SendFile")
+                : (isText ? "ReceiveText" : "ReceiveFile"),
             outcome: outcome,
             durationMs: durationMs));
     }
@@ -1891,21 +2296,97 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
     private static TransferMessage? ParseMessage(Dictionary<string, object>? meta)
     {
-        if (meta is null)
-            return null;
-        if (!meta.TryGetValue(MetaKey, out object? raw))
-            return null;
-        string? json = raw switch
-        {
-            string s => s,
-            JsonElement je => je.ValueKind == JsonValueKind.String ? je.GetString() : je.GetRawText(),
-            _ => raw.ToString(),
-        };
+        string? json = ExtractRawJson(meta);
         if (string.IsNullOrEmpty(json))
             return null;
         try
         { return JsonSerializer.Deserialize<TransferMessage>(json, JsonOpts); }
         catch (JsonException) { return null; }
+    }
+
+    /// <summary>从 WatsonTcp 的 metadata 里取出那段 JSON（键固定为 <see cref="MetaKey"/>）。</summary>
+    private static string? ExtractRawJson(Dictionary<string, object>? meta)
+    {
+        if (meta is null)
+            return null;
+        if (!meta.TryGetValue(MetaKey, out object? raw))
+            return null;
+        return raw switch
+        {
+            string s => s,
+            JsonElement je => je.ValueKind == JsonValueKind.String ? je.GetString() : je.GetRawText(),
+            _ => raw.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// 反序列化失败时的兜底：**不再静默丢弃**（方案 §3.2）。
+    /// <para>
+    /// 典型场景：对端版本更新，发来本端 <see cref="TransferMessageType"/> 里还没有的类型。
+    /// 旧行为是 <see cref="ParseMessage"/> 把 <c>JsonException</c> 咽掉 → 本端毫无反应、
+    /// 对端傻等到超时，两端都拿不到原因。现在只要能认出类型名就明确回一个 <c>Error</c>。
+    /// </para>
+    /// <para>
+    /// 认不出类型名（metadata 缺失 / 根本不是本协议的报文）时**只记日志、不回错误**：
+    /// 那未必是协议对端，回一个"我们不认识你"的消息只会制造噪音。
+    /// </para>
+    /// </summary>
+    private void HandleUnparsableMessage(Guid guid, string ipPort, Dictionary<string, object>? meta)
+    {
+        (string? typeName, string? taskId) = TryPeekEnvelope(meta);
+        if (string.IsNullOrEmpty(typeName))
+        {
+            _logger.Warn($"收到无法解析的消息（{ipPort}）——metadata 里没有可识别的协议报文，既不处理也不回错误。");
+            return;
+        }
+
+        _logger.Warn(
+            $"收到本版本不支持的消息类型：{ipPort}（类型 {typeName}，任务 {taskId ?? "未知"}）"
+            + "——已回错误，不静默丢弃（两端版本可能不一致）。");
+        _ = SendControlAsync(guid, new TransferMessage
+        {
+            Type = TransferMessageType.Error,
+            TaskId = taskId ?? string.Empty,
+            // 这类"协议层不兼容"没有成因码（原因码表按约定只收传输语义的码），
+            // 文案里带上类型名让对端/用户能直接判断"是不是版本不一致"。
+            Error = $"不支持的消息类型：{typeName}。两端版本可能不一致，请更新后重试。",
+        });
+    }
+
+    /// <summary>
+    /// 尽力从未知报文里取出「类型名」与「任务 ID」——**不依赖能否反序列化成
+    /// <see cref="TransferMessage"/>**（枚举值未知时它必失败）。
+    /// </summary>
+    private static (string? TypeName, string? TaskId) TryPeekEnvelope(Dictionary<string, object>? meta)
+    {
+        string? json = ExtractRawJson(meta);
+        if (string.IsNullOrEmpty(json))
+            return (null, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return (null, null);
+
+            string? type = null;
+            string? taskId = null;
+            foreach (JsonProperty property in doc.RootElement.EnumerateObject())
+            {
+                // ⚠️ 先判 ValueKind：JsonElement.GetString 对非字符串会抛异常（本仓既有实证）
+                if (property.Value.ValueKind != JsonValueKind.String)
+                    continue;
+                if (type is null && string.Equals(property.Name, "Type", StringComparison.OrdinalIgnoreCase))
+                    type = property.Value.GetString();
+                else if (taskId is null && string.Equals(property.Name, "TaskId", StringComparison.OrdinalIgnoreCase))
+                    taskId = property.Value.GetString();
+            }
+
+            return (type, taskId);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
     }
 
     // internal + InternalsVisibleTo：消毒口径有直测锁定（v5 🟡-4，反向验证见 FileTransferServiceTests）

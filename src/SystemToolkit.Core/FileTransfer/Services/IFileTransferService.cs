@@ -88,6 +88,29 @@ public interface IFileTransferService : IAsyncDisposable
     Task<TransferTask> SendFileAsync(string filePath, string peerIp, int peerPort, string? pairCode, CancellationToken ct = default);
 
     /// <summary>
+    /// 发送一条文本 / 剪贴板内容（FT-3，B8a）。
+    /// <para>
+    /// 文本走 metadata 通道、**没有消息体** —— 因此不分片、不续传、不落盘；
+    /// 接收端把它写进剪贴板后回 <c>TextAck</c>，写不进去则拒绝并回
+    /// <see cref="TransferReasonCodes.ClipboardWriteFailed"/>。
+    /// </para>
+    /// <para>
+    /// 🔴 **本方法在文本不合规时抛 <see cref="ArgumentException"/> 且不发起任何连接**：
+    /// 空文本 / 纯空白、或 UTF-8 字节数超过 <see cref="TransferText.MaxBytes"/>。
+    /// 为什么是抛异常而不是返回一个「失败的任务」——那不是一次传输尝试，
+    /// 记进任务列表与历史只会污染成"传过但失败了"的假象。调用方（UI）应当先用
+    /// <see cref="TransferText.Validate"/> 预校验并禁用发送按钮，这里是防御性兜底。
+    /// </para>
+    /// </summary>
+    /// <param name="text">文本内容。</param>
+    /// <param name="peerIp">对端 IP。</param>
+    /// <param name="peerPort">对端 TCP 端口。</param>
+    /// <param name="pairCode">一次性配对码（接收端开启 RequirePairing 时必填）。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <returns>传输任务对象（状态经 <see cref="TaskUpdated"/> / <see cref="TaskCompleted"/> 上报）。</returns>
+    Task<TransferTask> SendTextAsync(string text, string peerIp, int peerPort, string? pairCode = null, CancellationToken ct = default);
+
+    /// <summary>
     /// 取消传输任务。
     /// </summary>
     Task CancelAsync(string taskId);

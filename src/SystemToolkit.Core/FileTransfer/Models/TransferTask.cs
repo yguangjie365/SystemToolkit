@@ -77,6 +77,16 @@ public sealed class TransferTask
     /// <summary>任务唯一 ID。</summary>
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// 内容种类（文件 / 文本；B8a）。
+    /// <para>
+    /// 文本任务**没有文件**：<see cref="FilePath"/> 恒为空、不需要分片与断点续传，
+    /// <see cref="FileName"/> 存的是 <see cref="TransferText.PreviewLength"/> 字预览而非文件名。
+    /// 取用方（任务列表、历史写入、日志）必须先看本字段，否则会把预览当成文件名展示。
+    /// </para>
+    /// </summary>
+    public TransferKind Kind { get; init; }
+
     /// <summary>文件名（不含路径）。</summary>
     public string FileName { get; init; } = string.Empty;
 
