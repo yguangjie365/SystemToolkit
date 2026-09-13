@@ -42,6 +42,14 @@
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
             <Setter Property="Padding" Value="8,3"/>
             <Setter Property="MinWidth" Value="0"/>
+            <!-- 2026-09-13 实机反馈：卡片操作行三键（商店页面 / 安装 / 启动）字体统一加粗 -->
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <!-- 卡片主键（安装 / 启动）：与上面副键（商店页面）同字重。
+             ⚠️ 不能直接改 UI.Common 的 PrimaryButton —— 那是全应用共享样式，改它会把所有模块的
+             主键一起加粗。故此处派生局部样式，只作用于卡片操作行。 -->
+        <Style x:Key="CardPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="FontWeight" Value="Bold"/>
         </Style>
         <!-- 卡片元数据文本（HTML .meta-item：mono 微字弱色） -->
         <Style x:Key="CardMetaText" TargetType="TextBlock">
@@ -59,13 +67,20 @@
             <Setter Property="Margin" Value="7,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <!-- 工具行搜索框外壳（2026-09-13 UI 评审：原先内联固定宽，窄窗时与右侧排序/勾选/
-             「启动 Steam」互相挤压 → 改**弹性**）。Min/Max 前缀不匹配棘轮正则，故上下限写在 Setter 内亦合规。 -->
+        <!-- 工具行搜索框外壳。2026-09-13 实机反馈「靠左布置」后定为**定宽 + 靠左**：
+             🔴 上一版用 `Stretch` + `MaxWidth` 想做「弹性」是**错的**——WPF 里 `Stretch` 只在元素
+             能填满整个格时才贴边；一旦尺寸被 `MaxWidth`（或 `Width`）截断，**富余空间按居中分配**，
+             于是它悬在 1652px 宽的 `*` 列正中（实机截图实测左缘距内容左缘 340px）。
+             🔴 而 `Left` + `MinWidth` 也拿不到「弹性」：`Left` 下元素宽度 = 内容期望宽（空 TextBox
+             极小）→ 只剩 MinWidth 生效，等于定宽。**「撑满上限 + 贴左」在纯布局层无法同时成立**，
+             故取定宽。宽度取 320 = 卡片同宽（本页原始设计值），且它在最小窗口（1240 逻辑宽）下
+             仍有富余——`*` 列此时 ≈460，不会被排序/勾选/「启动 Steam」挤到溢出。
+             ⚠️ 仓内其它页搜索框同样是定宽（音乐在线搜索 `Width=220`、局域网扫描 `Grid Width=220`），
+             故此选择与全局惯例一致。Width 写在 Setter 内（不匹配棘轮正则），基线不受影响。 -->
         <Style x:Key="SearchBoxChrome" TargetType="Border">
             <Setter Property="Height" Value="30"/>
-            <Setter Property="MinWidth" Value="180"/>
-            <Setter Property="MaxWidth" Value="420"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Width" Value="320"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -189,19 +204,10 @@
         </Style>
         <!-- ============ B2 未安装显示（2026-09-13） ============
              尺寸一律走 Style Setter / 具名 Thickness：本文件 Width / BorderThickness / StrokeThickness
-             裸值已顶满 UiTokenRatchet 基线，内联数字字面量会直接变红。 -->
-        <!-- 徽章外边距：与卡片既有两个徽章完全等值（12,8,12,8）。用具名 Thickness 而非 Space_*
-             —— 后者四边同值，会改变垂直间距、把徽章顶偏 -->
-        <Thickness x:Key="BadgeGap">12,8,12,8</Thickness>
+             裸值已顶满 UiTokenRatchet 基线，内联数字字面量会直接变红。
+             （卡片「未安装」徽章连同其 CardStateBadge 样式与 BadgeGap 具名 Thickness 已于同日实机反馈后删除。） -->
         <!-- 工具行勾选前的横向间隙：只加左侧，不给整行凭空加高度 -->
         <Thickness x:Key="ToolRowGap">16,0,0,0</Thickness>
-        <Style x:Key="CardStateBadge" TargetType="Border">
-            <Setter Property="HorizontalAlignment" Value="Right"/>
-            <Setter Property="Margin" Value="{StaticResource BadgeGap}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XS}"/>
-            <Setter Property="Padding" Value="7,2"/>
-        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -526,20 +532,11 @@
                                                                FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_DangerText}"/>
                                                 </Border>
                                             </StackPanel>
-                                            <!-- 未安装（B2，2026-09-13）：中性灰 —— 不借绿(已安装)/琥珀(下载中)/红(库离线)任一语义色，
-                                                 否则会被读成"可安装/推荐"。与上面两个徽章互斥（判据见 GameCardVm.StateKind） -->
-                                            <StackPanel VerticalAlignment="Bottom"
-                                                        Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}">
-                                                <StackPanel.Background>
-                                                    <StaticResource ResourceKey="Brush_CoverOverlay"/>
-                                                </StackPanel.Background>
-                                                <Border Style="{StaticResource CardStateBadge}"
-                                                        Background="{DynamicResource Brush_SurfaceAlt}"
-                                                        BorderBrush="{DynamicResource Brush_Border}">
-                                                    <TextBlock Text="未安装" FontFamily="{DynamicResource Font_Mono}"
-                                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
-                                                </Border>
-                                            </StackPanel>
+                                            <!-- 未安装徽章（B2，2026-09-13 加入 → 同日实机反馈**移除**）：
+                                                 「未安装」不是需要警示的状态，而在封面上反复盖章反而稀释了唯一有信息量的
+                                                 区分——操作行的主键已经不同（未安装=「安装」／已安装=「启动」）。
+                                                 详情面板的「未安装」状态徽章保留（那里是单条信息区，需要文字交代）。
+                                                 故 CardStateBadge / BadgeGap 一并成为死资源，已删除。 -->
                                         </Grid>
                                     </Border>
                                     <StackPanel Margin="14,12,14,14">
@@ -582,13 +579,13 @@
                                                 </Button>
                                                 <!-- 安装引导（批次 4 · B3）：未安装游戏的唯一闭环动作。
                                                      点击调 steam://install/<appid>，交给 Steam 弹安装向导（本程序不下载）。 -->
-                                                <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="安装" Margin="4,0,0,0"
+                                                <Button Grid.Column="1" Style="{StaticResource CardPrimaryButton}" Content="安装" Margin="4,0,0,0"
                                                         Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}"
                                                         AutomationProperties.Name="安装此游戏"
                                                         Command="{Binding DataContext.InstallGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
-                                                <!-- 已安装：启动（打开目录/卸载收纳进 ⋯ 菜单） -->
-                                                <Button Grid.Column="1" Style="{DynamicResource PrimaryButton}" Content="启动" Margin="4,0,0,0"
+                                                <!-- 已安装：启动（对应副键恒为「商店页面」；打开安装目录在详情面板内） -->
+                                                <Button Grid.Column="1" Style="{StaticResource CardPrimaryButton}" Content="启动" Margin="4,0,0,0"
                                                         Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
                                                         Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>

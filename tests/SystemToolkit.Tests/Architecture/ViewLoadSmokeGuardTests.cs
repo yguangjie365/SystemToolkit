@@ -391,9 +391,9 @@ public class ViewLoadSmokeGuardTests
     /// 游戏管理视图全页加载冒烟（2026-09-06 布局对齐参考稿随附）。
     /// <para>
     /// 本轮改动引入两个模板求值期风险模式，必须以「真实加载 + 填数据 + Measure」验证：
-    /// ① 封面 hover 的 EventTrigger Storyboard 用 TargetName 引用 DataTemplate 内命名元素；
-    /// ② 未安装徽章遮罩经 StaticResource 引用 UserControl.Resources 里的渐变笔刷。
-    /// 用例覆盖三种卡态：有封面已安装 / 无封面（字母占位）/ 未安装（下载徽章）。
+    /// ① 卡片 hover 的 EventTrigger Storyboard 用 TargetName 引用 DataTemplate 内命名元素；
+    /// ② 卡片态徽章遮罩（下载/更新中、库离线）经 StaticResource 引用 UserControl.Resources 里的渐变笔刷。
+    /// 用例覆盖四种卡态：有封面已安装 / 无封面（字母占位）/ 更新中（进度徽章）/ 未安装（安装+商店操作行）。
     /// 与其它视图用例同类串行——Application 全 AppDomain 单实例，必须经 EnsureApplication 复用。
     /// </para>
     /// </summary>
@@ -420,7 +420,8 @@ public class ViewLoadSmokeGuardTests
                 vm.Games.Add(new GameCardVm(MakeGame(814380, "Sekiro", stateFlags: 4), "C:\\cover-a.jpg", false, vm));
                 vm.Games.Add(new GameCardVm(MakeGame(1245620, "ELDEN RING", stateFlags: 4), string.Empty, false, vm));
                 vm.Games.Add(new GameCardVm(MakeGame(2215430, "Torchlight", stateFlags: 6), string.Empty, false, vm));
-                // 第 4 态（B2）：未安装 —— 覆盖「未安装」徽章模板、只留「商店页面」的操作行、占用显示「—」
+                // 第 4 态（B2）：未安装 —— 覆盖未安装态操作行（安装+商店两键）、占用显示「—」。
+                // 注：卡片「未安装」角标已于 2026-09-13 实机反馈后移除，故此处不再覆盖该徽章。
                 vm.Games.Add(new GameCardVm(MakeGame(570, "Dota 2", stateFlags: 0, installed: false), string.Empty, false, vm));
                 vm.GamesView.Refresh();
 
