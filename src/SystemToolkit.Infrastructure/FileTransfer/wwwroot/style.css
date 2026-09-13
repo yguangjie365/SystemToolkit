@@ -1152,3 +1152,51 @@ a {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* ============ 证书变更横幅（协议 §6.3） ============
+   仅在服务端证书指纹与"上次记录"不一致时，由 app.js 展开（默认 hidden）。
+   用 warning 语义色而非 danger：证书轮换是正常维护动作（90 天到期 / 换网卡 IP），
+   红屏会把用户推向"我是不是被中间人攻击了"的误判——提示要明确，但不该制造恐慌。 */
+.cert-banner {
+    margin: var(--sp-lg) var(--sp-lg) 0;
+    padding: var(--sp-lg);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-strong);
+    border-left: 4px solid var(--warning);
+    border-radius: var(--r-lg);
+}
+
+.cert-banner[hidden] {
+    display: none;
+}
+
+.cert-banner__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--warning);
+    margin-bottom: var(--sp-sm);
+}
+
+.cert-banner__body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.cert-banner__fp {
+    margin-top: var(--sp-md);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    word-break: break-all;
+    color: var(--text-muted);
+}
+
+.cert-banner__btn {
+    margin-top: var(--sp-lg);
+    padding: var(--sp-sm) var(--sp-lg);
+    font-size: 13px;
+    color: var(--text-on-accent);
+    background: var(--accent);
+    border: none;
+    border-radius: var(--r-md);
+}

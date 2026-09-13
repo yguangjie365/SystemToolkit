@@ -30,6 +30,10 @@
     // 未完成上传的持久化键：下拉刷新/重载后仍能列出「待续传」。
     // 用 sessionStorage（关标签页即清）——长期残留无意义，服务端 .part 另有清理策略。
     const PENDING_STORAGE_KEY = "stk_pending_uploads";
+    // 上次见到的 HTTPS 证书指纹（协议 §6.3）：服务端 90 天轮换或换网卡 IP 会重签证书，
+    // 浏览器随即提示"不受信任"——若不解释，用户极易误判为中间人攻击。
+    // 指纹由 /api/cert-info 下发（JS 拿不到 TLS 层证书），只做本地比对，不上报任何东西。
+    const CERT_FP_STORAGE_KEY = "stk_cert_fingerprint";
     // WebSocket 地址：ws(s)://当前主机/ws（带令牌）。
     // 必须是函数而非常量——配对是异步的，TOKEN 在页面初始化时才会拿到（扫码前为空）。
     const wsUrl = () => (window.location.protocol === "https:" ? "wss://" : "ws://")
@@ -1470,6 +1474,58 @@
     }
 
     /**
+     * 核对 HTTPS 证书指纹（协议 §6.3）：与上次记录的比对，不一致就挂出常驻横幅。
+     *
+     * 首次访问只记基线、不打扰用户 —— 没有基线就谈不上"变更"，此时弹提示纯属噪音。
+     * 拿不到 /api/cert-info 时**静默返回**：这是锦上添花的安全提示，不能反过来拦住主流程。
+     */
+    async function checkCertFingerprint() {
+        let info;
+        try {
+            const resp = await fetch(API_BASE + "/api/cert-info", { cache: "no-store" });
+            if (!resp.ok) return;
+            info = await resp.json();
+        } catch (e) {
+            return;
+        }
+
+        if (!info || !info.https || !info.fingerprint) return; // 明文 HTTP 模式：无证书可比
+
+        const seen = localStorage.getItem(CERT_FP_STORAGE_KEY);
+        if (!seen) {
+            localStorage.setItem(CERT_FP_STORAGE_KEY, info.fingerprint);
+            return;
+        }
+        if (seen === info.fingerprint) return;
+
+        showCertBanner(info.fingerprint, seen);
+    }
+
+    /** 展开证书变更横幅；用户点「知道了」才写入新指纹并收起（避免提示一闪而过被忽略）。 */
+    function showCertBanner(currentFp, previousFp) {
+        const banner = document.getElementById("certBanner");
+        const detail = document.getElementById("certBannerDetail");
+        if (!banner || !detail) return;
+
+        detail.textContent = "当前：" + formatFingerprint(currentFp)
+            + "　上次：" + formatFingerprint(previousFp);
+        banner.hidden = false;
+
+        const ack = document.getElementById("certBannerAck");
+        if (ack) {
+            ack.addEventListener("click", () => {
+                localStorage.setItem(CERT_FP_STORAGE_KEY, currentFp);
+                banner.hidden = true;
+            });
+        }
+    }
+
+    /** 指纹按 2 位一组分隔，便于人眼与电脑端显示的指纹逐段核对。 */
+    function formatFingerprint(hex) {
+        return String(hex || "").replace(/(..)/g, "$1 ").trim();
+    }
+
+    /**
      * 扫码配对：URL 上带 ?c= 时，用短期配对码换取长期令牌并存入 localStorage，
      * 然后把配对码从地址栏抹掉（避免它被存进浏览器历史/分享出去）。
      * @returns {Promise<boolean>} 是否已持有可用令牌
@@ -1516,6 +1572,9 @@
         renderBreadcrumb();
         initUploadZone();
         initVisibilityHandler();
+
+        // 证书指纹核对（协议 §6.3）：免令牌端点，故与配对结果无关，先挂上不影响主流程
+        checkCertFingerprint();
 
         // 加载初始文件列表
         fetchFiles("");

@@ -18,27 +18,61 @@ public partial class FileTransferMobileViewModel : ObservableObject
     private readonly IFileWebServer _web;
     private readonly PairingService _pairing;
     private readonly Action<string> _log;
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
 
     /// <remarks>
-    /// 🟡 审查 2026-09-10（🟡-13）：本 VM 与 <see cref="FileTransferDesktopViewModel"/> 的差异是**有意的**——
-    /// 它目前只有 <c>DispatcherTimer</c>（Tick 本就在 UI 线程执行），没有任何需要编组的后台事件订阅，
-    /// 因此不接 <c>Dispatcher</c>。
+    /// 🟡 审查 2026-09-10（🟡-13）曾记录：本 VM 只有 <c>DispatcherTimer</c>（Tick 本就在 UI 线程），
+    /// 无需编组，故不接 <c>Dispatcher</c>。
     /// <para>
-    /// 若将来在此 VM 里订阅核心层事件（如 <c>ITransferService</c> 的 TaskUpdated），**必须**照 Desktop 的
-    /// <c>RunOnUi</c> 模式补「显式 Dispatcher 注入 + 死线程检测 + BeginInvoke」，
-    /// 不要直接抓 <c>Application.Current?.Dispatcher</c>（Application 为 null 时静默跳过）、
-    /// 也不要用同步 <c>Invoke</c>（有死锁风险）。
-    /// </para>
-    /// <para>
-    /// 说明：此刻提前加一个**无人调用**的 RunOnUi 只会变成死代码并触发 IDE0051
-    /// （Release 的 TreatWarningsAsErrors 会直接失败），故以本条约定替代代码。
+    /// **2026-09-13 起前提已变**：会话列表要订阅 <see cref="IFileWebServer.SessionsChanged"/>
+    /// （由请求线程 / 后台线程触发），于是按那条约定补上「显式 Dispatcher 注入 + 死线程检测 +
+    /// BeginInvoke」——约定触发时就照约定做，而不是抓 <c>Application.Current?.Dispatcher</c>
+    /// （Application 为 null 时静默跳过）或用同步 <c>Invoke</c>（死锁风险）。测试传 null → 直执行。
     /// </para>
     /// </remarks>
-    public FileTransferMobileViewModel(IFileWebServer web, PairingService pairing, Action<string> log)
+    public FileTransferMobileViewModel(
+        IFileWebServer web,
+        PairingService pairing,
+        Action<string> log,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         _web = web;
         _pairing = pairing;
         _log = log;
+        _dispatcher = dispatcher;
+
+        // 会话的签发/撤销/过期都发生在服务端 → 订阅事件刷新列表（可能在任意线程，故走 RunOnUi）
+        _web.SessionsChanged += (_, _) => RefreshSessions();
+    }
+
+    /// <summary>后台事件 → UI 线程编组（与 Desktop VM 同一模式，理由见其注释）。</summary>
+    private void RunOnUi(Action action)
+    {
+        System.Windows.Threading.Dispatcher? d = _dispatcher;
+        if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
+        {
+            RunGuarded(action);
+        }
+        else if (d.CheckAccess())
+        {
+            RunGuarded(action);
+        }
+        else
+        {
+            d.BeginInvoke(() => RunGuarded(action));
+        }
+    }
+
+    private void RunGuarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _log($"[手机] ⚠️ 界面更新异常：{ex.Message}");
+        }
     }
 
     private static readonly string MobileConfigPath = Path.Combine(
@@ -68,6 +102,9 @@ public partial class FileTransferMobileViewModel : ObservableObject
         {
             _log("[手机] ⚠️ 配置读取失败（使用默认值）：" + ex.Message);
         }
+
+        // 页面重入（切 Tab 回来）时把会话列表与证书指纹拉成当前状态
+        RefreshSessions();
     }
 
     /// <summary>Web 启动成功即持久化共享目录（原子写）。</summary>
@@ -106,6 +143,25 @@ public partial class FileTransferMobileViewModel : ObservableObject
     [ObservableProperty]
     private ImageSource? _qrImage;
 
+    /// <summary>已授权设备（会话）列表：手机配对成功一台就多一行（协议 §5.3）。</summary>
+    public System.Collections.ObjectModel.ObservableCollection<WebSessionVm> Sessions { get; } = new();
+
+    /// <summary>是否有已授权设备——空态文案与「全部踢出」的显隐依据。</summary>
+    [ObservableProperty]
+    private bool _hasSessions;
+
+    /// <summary>会话计数文案（"已授权 2 台设备" / "暂无已授权设备"）。</summary>
+    [ObservableProperty]
+    private string _sessionsSummary = "暂无已授权设备";
+
+    /// <summary>证书指纹短形式（前 8 组 hex），供人工与手机端显示的指纹逐段核对。</summary>
+    [ObservableProperty]
+    private string _certFingerprintText = "—";
+
+    /// <summary>完整证书指纹（「复制」用；界面上显示完整 64 位会被截断得没法核对）。</summary>
+    [ObservableProperty]
+    private string _certFingerprintFull = "";
+
     private System.Windows.Threading.DispatcherTimer? _codeTimer;
 
     [RelayCommand(CanExecute = nameof(CanToggle))]
@@ -129,6 +185,7 @@ public partial class FileTransferMobileViewModel : ObservableObject
             EnsureCodeTimer();
             SaveShareDirectory();
             _log($"[手机] ✅ Web 服务已启动：{_web.LanUrl}（{(_web.IsHttps ? "HTTPS 加密" : "⚠️ HTTP 未加密")}），配对码 10 分钟轮换");
+            RefreshSessions(); // 取当前证书指纹（会话列表此刻还是空的，配对后才会有）
         }
         catch (Exception ex)
         {
@@ -161,6 +218,7 @@ public partial class FileTransferMobileViewModel : ObservableObject
             _codeTimer?.Stop();
             _codeTimer = null;
             _log("[手机] Web 服务已停止");
+            RefreshSessions(); // 服务停下 = 全部会话作废，列表与指纹一起归零（不能留着显示成"仍然有效"）
         }
         finally
         {
@@ -199,6 +257,45 @@ public partial class FileTransferMobileViewModel : ObservableObject
         }
     }
 
+    /// <summary>踢出单个会话：该设备的令牌立即失效（需重新扫码），其它设备与本机预览不受影响。</summary>
+    [RelayCommand]
+    private void KickSession(WebSessionVm? session)
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        if (_web.RevokeSession(session.Id))
+        {
+            _log($"[手机] 已踢出设备：{session.Label}（{session.IpText}）——它需要重新扫码配对");
+        }
+
+        RefreshSessions();
+    }
+
+    /// <summary>踢出全部已授权设备（本机预览会话保留，否则桌面「打开网页」会失效）。</summary>
+    [RelayCommand]
+    private void KickAllSessions()
+    {
+        int count = _web.RevokeAllSessions();
+        _log(count > 0
+            ? $"[手机] 已踢出全部 {count} 台设备——它们都需要重新扫码配对"
+            : "[手机] 当前没有已授权设备");
+        RefreshSessions();
+    }
+
+    /// <summary>复制完整证书指纹（手机端提示「证书已变更」时用来人工核对）。</summary>
+    [RelayCommand]
+    private void CopyCertFingerprint()
+    {
+        if (!string.IsNullOrEmpty(CertFingerprintFull))
+        {
+            System.Windows.Clipboard.SetText(CertFingerprintFull);
+            _log("[手机] 证书指纹已复制到剪贴板");
+        }
+    }
+
     /// <summary>每秒刷新配对码展示（轮换由 PairingService 惰性完成，这里只反映现状）。</summary>
     private void EnsureCodeTimer()
     {
@@ -218,6 +315,80 @@ public partial class FileTransferMobileViewModel : ObservableObject
         PairCodeText = _pairing.CurrentCode;
         TimeSpan remain = _pairing.ExpiresAt - DateTimeOffset.UtcNow;
         PairExpiresText = remain > TimeSpan.Zero ? $"{(int)remain.TotalMinutes:00}:{remain.Seconds:00} 后轮换" : "即将轮换";
+    }
+
+    /// <summary>
+    /// 重建会话列表与证书指纹展示。任意线程可调用——内部编组到 UI 线程
+    /// （会话事件由请求线程触发）。
+    /// </summary>
+    private void RefreshSessions() => RunOnUi(() =>
+    {
+        Sessions.Clear();
+        foreach (WebSessionInfo info in _web.Sessions)
+        {
+            Sessions.Add(new WebSessionVm(info));
+        }
+
+        HasSessions = Sessions.Count > 0;
+        SessionsSummary = Sessions.Count > 0 ? $"已授权 {Sessions.Count} 台设备" : "暂无已授权设备";
+
+        string fingerprint = _web.CertFingerprint;
+        CertFingerprintFull = fingerprint;
+        CertFingerprintText = FormatFingerprintShort(fingerprint);
+    });
+
+    /// <summary>
+    /// 指纹短形式：前 8 组（16 位 hex）+ 省略号。
+    /// 完整 64 位铺在界面上反而没法逐段核对，「复制」按钮给完整值。
+    /// </summary>
+    private static string FormatFingerprintShort(string raw)
+        => string.IsNullOrEmpty(raw)
+            ? "—"
+            : string.Join(':', raw[..Math.Min(16, raw.Length)].Chunk(2).Select(static c => new string(c))) + "…";
+
+    /// <summary>已授权设备行（会话列表的一行）。</summary>
+    public sealed class WebSessionVm
+    {
+        private readonly WebSessionInfo _info;
+
+        public WebSessionVm(WebSessionInfo info) => _info = info;
+
+        /// <summary>会话 Id（踢出时带回服务端）。</summary>
+        public string Id => _info.Id;
+
+        /// <summary>设备标签（由 User-Agent 归纳）。</summary>
+        public string Label => string.IsNullOrWhiteSpace(_info.Label) ? "未知设备" : _info.Label;
+
+        /// <summary>来源 IP。</summary>
+        public string IpText => string.IsNullOrWhiteSpace(_info.Ip) ? "—" : _info.Ip;
+
+        /// <summary>最近访问（相对时间）——判断"这台还在用吗"的唯一依据。</summary>
+        public string LastSeenText => DescribeRelative(_info.LastSeenAt);
+
+        /// <summary>悬停提示：签发时间（何时开始有权访问）。</summary>
+        public string DetailTip => "签发于 " + _info.CreatedAt.ToLocalTime()
+            .ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+        private static string DescribeRelative(DateTimeOffset when)
+        {
+            TimeSpan age = DateTimeOffset.UtcNow - when;
+            if (age < TimeSpan.FromMinutes(1))
+            {
+                return "刚刚";
+            }
+
+            if (age < TimeSpan.FromHours(1))
+            {
+                return $"{(int)age.TotalMinutes} 分钟前";
+            }
+
+            if (age < TimeSpan.FromDays(1))
+            {
+                return $"{(int)age.TotalHours} 小时前";
+            }
+
+            return age < TimeSpan.FromDays(2) ? "昨天" : $"{(int)age.TotalDays} 天前";
+        }
     }
 
     /// <summary>bool[][] 二维码矩阵 → 白底黑码位图（含 2 模块静区）。</summary>

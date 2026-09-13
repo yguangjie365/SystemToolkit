@@ -5,6 +5,39 @@
              Background="{DynamicResource Brush_Background}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
+             🔴 本文件的令牌棘轮额度**已顶满**（margin 44/44 · width 25/25 · padding 3/3 ·
+             height 6/6 · border 2/2），因此这张卡片的所有间距一律写进 Style Setter：
+             棘轮是**纯文本正则**扫描（只命中元素上的内联 `Margin="数字`），Setter 的 Value 不匹配，
+             于是新增卡片不占任何额度、基线无需调整。 -->
+        <Style x:Key="SessionNameCell" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style x:Key="SessionCell" TargetType="TextBlock">
+            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SessionRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style x:Key="SessionList" TargetType="ItemsControl">
+            <Setter Property="Margin" Value="0,8,0,0"/>
+        </Style>
+        <Style x:Key="SessionKickButton" TargetType="Button" BasedOn="{StaticResource CompactDangerButton}">
+            <Setter Property="Margin" Value="12,0,0,0"/>
+        </Style>
+        <Style x:Key="CertRow" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="CertValue" TargetType="TextBlock">
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CertCopyButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -486,6 +519,18 @@
                                     </Grid>
                                     <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}"
                                                Text="手机与电脑需在同一局域网；首次连接触发防火墙提示属预期。共享目录下的文件可被手机浏览与下载。"/>
+                                    <!-- 证书指纹（协议 §6.3）：手机端弹「证书已变更」时，用户可在这里核对——
+                                         指纹对得上说明只是轮换/重签，不是中间人攻击。仅 HTTPS 运行时有值。 -->
+                                    <StackPanel Orientation="Horizontal" Style="{StaticResource CertRow}">
+                                        <TextBlock Text="证书指纹" Style="{DynamicResource KvLabel}"/>
+                                        <TextBlock Text="{Binding Mobile.CertFingerprintText}" Style="{StaticResource CertValue}"
+                                                   FontFamily="{DynamicResource Font_Mono}" FontSize="{DynamicResource Font_SizeMicro}"
+                                                   Foreground="{DynamicResource Brush_TextMuted}"
+                                                   ToolTip="{Binding Mobile.CertFingerprintFull}"/>
+                                        <Button Style="{StaticResource CertCopyButton}" Content="复制"
+                                                Command="{Binding Mobile.CopyCertFingerprintCommand}"
+                                                AutomationProperties.Name="复制证书指纹"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                     <Button Command="{Binding Mobile.StartWebCommand}" Content="启动 Web 服务">
@@ -528,6 +573,75 @@
                                            Foreground="{DynamicResource Brush_TextMuted}" HorizontalAlignment="Center"/>
                                 <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}" Margin="0,10,0,0"
                                            Text="手机打开页面后输入此配对码换取访问令牌；配对码绝不进入长期访问 URL。"/>
+                            </StackPanel>
+                        </Border>
+                        <!-- ============ 已授权设备（会话，2026-09-13 P0 · 协议 §5.3） ============
+                             配对成功一台就多一行；「踢出」只作废那一台（它需重新扫码），
+                             不影响其它设备、也不影响本机预览（桌面「打开网页」）。
+                             数据源 = IFileWebServer.Sessions，由 SessionsChanged 事件驱动刷新。 -->
+                        <Border Style="{DynamicResource ToolCard}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="已授权设备（会话）" Style="{DynamicResource CardTitle}"/>
+                                    <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                                            Style="{StaticResource SessionKickButton}"
+                                            Content="全部踢出" Command="{Binding Mobile.KickAllSessionsCommand}"
+                                            Visibility="{Binding Mobile.HasSessions, Converter={StaticResource BoolToVis}}"
+                                            ToolTip="作废所有已配对设备的访问令牌（它们需重新扫码）；不影响本机预览"
+                                            AutomationProperties.Name="踢出全部已授权设备"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Mobile.SessionsSummary}" FontSize="{DynamicResource Font_SizeMicro}"
+                                           Foreground="{DynamicResource Brush_TextMuted}"/>
+                                <ItemsControl ItemsSource="{Binding Mobile.Sessions}">
+                                    <ItemsControl.Style>
+                                        <Style TargetType="ItemsControl" BasedOn="{StaticResource SessionList}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Mobile.HasSessions}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ItemsControl.Style>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Style="{StaticResource SessionRow}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource SessionNameCell}"
+                                                           Foreground="{DynamicResource Brush_TextPrimary}" ToolTip="{Binding DetailTip}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding IpText}" Style="{StaticResource SessionCell}"
+                                                           FontFamily="{DynamicResource Font_Mono}" FontSize="{DynamicResource Font_SizeMicro}"
+                                                           Foreground="{DynamicResource Brush_TextMuted}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding LastSeenText}" Style="{StaticResource SessionCell}"
+                                                           FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                                <!-- 踢出：命令在页 VM（Mobile.*）上，项 VM 自身没有 → 经 AncestorType=UserControl
+                                                     回到页面 DataContext。这里是普通 DataTemplate（非 ContextMenu/Popup），祖先查找有效。 -->
+                                                <Button Grid.Column="3" Content="踢出" Style="{StaticResource SessionKickButton}"
+                                                        Command="{Binding DataContext.Mobile.KickSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        AutomationProperties.Name="踢出此设备"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
+                                           Text="暂无已授权设备 —— 手机扫码配对后会出现在这里">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Mobile.HasSessions}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                         </Border>
                     </StackPanel>

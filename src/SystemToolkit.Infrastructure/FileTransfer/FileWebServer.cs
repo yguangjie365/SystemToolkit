@@ -24,14 +24,22 @@ namespace SystemToolkit.Infrastructure.FileTransfer;
 /// 提供：静态前端资源（嵌入资源 index.html / app.js / style.css）、
 /// RESTful API（文件列表 / 下载 / 打包下载 / 分块上传 / 设备列表 / 配对）。
 /// </para>
-/// <para>安全边界：除配对端点与静态外壳资源外，所有请求必须携带访问令牌（<c>?t=</c>，
-/// 每次启动随机生成，随 <see cref="Url"/> 展示给用户）；文件路径一律先做穿越校验，
+/// <para>安全边界：除配对端点、证书信息与静态外壳资源外，所有请求必须携带**会话令牌**（<c>?t=</c>）；
+/// 文件路径一律先做穿越校验，
 /// 目标必须落在共享根目录之内；上传写入只取安全相对路径且同名不覆盖（自动追加序号）；
 /// 上传走<b>原始 body 流式直写</b>，单文件上限 10GB。</para>
 /// <para>配对模型：二维码只携带 6 位短期配对码（<see cref="LanUrl"/> 的 <c>?c=</c>），
 /// 手机提交配对码换长期令牌（<see cref="PairingService"/>，一次性消费、10 分钟轮换），
 /// 令牌不再出现在 URL 与浏览器历史里。旧工程内联的配对码实现已抽取为
 /// <see cref="PairingService"/>（桌面 TCP 通道共用），本类只注入使用，不再自持配对码状态。</para>
+/// <para>
+/// 🔴 **会话模型（2026-09-13 起，协议 §5.3）**：配对成功即签发**该设备专属**的会话
+/// （<see cref="Sessions"/>，8 小时有效），替代此前的"单一全局令牌"。三点收益：
+/// ① 可按设备踢出（<see cref="RevokeSession"/> / <see cref="RevokeAllSessions"/>）而不连累他人；
+/// ② 会话列表能如实显示"谁在访问、最近何时来"；③ 明文 HTTP 上泄露令牌时只作废那一个会话
+/// （此前是整体轮换，等于让所有设备一起重新配对）。桌面「打开网页」用的是
+/// <c>IsLocalPreview</c> 会话——它不出现在可踢出的设备列表里、也不设过期。
+/// </para>
 /// </summary>
 public sealed partial class FileWebServer : IFileWebServer, IDisposable
 {
@@ -97,8 +105,55 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     private int _httpsPort;
     /// <summary>启动时探测的局域网 IP（<see cref="LanUrl"/> 计算属性用）。</summary>
     private string _lanIp = string.Empty;
-    /// <summary>访问令牌。volatile：StartAsync 与 RotateToken 在非请求线程写，鉴权中间件在请求线程读。</summary>
+
+    /// <summary>
+    /// **本机预览会话**的令牌（桌面「打开网页」用）。volatile：StartAsync 与撤销路径在非请求线程写，
+    /// 鉴权中间件在请求线程读。
+    /// </summary>
+    /// <remarks>
+    /// 2026-09-13 起它不再是"全网唯一令牌"——手机端各自持有自己的会话令牌（见 <see cref="_sessions"/>）。
+    /// 好处有两处：① 「踢出某台手机」不必再让所有人（含本机预览）一起重新配对；
+    /// ② 会话列表能如实显示"谁在访问"，而单一令牌下这件事无从谈起。
+    /// </remarks>
     private volatile string _token = string.Empty;
+
+    /// <summary>会话表：会话 Id → 会话（协议 §5.3）。取代此前的单一全局令牌。</summary>
+    private readonly Dictionary<string, WebSession> _sessions = new();
+
+    /// <summary>会话表锁：签发/撤销可能在请求线程，读列表可能在 UI 线程。</summary>
+    private readonly object _sessionGate = new();
+
+    /// <summary>HTTPS 自签证书（仅启用 HTTPS 时非空）——对外暴露指纹用（协议 §6.3）。</summary>
+    private X509Certificate2? _cert;
+
+    /// <summary>上传断点文件的保留期：超过即视为孤儿（协议 §4.3 🟠）。</summary>
+    private static readonly TimeSpan OrphanPartRetention = TimeSpan.FromDays(7);
+
+    /// <summary>远程会话有效期（协议 §5.3「默认 8 小时或服务停止即失效」）。</summary>
+    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
+
+    /// <summary>一个已授权的访问会话（协议 §5.3）。令牌只存内存，绝不外传。</summary>
+    private sealed class WebSession
+    {
+        public required string Id { get; init; }
+
+        public required string Token { get; init; }
+
+        /// <summary>设备标签（由 User-Agent 归纳）。</summary>
+        public required string Label { get; init; }
+
+        public string Ip { get; set; } = "?";
+
+        public DateTimeOffset CreatedAt { get; init; }
+
+        public DateTimeOffset LastSeenAt { get; set; }
+
+        /// <summary>到期时间（本机预览会话为 <see cref="DateTimeOffset.MaxValue"/>，即不过期）。</summary>
+        public required DateTimeOffset ExpiresAt { get; init; }
+
+        /// <summary>本机预览会话（桌面「打开网页」）——不列入可踢出的手机列表。</summary>
+        public bool IsLocalPreview { get; init; }
+    }
 
     /// <inheritdoc/>
     public bool IsRunning => _app is not null;
@@ -134,6 +189,78 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <inheritdoc/>
     public string Token => _token;
 
+    /// <inheritdoc/>
+    public IReadOnlyList<WebSessionInfo> Sessions
+    {
+        get
+        {
+            lock (_sessionGate)
+            {
+                return _sessions.Values
+                    .Where(s => !s.IsLocalPreview)
+                    .OrderByDescending(s => s.LastSeenAt)
+                    .Select(s => new WebSessionInfo(s.Id, s.Label, s.Ip, s.CreatedAt, s.LastSeenAt))
+                    .ToList();
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public event EventHandler? SessionsChanged;
+
+    /// <inheritdoc/>
+    public bool RevokeSession(string sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return false;
+        }
+
+        bool removed;
+        lock (_sessionGate)
+        {
+            removed = _sessions.Remove(sessionId);
+        }
+
+        if (!removed)
+        {
+            return false;
+        }
+
+        _logger.Info($"已撤销 Web 访问会话 {sessionId}：该设备的访问令牌立即失效，需重新扫码配对。");
+        RaiseSessionsChanged();
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int RevokeAllSessions()
+    {
+        int removed = 0;
+        lock (_sessionGate)
+        {
+            // 保留本机预览会话（IsLocalPreview）——撤掉它会让桌面「打开网页」按钮失效，
+            // 而它不是"来访设备"，踢它没有意义。
+            foreach (string id in _sessions.Where(kv => !kv.Value.IsLocalPreview).Select(kv => kv.Key).ToList())
+            {
+                if (_sessions.Remove(id))
+                {
+                    removed++;
+                }
+            }
+        }
+
+        if (removed > 0)
+        {
+            _logger.Info($"已撤销全部 Web 访问会话（{removed} 个）：所有已配对设备都需重新扫码。");
+            RaiseSessionsChanged();
+        }
+
+        return removed;
+    }
+
+    /// <inheritdoc/>
+    public string CertFingerprint => _cert?.GetCertHashString(HashAlgorithmName.SHA256) ?? string.Empty;
+
     /// <summary>
     /// 构造 Web 文件服务。
     /// </summary>
@@ -159,9 +286,26 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         _shareDirectory = shareDirectory;
         _port = settings.WebPort;
         _httpsEnabled = settings.UseHttps;
-        _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         string lanIp = DetectLanIp();
         _lanIp = lanIp;
+
+        // 授权态重置：每次启动都是干净的开始（"服务停过"即等于"上面所有会话都已作废"）。
+        lock (_sessionGate)
+        {
+            _sessions.Clear();
+        }
+
+        // 本机预览会话：桌面「打开网页」按钮用它的令牌；它不出现在可踢出的设备列表里。
+        WebSession localPreview = NewSession("本机预览", "localhost", isLocalPreview: true);
+        lock (_sessionGate)
+        {
+            _sessions[localPreview.Id] = localPreview;
+        }
+        _token = localPreview.Token;
+
+        // 孤儿断点清理（协议 §4.3 🟠）：服务启动时扫一次超期 .part，避免上一次运行中断留下的
+        // 残片在共享目录里无限期堆积（用户看不见，只能靠目录膨胀发现）。
+        CleanupOrphanUploadParts("服务启动");
 
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
         // 桥接框架日志 → Core ILogger：WPF 进程没有控制台，Kestrel 的日志（含启动失败真因）默认进黑洞
@@ -174,8 +318,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 // HTTPS 为主通道；同时保留 HTTP 端口做兼容与跳转，
                 // 这样已配对过的旧手机（存的是 http 地址）打开时会收到 301 而不是连接失败。
                 _httpsPort = settings.HttpsPort > 0 ? settings.HttpsPort : 18891;
-                options.Listen(IPAddress.Any, _httpsPort,
-                    listen => listen.UseHttps(SelfSignedCertificate.GetOrCreate(lanIp)));
+                // 证书留一份引用：手机端要拿它的指纹与上次比对（协议 §6.3「证书已变更」提示）
+                _cert = SelfSignedCertificate.GetOrCreate(lanIp);
+                options.Listen(IPAddress.Any, _httpsPort, listen => listen.UseHttps(_cert));
                 options.Listen(IPAddress.Any, _port);
             }
             else
@@ -212,8 +357,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         //   ① 跳转 Location 剥离 ?t= —— 旧实现原样回显查询串，等于把 32-hex 长期令牌
         //      又写进一个**响应头**里；同 LAN 的 MiTM 抓一次 301 就能拿到全量读写权限。
         //      （代价：已配对手机里存的旧 http 链接跳转后需重新配对——安全优先于这个便利。）
-        //   ② 请求本身携带 ?t= 说明令牌已明文上过线路，泄露既成事实，唯一止损手段是
-        //      立即作废（轮换）并让客户端重新配对：配对码 6 位 / 60s，重配对代价可接受。
+        //   ② 请求本身携带 ?t= 说明令牌已明文上过线路，泄露既成事实，止损手段是
+        //      **立即作废该会话**并让那台设备重新配对（配对码 6 位、10 分钟有效，
+        //      重配对代价可接受）。2026-09-13 起按**会话**撤销而非整体轮换：
+        //      只有那台设备需要重配，其它设备与本机预览不受影响。
         if (_httpsEnabled)
         {
             app.Use(async (ctx, next) =>
@@ -222,10 +369,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 {
                     if (ctx.Request.Query.ContainsKey("t"))
                     {
-                        RotateToken("HTTP 明文请求携带访问令牌");
+                        RevokeLeakedSession(ctx.Request.Query["t"].ToString());
                         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         await ctx.Response.WriteAsync(
-                            "token leaked over plain HTTP: rotated, please pair again", ctx.RequestAborted);
+                            "token leaked over plain HTTP: revoked, please pair again", ctx.RequestAborted);
                         return;
                     }
 
@@ -237,7 +384,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             });
         }
 
-        // ── 令牌认证：除白名单外所有路径（静态 API）统一要求 ?t=<token> ──
+        // ── 会话令牌认证：除白名单外所有路径（静态 API）统一要求 ?t=<会话令牌> ──
+        // 2026-09-13：从"单一全局令牌"改为"每台设备一个会话令牌"（协议 §5.3）——
+        // 于是"踢出某台手机"成为可能，且不必连累其它设备重新配对。
         app.Use(async (ctx, next) =>
         {
             // 免令牌白名单（详见 IsPublicAsset 说明）
@@ -247,10 +396,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 return;
             }
 
-            // 时间常量比较，规避时序侧信道
-            byte[] provided = Encoding.UTF8.GetBytes(ctx.Request.Query["t"].ToString());
-            byte[] expected = Encoding.UTF8.GetBytes(_token);
-            if (!CryptographicOperations.FixedTimeEquals(provided, expected))
+            // 时间常量比较，规避时序侧信道；逐个会话比对（会话数是个位数，代价可忽略）
+            string? sessionId = MatchSession(ctx.Request.Query["t"].ToString());
+            if (sessionId is null)
             {
                 ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -266,6 +414,8 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 }
                 return;
             }
+
+            TouchSession(sessionId, ctx.Connection.RemoteIpAddress?.ToString() ?? "?");
             await next();
         });
 
@@ -509,6 +659,12 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                     }
 
                     _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
+
+                    // 传输结束后顺手清一次超期断点（协议 §4.3 🟠）。刚定稿的 .part 已在
+                    // FinalizeUpload 里被改名/删除，故这里通常什么都不做——只在目录里
+                    // 确实躺着过期残片时才真删（单目录 glob，代价可忽略）。
+                    CleanupOrphanUploadParts("上传定稿");
+
                     return Results.Ok(new { received, total = size, done = true, name = finalName, hash });
                 }
                 finally
@@ -578,11 +734,34 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
 
             PairThrottle.Reset(clientIp);
+
+            // 配对成功 → 签发**本设备专属**会话（协议 §5.3）：令牌各自独立，
+            // 于是"踢出某台手机"不会连累别人，会话列表也才有对象可列。
+            WebSession session = NewSession(DescribeClient(ctx.Request), clientIp, isLocalPreview: false);
+            lock (_sessionGate)
+            {
+                _sessions[session.Id] = session;
+            }
+            _logger.Info($"Web 配对成功：签发会话 {session.Id}（{session.Label}，来自 {clientIp}）。");
+            RaiseSessionsChanged();
+
             int expiresInMinutes = Math.Max(1, (int)Math.Ceiling((expiresAt - DateTimeOffset.UtcNow).TotalMinutes));
-            return Results.Ok(new { token = _token, expiresInMinutes });
+            return Results.Ok(new { token = session.Token, expiresInMinutes });
         });
 
         app.MapGet("/api/devices", () => Results.Ok(SnapshotDevices()));
+
+        // ── 证书信息（免令牌，见 IsPublicAsset）：手机端拿指纹与"上次记忆的指纹"比对，
+        //    用于协议 §6.3 要求的「证书已变更，请重新信任」提示。
+        // 🔴 必须免令牌且**早于配对**可读：否则首次访问拿不到基线指纹，之后就无从判断"变更"。
+        // 指纹本身不是秘密（浏览器点开证书就能看到），JS 又拿不到 TLS 层证书 → 只能服务端告知。
+        app.MapGet("/api/cert-info", () => Results.Ok(new
+        {
+            https = _httpsEnabled,
+            fingerprint = CertFingerprint,
+            subject = _cert?.Subject ?? string.Empty,
+            notAfterUtcMs = _cert is null ? 0L : new DateTimeOffset(_cert.NotAfter).ToUnixTimeMilliseconds(),
+        }));
 
         _app = app;
         try
@@ -744,7 +923,22 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         }
         await app.DisposeAsync();
 
-        _logger.Info("Web 文件服务已停止。");
+        // 服务停下 = 授权态整体作废（协议 §5.3「服务停止即失效」）。这里必须清空，
+        // 否则界面在"已停止"状态下仍列着上一次的会话，用户会以为它们还有效。
+        int sessionCount;
+        lock (_sessionGate)
+        {
+            sessionCount = _sessions.Count;
+            _sessions.Clear();
+        }
+        _token = string.Empty;
+        _cert = null;
+        if (sessionCount > 0)
+        {
+            RaiseSessionsChanged();
+        }
+
+        _logger.Info($"Web 文件服务已停止（{sessionCount} 个会话已作废）。");
     }
 
     /// <inheritdoc/>
@@ -949,10 +1143,270 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// 桌面端 <see cref="Url"/> / <see cref="LanUrl"/> 均为计算属性，下一次取值即自动带上新令牌。
     /// </para>
     /// </summary>
-    private void RotateToken(string reason)
+    /// <summary>
+    /// 新建一个会话（**尚未入表**，调用方负责在锁内入表）。
+    /// <para>令牌 16 字节随机（32 位 hex）与会话 Id 分离——Id 只用于展示与「踢出」，不是凭据。</para>
+    /// </summary>
+    private static WebSession NewSession(string label, string ip, bool isLocalPreview)
     {
-        _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-        _logger.Warn($"[FileWebServer] 访问令牌已轮换（{reason}）；已配对设备需重新配对。");
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        return new WebSession
+        {
+            Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant(),
+            Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+            Label = label,
+            Ip = ip,
+            CreatedAt = now,
+            LastSeenAt = now,
+            // 本机预览会话不设过期：它从不出现在网络上（只在桌面自己的 localhost 链接里），
+            // 过期只会让「打开网页」按钮在某天莫名要求重新配对。
+            ExpiresAt = isLocalPreview ? DateTimeOffset.MaxValue : now + SessionLifetime,
+            IsLocalPreview = isLocalPreview,
+        };
+    }
+
+    /// <summary>
+    /// 按令牌找会话（时间常量比较），顺手清掉**过期**会话（协议 §5.3：默认 8 小时）。
+    /// 返回命中的会话 Id；无命中返回 <c>null</c>（调用方据此 401）。
+    /// </summary>
+    private string? MatchSession(string providedToken)
+    {
+        if (string.IsNullOrEmpty(providedToken))
+        {
+            return null;
+        }
+
+        byte[] provided = Encoding.UTF8.GetBytes(providedToken);
+        List<string>? expired = null;
+        string? matched = null;
+        lock (_sessionGate)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            foreach ((string id, WebSession session) in _sessions)
+            {
+                if (session.ExpiresAt <= now)
+                {
+                    (expired ??= new List<string>()).Add(id);
+                    continue;
+                }
+
+                // FixedTimeEquals 长度不等即 false（不抛）；逐会话比，会话数是个位数
+                if (matched is null
+                    && CryptographicOperations.FixedTimeEquals(provided, Encoding.UTF8.GetBytes(session.Token)))
+                {
+                    matched = id;
+                }
+            }
+
+            if (expired is not null)
+            {
+                foreach (string id in expired)
+                {
+                    _sessions.Remove(id);
+                }
+            }
+        }
+
+        if (expired is not null)
+        {
+            _logger.Info($"已清理 {expired.Count} 个过期 Web 访问会话（有效期 {SessionLifetime.TotalHours:0} 小时）。");
+            RaiseSessionsChanged();
+        }
+
+        return matched;
+    }
+
+    /// <summary>
+    /// 刷新会话的最近访问时间与来源 IP —— 会话列表里"这台还在用吗"的唯一依据。
+    /// </summary>
+    /// <remarks>
+    /// 只在**分钟级**变化或来源 IP 变了才触发 <see cref="SessionsChanged"/>：
+    /// 单个上传有上千个分块请求，每块都刷一次 UI 列表是无意义的抖动。
+    /// </remarks>
+    private void TouchSession(string sessionId, string ip)
+    {
+        bool changed;
+        lock (_sessionGate)
+        {
+            if (_sessions.TryGetValue(sessionId, out WebSession? session))
+            {
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                changed = (now - session.LastSeenAt) > TimeSpan.FromMinutes(1)
+                          || !string.Equals(session.Ip, ip, StringComparison.Ordinal);
+                session.LastSeenAt = now;
+                session.Ip = ip;
+            }
+            else
+            {
+                changed = false;
+            }
+        }
+
+        if (changed)
+        {
+            RaiseSessionsChanged();
+        }
+    }
+
+    /// <summary>
+    /// 明文 HTTP 上出现令牌即视为泄露：作废**该令牌所属的那一个会话**（不再整体轮换）。
+    /// <para>
+    /// 若泄露的是本机预览令牌，则**就地换发新令牌**（而不是留下一个失效的 localhost 链接）——
+    /// 桌面「打开网页」读的是 <see cref="Token"/>，不换发会让它一直 401 到下次重启。
+    /// </para>
+    /// </summary>
+    private void RevokeLeakedSession(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return;
+        }
+
+        string? revokedId = null;
+        bool wasLocalPreview = false;
+        lock (_sessionGate)
+        {
+            foreach ((string id, WebSession session) in _sessions)
+            {
+                if (CryptographicOperations.FixedTimeEquals(
+                        Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(session.Token)))
+                {
+                    revokedId = id;
+                    wasLocalPreview = session.IsLocalPreview;
+                    _sessions.Remove(id);
+                    break;
+                }
+            }
+        }
+
+        if (revokedId is null)
+        {
+            return; // 未知令牌（可能已撤销或过期）：无需动作
+        }
+
+        if (wasLocalPreview)
+        {
+            WebSession replacement = NewSession("本机预览", "localhost", isLocalPreview: true);
+            lock (_sessionGate)
+            {
+                _sessions[replacement.Id] = replacement;
+            }
+            _token = replacement.Token;
+            _logger.Warn(
+                $"[FileWebServer] 本机预览令牌出现在明文 HTTP 上——已换发新令牌（会话 {revokedId} → {replacement.Id}）。");
+        }
+        else
+        {
+            _logger.Warn(
+                $"[FileWebServer] 访问令牌经明文 HTTP 传输（会话 {revokedId}）——该会话已作废，设备需重新配对。");
+        }
+
+        RaiseSessionsChanged();
+    }
+
+    private void RaiseSessionsChanged() => SessionsChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>由 User-Agent 归纳出的设备标签，供会话列表显示"是台什么设备"。</summary>
+    private static string DescribeClient(HttpRequest request)
+    {
+        string ua = request.Headers.UserAgent.ToString();
+        if (string.IsNullOrEmpty(ua))
+        {
+            return "未知设备";
+        }
+
+        string platform =
+            ua.Contains("iPhone", StringComparison.OrdinalIgnoreCase) ? "iPhone"
+            : ua.Contains("iPad", StringComparison.OrdinalIgnoreCase) ? "iPad"
+            : ua.Contains("Android", StringComparison.OrdinalIgnoreCase) ? "Android"
+            : ua.Contains("Windows", StringComparison.OrdinalIgnoreCase) ? "Windows"
+            : ua.Contains("Macintosh", StringComparison.OrdinalIgnoreCase) ? "Mac"
+            : ua.Contains("Linux", StringComparison.OrdinalIgnoreCase) ? "Linux"
+            : "未知设备";
+
+        string browser =
+            ua.Contains("Edg/", StringComparison.OrdinalIgnoreCase) ? "Edge"
+            : ua.Contains("Chrome", StringComparison.OrdinalIgnoreCase) ? "Chrome"
+            : ua.Contains("Firefox", StringComparison.OrdinalIgnoreCase) ? "Firefox"
+            : ua.Contains("Safari", StringComparison.OrdinalIgnoreCase) ? "Safari"
+            : string.Empty;
+
+        return browser.Length > 0 ? $"{platform} · {browser}" : platform;
+    }
+
+    /// <summary>
+    /// 清理**孤儿上传断点**（协议 §4.3 🟠，保留 7 天）：共享目录里超期且当前无人续传的
+    /// <c>.upload_*.part</c>。服务启动时与每次定稿后各扫一次。
+    /// <para>
+    /// 🔴 必须排除**活跃**上传（<see cref="_uploadGates"/> 里仍有闸的 uploadId）：
+    /// 那是正在传的文件，删掉等于毁掉用户的续传进度。
+    /// </para>
+    /// </summary>
+    private void CleanupOrphanUploadParts(string trigger)
+    {
+        try
+        {
+            string root = ShareRoot;
+            if (!Directory.Exists(root))
+            {
+                return;
+            }
+
+            DateTime cutoff = (DateTimeOffset.UtcNow - OrphanPartRetention).UtcDateTime;
+            HashSet<string> active;
+            lock (_uploadGateSync)
+            {
+                active = new HashSet<string>(_uploadGates.Keys, StringComparer.Ordinal);
+            }
+
+            int removed = 0;
+            long freed = 0;
+            foreach (string part in Directory.EnumerateFiles(root, ".upload_*.part", SearchOption.TopDirectoryOnly))
+            {
+                string name = Path.GetFileName(part);
+                // 命名形如 .upload_{uploadId}.part
+                if (name.Length <= ".upload_".Length + ".part".Length)
+                {
+                    continue;
+                }
+
+                string uploadId = name[".upload_".Length..^".part".Length];
+                if (active.Contains(uploadId))
+                {
+                    continue; // 正在续传，动不得
+                }
+
+                var info = new FileInfo(part);
+                if (info.LastWriteTimeUtc > cutoff)
+                {
+                    continue; // 未超期：用户可能过会儿接着传
+                }
+
+                try
+                {
+                    long size = info.Length;
+                    File.Delete(part);
+                    removed++;
+                    freed += size;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"清理孤儿上传断点失败（{part}）：{ex.Message}");
+                }
+            }
+
+            if (removed > 0)
+            {
+                _logger.Info(
+                    $"已清理 {removed} 个孤儿上传断点（{trigger}，超过 {OrphanPartRetention.TotalDays:0} 天未续传），"
+                    + $"释放 {freed:N0} 字节。");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 清理是「卫生工作」：失败只记日志，绝不因此让服务启动或定稿跟着失败
+            _logger.Warn($"孤儿上传断点清理异常（{trigger}）：{ex.Message}");
+        }
     }
 
     /// 只放<b>配对码</b>（<c>?c=</c>）后该方案直接失效：首屏就被 401 拦下，前端没机会执行配对流程。
@@ -961,6 +1415,7 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// </summary>
     private static bool IsPublicAsset(PathString path)
         => path.StartsWithSegments("/api/pair")
+           || path.StartsWithSegments("/api/cert-info")
            || path.Equals("/", StringComparison.Ordinal)
            || path.Equals("/index.html", StringComparison.Ordinal)
            || path.Equals("/app.js", StringComparison.Ordinal)

@@ -28,6 +28,20 @@
             <span class="status-bar__host" id="hostInfo"></span>
         </header>
 
+        <!-- 证书变更横幅（默认隐藏，协议 §6.3）：服务端证书轮换/重签后必须显式提示
+             「证书已变更」，否则用户会把浏览器的证书警告误读成中间人攻击。
+             由 app.js 的 checkCertFingerprint() 与上次记录的指纹比对后决定是否展开。 -->
+        <div class="cert-banner" id="certBanner" role="alert" hidden>
+            <div class="cert-banner__title">⚠️ 证书已变更，请重新信任</div>
+            <div class="cert-banner__body">
+                这台电脑重新签发了 HTTPS 证书（例如 90 天到期轮换、或换了网卡 IP）。
+                浏览器此时提示"证书不受信任"属于预期，<b>不是</b>中间人攻击；
+                但请先确认这确实是你自己的电脑，再继续使用。
+            </div>
+            <div class="cert-banner__fp" id="certBannerDetail"></div>
+            <button type="button" class="cert-banner__btn" id="certBannerAck">知道了（记录当前指纹）</button>
+        </div>
+
         <!-- ============ 主内容区（三栏面板） ============ -->
         <main class="main" role="main">
 

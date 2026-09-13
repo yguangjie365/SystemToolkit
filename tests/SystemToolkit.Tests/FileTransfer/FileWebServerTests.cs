@@ -744,7 +744,12 @@ public class FileWebServerTests
             string body = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(body);
             string exchanged = doc.RootElement.GetProperty("token").GetString()!;
-            Assert.Equal(server.Token, exchanged);
+            // 🔴 2026-09-13 起令牌按**设备**签发（协议 §5.3）：它**不再**等于本机预览令牌。
+            // 旧断言 `Assert.Equal(server.Token, exchanged)` 是"单一全局令牌"时代的产物——
+            // 那次改动同时让"踢出某台手机"成为可能（见 Pair_IssuesPerDeviceSession_…）。
+            // 判据不放松：仍是同规格的 32 位 hex 随机串，且必须真的能访问受保护接口。
+            Assert.NotEqual(server.Token, exchanged);
+            Assert.Equal(32, exchanged.Length);
             Assert.True(doc.RootElement.GetProperty("expiresInMinutes").GetInt32() > 0);
 
             // 换来的令牌必须真的能访问受保护接口
@@ -969,6 +974,116 @@ public class FileWebServerTests
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
             // 共享目录之外绝不能出现任何文件
             Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(dir)!, "evil.txt")));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 证书信息端点（协议 §6.3，2026-09-13 P0）：**免令牌**且 HTTP 模式下无指纹。
+    /// <para>必须免令牌——手机端要"早于配对"就能拿到基线指纹，否则首次访问没有基线，
+    /// 之后的"证书已变更"提示就无从判断（JS 拿不到 TLS 层证书，只能靠服务端告知）。</para>
+    /// </summary>
+    [Fact]
+    public async Task CertInfo_IsPublic_ReportsHttpModeWithoutFingerprint()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            HttpResponseMessage resp = await http.GetAsync($"http://localhost:{port}/api/cert-info");
+            resp.EnsureSuccessStatusCode();
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.False(doc.RootElement.GetProperty("https").GetBoolean());
+            Assert.Equal(string.Empty, doc.RootElement.GetProperty("fingerprint").GetString());
+            Assert.Equal(string.Empty, server.CertFingerprint);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 会话模型（协议 §5.3，2026-09-13 P0）：配对签发**该设备专属**令牌；踢出只作废它，
+    /// 本机预览令牌必须仍然可用（否则桌面「打开网页」会跟着失效）。
+    /// <para>反向验证：把 <c>RevokeAllSessions</c> 改成连本机预览一起清，最后一条断言即变红。</para>
+    /// </summary>
+    [Fact]
+    public async Task Pair_IssuesPerDeviceSession_RevokeInvalidatesOnlyThatDevice()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "a.txt"), "hello");
+
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            // 配对前：没有任何远程会话（本机预览不算"来访设备"）
+            Assert.Empty(server.Sessions);
+
+            HttpResponseMessage paired = await PairAsync(http, port, server.PairCode);
+            paired.EnsureSuccessStatusCode();
+            using var doc = JsonDocument.Parse(await paired.Content.ReadAsStringAsync());
+            string deviceToken = doc.RootElement.GetProperty("token").GetString()!;
+
+            // 每台设备独立令牌，且与本机预览令牌不同
+            Assert.NotEqual(server.Token, deviceToken);
+            WebSessionInfo session = Assert.Single(server.Sessions);
+            Assert.False(string.IsNullOrWhiteSpace(session.Label));
+            Assert.False(session.IsLocalPreview);
+
+            // 该令牌可用
+            (await http.GetAsync($"http://localhost:{port}/api/files?t={deviceToken}")).EnsureSuccessStatusCode();
+
+            // 踢出：设备令牌立即失效，本机预览不受影响
+            Assert.Equal(1, server.RevokeAllSessions());
+            Assert.Empty(server.Sessions);
+            Assert.Equal(
+                HttpStatusCode.Unauthorized,
+                (await http.GetAsync($"http://localhost:{port}/api/files?t={deviceToken}")).StatusCode);
+            (await http.GetAsync($"http://localhost:{port}/api/files?t={server.Token}")).EnsureSuccessStatusCode();
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 孤儿上传断点清理（协议 §4.3 🟠，2026-09-13 P0）：服务启动时删掉超过 7 天未续传的
+    /// <c>.upload_*.part</c>，但**保留未超期的**（用户可能过会儿接着传，删了等于毁进度）。
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_RemovesOnlyStaleOrphanUploadParts()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            string stale = Path.Combine(dir, ".upload_aaaa.part");
+            string recent = Path.Combine(dir, ".upload_bbbb.part");
+            await File.WriteAllTextAsync(stale, "old");
+            await File.WriteAllTextAsync(recent, "new");
+            File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-8)); // 超过 7 天保留期
+
+            var logger = new CapturingLogger();
+            await using var server = new FileWebServer(null, null, logger);
+            await server.StartAsync(MakeSettings(port), dir);
+
+            Assert.False(File.Exists(stale), "超过 7 天的孤儿断点应在服务启动时被清理");
+            Assert.True(File.Exists(recent), "未超期的断点必须保留（可能是用户稍后要续传的文件）");
+            Assert.Contains(logger.Messages, m => m.Contains("孤儿上传断点"));
         }
         finally
         {

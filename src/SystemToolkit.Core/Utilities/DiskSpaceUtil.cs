@@ -46,7 +46,13 @@ public static class DiskSpaceUtil
                 return DiskSpaceCheck.Unknown;
             }
 
-            long required = neededBytes + (long)marginMb * 1024 * 1024;
+            // 🔴 饱和加法（2026-09-13）：neededBytes 可能来自**对端声明**（文件互传的 FileSize），
+            // 一个 long.MaxValue 级别的荒谬值会让 neededBytes + margin 溢出成负数 →
+            // "剩余空间 > 负数" 恒真 = 误判充足，预检形同虚设。饱和到 long.MaxValue 让它必然判不足。
+            // 负数同样按 0 处理：否则 required 可能为负，同样得到永恒的"充足"。
+            long need = neededBytes > 0 ? neededBytes : 0;
+            long margin = (long)marginMb * 1024 * 1024;
+            long required = need > long.MaxValue - margin ? long.MaxValue : need + margin;
             return driveInfo.AvailableFreeSpace > required
                 ? DiskSpaceCheck.Enough
                 : DiskSpaceCheck.Insufficient;

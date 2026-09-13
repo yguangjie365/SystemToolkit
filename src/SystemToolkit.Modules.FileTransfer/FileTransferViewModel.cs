@@ -39,7 +39,7 @@ public partial class FileTransferViewModel : ObservableObject
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
         Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger, dispatcher);
-        Mobile = new FileTransferMobileViewModel(webServer, pairing, Log);
+        Mobile = new FileTransferMobileViewModel(webServer, pairing, Log, dispatcher);
     }
 
     public void AddLog(string message) => LogFeed.Append(LogLines, message, LogFeed.DefaultMaxLines);

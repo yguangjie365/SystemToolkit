@@ -605,8 +605,15 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         _receiveContexts.TryRemove(guid, out _); // 归还槽之后再摘除上下文
     }
 
+    /// <summary>接收目录（未配置时为「桌面\Received」）。单一来源——预检与落盘必须指向同一处。</summary>
+    private string ResolveReceiveDirectory()
+        => string.IsNullOrEmpty(_receiveDirectory)
+            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop), "Received")
+            : _receiveDirectory;
+
     /// <summary>
-    /// 握手处理：来源白名单 → 并发上限 → 分片大小校验 → 建临时 .part 文件（断点续传）→ 回确认。
+    /// 握手处理：来源白名单 → 配对码 → 并发上限 → 分片大小 / 文件大小校验 → **磁盘空间预检**
+    /// → 建临时 .part 文件（断点续传）→ 回确认。
     /// </summary>
     private void HandleHandshake(Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx)
     {
@@ -713,6 +720,41 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Error = "文件大小非法。",
             });
             return;
+        }
+
+        // 安全边界六（2026-09-13 P0）：**接收前磁盘空间预检**。
+        // 设计依据：协议 §7「磁盘空间不足 → TRANSFER_REQUEST 时接收端预检总量，不足即
+        // TRANSFER_REJECT（原因码 INSUFFICIENT_DISK）」。
+        // 🔴 此前只有手机 Web 通道做了预检（FileWebServer 复用同一个 DiskSpaceUtil），
+        // 电脑↔电脑通道**没做** → 大文件会"传到一半才发现盘满"，此刻已写坏 .part，
+        // 比"提前拒绝"差得多（用户白等、磁盘多一份垃圾）。
+        // 复用手机端同款工具（含 128MB 安全余量），保证两条通道口径一致。
+        // 已知取舍（有意，非疏漏）：这里按 **FileSize 总量**判定，不减去断点已收字节——
+        // 断点偏移要到 CompleteHandshake 才知道，而那里的拒绝路径无法安全归还接收槽
+        // （ReleaseReceiveSlot 要求 ctx.Task 已挂上且任务已终态）。宁可对"盘将满时的续传"
+        // 偏保守（提示用户清理后再传），也不让"盘真的不够"漏过去。
+        // Unknown（UNC / 未就绪卷 / 无权限）**不阻断**：接收失败最坏只是白传一次，
+        // 不像备份那样会毁数据；但必须留痕，不允许静默通过。
+        DiskSpaceCheck space = DiskSpaceUtil.Check(ResolveReceiveDirectory(), tm.FileSize);
+        if (space == DiskSpaceCheck.Insufficient)
+        {
+            Interlocked.Decrement(ref _activeReceives); // 与上面各拒绝分支同款：归还已抢的接收槽
+            _logger.Warn(
+                $"拒绝传输握手：接收目录所在磁盘空间不足（需 {tm.FileSize:N0} 字节 + 安全余量，"
+                + $"目录 {ResolveReceiveDirectory()}），来源 {ipPort}，任务 {tm.TaskId}，原因码 INSUFFICIENT_DISK。");
+            _ = SendControlAsync(guid, new TransferMessage
+            {
+                Type = TransferMessageType.Error,
+                TaskId = tm.TaskId,
+                Error = "接收端磁盘空间不足，请清理空间后重试。",
+            });
+            return;
+        }
+        if (space == DiskSpaceCheck.Unknown)
+        {
+            _logger.Warn(
+                $"无法判定接收目录剩余空间（目录 {ResolveReceiveDirectory()}，任务 {tm.TaskId}）"
+                + "——按放行处理；若传输中途失败请优先检查目标盘空间。");
         }
 
         // 任务对象统一在确认门前创建——待确认任务以 Negotiating 态出现在任务列表，
@@ -827,9 +869,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     private void CompleteHandshake(Guid guid, string ipPort, TransferMessage tm, ReceiveContext ctx, TransferTask task)
     {
         ctx.FileModifiedAt = tm.FileModifiedAt;
-        string dir = string.IsNullOrEmpty(_receiveDirectory)
-            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop), "Received")
-            : _receiveDirectory;
+        string dir = ResolveReceiveDirectory();
         Directory.CreateDirectory(dir);
 
         string safeName = SanitizeFileName(tm.FileName);

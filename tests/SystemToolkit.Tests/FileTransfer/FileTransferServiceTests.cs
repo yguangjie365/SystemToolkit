@@ -533,6 +533,64 @@ public class FileTransferServiceTests
     }
 
     /// <summary>
+    /// 接收前**磁盘空间预检**（协议 §7，2026-09-13 P0）：空间不足必须在握手阶段就拒绝，
+    /// 不能等传到一半才失败——那时已写坏 <c>.part</c>，用户白等还多一份垃圾。
+    /// <para>
+    /// 用例用 <c>long.MaxValue</c> 声明文件大小，一次覆盖两件事：
+    /// ① 预检真的生效（必然判不足）；
+    /// ② <see cref="SystemToolkit.Core.Utilities.DiskSpaceUtil"/> 的**溢出防护**——
+    /// 修复前 <c>neededBytes + margin</c> 会溢出成负数，比较式恒真 → 误判"充足"，
+    /// 本用例会因等不到 Error 而超时变红。
+    /// </para>
+    /// <para>同时断言共享目录里**没有落任何 .part**：预检必须在创建断点文件之前完成。</para>
+    /// </summary>
+    [Fact]
+    public async Task Handshake_InsufficientDiskSpace_RejectedBeforeCreatingPart()
+    {
+        int recvPort = FreeTcpPort();
+        string dir = NewTempDir();
+        string recvDir = Path.Combine(dir, "recv");
+        try
+        {
+            await using var receiver = new FileTransferService();
+            await receiver.StartAsync(MakeSettings(recvPort, recvDir));
+
+            using var client = new WatsonTcpClient("127.0.0.1", recvPort);
+            var errTcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.Events.MessageReceived += (_, e) =>
+            {
+                TransferMessage? tm = ParseTestMessage(e.Metadata);
+                if (tm?.Type == TransferMessageType.Error)
+                {
+                    errTcs.TrySetResult(tm.Error);
+                }
+            };
+            client.Connect();
+
+            await client.SendAsync(string.Empty, BuildTestMetadata(new TransferMessage
+            {
+                Type = TransferMessageType.Handshake,
+                TaskId = "huge-task",
+                FileName = "huge.bin",
+                FileSize = long.MaxValue,
+                ChunkSize = ChunkSize,
+                TotalChunks = 1,
+            }), CancellationToken.None);
+
+            string? error = await errTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("磁盘空间不足", error);
+
+            Assert.False(
+                Directory.Exists(recvDir) && Directory.GetFiles(recvDir, "*.part").Length > 0,
+                "预检不足时不得创建 .part 断点文件");
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
     /// 🔴 审查 2026-09-10（🔴-1）：对端「握手成功后立即断开」必须归还接收并发槽。
     /// <para>
     /// 回归背景：<c>OnClientDisconnected</c> 曾先把 ctx 从 <c>_receiveContexts</c> 摘除、

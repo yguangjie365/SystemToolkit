@@ -31,7 +31,42 @@ public interface IFileWebServer : IAsyncDisposable
     string LanUrl { get; }
 
     /// <summary>本次运行周期内的访问令牌（每次 StartAsync 重新生成）。</summary>
+    /// <remarks>
+    /// 🔴 2026-09-13 起语义收窄：它现在只是**本机预览会话**的令牌（桌面「打开网页」用），
+    /// 不再是"全网唯一令牌"。手机端经配对码各自换取自己的会话令牌（见 <see cref="Sessions"/>）。
+    /// </remarks>
     string Token { get; }
+
+    /// <summary>
+    /// 当前已授权的远程访问会话（手机等浏览器），含最近访问时间；不含已撤销者。
+    /// </summary>
+    /// <remarks>设计依据：协议 §5.3。本机预览会话不在其中（它不是"来访设备"）。</remarks>
+    IReadOnlyList<WebSessionInfo> Sessions { get; }
+
+    /// <summary>会话集合发生变化（签发 / 撤销 / 访问刷新）时触发，供 UI 刷新列表。</summary>
+    event EventHandler? SessionsChanged;
+
+    /// <summary>
+    /// 撤销指定会话（"踢出"）。返回是否真的撤销了——令牌随之**立即失效**，
+    /// 该设备需要重新扫码配对。
+    /// </summary>
+    bool RevokeSession(string sessionId);
+
+    /// <summary>
+    /// 撤销全部**远程**会话（手机等），保留本机预览会话（否则桌面「打开网页」会失效）。
+    /// 返回被撤销的会话数。
+    /// </summary>
+    int RevokeAllSessions();
+
+    /// <summary>
+    /// 当前 HTTPS 自签证书的 SHA-256 指纹（仅 hex，冒号由展示层加）。
+    /// 未启用 HTTPS 时为空串。
+    /// </summary>
+    /// <remarks>
+    /// 协议 §6.3 要求"证书变更时页面明确提示重新信任"——手机端拿不到 TLS 证书指纹
+    /// （JS 无此 API），只能由服务端告知并与上次比对。
+    /// </remarks>
+    string CertFingerprint { get; }
 
     /// <summary>
     /// 当前有效的配对码（过期时惰性轮换）。未运行/未生成时为空串。
