@@ -34,6 +34,8 @@ public sealed class AppManagerModule : ModuleBase
         services.TryAddSingleton<HardwareSensorProbe>();
 
         services.AddSingleton<EnvListService>();
+        // 忽略清单存储（Core 类型，模块可直接注册；用工厂避免 DI 去解析 string/Action<string> 参数）
+        services.AddSingleton(_ => new PackageIgnoreStore());
         services.AddSingleton<IWingetClient, WingetService>();
         // 可观测日志（NullLogger 吞异常教训）：落 %LOCALAPPDATA%\SystemToolkit\logs\appmanager-日期.log
         // 🔴 必须键控注册（审查 2026-09-04）：非键 ILogger 是单槽，会覆盖 OverviewModule 的注册
@@ -41,7 +43,8 @@ public sealed class AppManagerModule : ModuleBase
         services.AddSingleton(sp => new AppManagerViewModel(
             sp.GetRequiredService<EnvListService>(),
             sp.GetRequiredService<IWingetClient>(),
-            sp.GetRequiredKeyedService<ILogger>("appmanager")));
+            sp.GetRequiredKeyedService<ILogger>("appmanager"),
+            sp.GetRequiredService<PackageIgnoreStore>()));
         services.AddSingleton(sp => new AppManagerView(
             sp.GetRequiredService<AppManagerViewModel>(),
             sp.GetRequiredKeyedService<ILogger>("appmanager")));

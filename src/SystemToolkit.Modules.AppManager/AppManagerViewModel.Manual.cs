@@ -194,9 +194,13 @@ public partial class AppManagerViewModel
             return;
         }
 
+        // 忽略清单命中的项不进入执行——这是"跳过 z"的**真实来源**（不是恒定 0 的装饰性数字）
+        int preselectedIgnored = targets.Count(p => _ignoreList.IsIgnored(p.Id, p.Model.Source, null));
         string names = string.Join("\n", targets.Select(p => $"  {p.Name}（{p.Id}）"));
         if (ConfirmRequest?.Invoke("批量安装确认",
-                $"将按顺序安装以下 {targets.Count} 个软件：\n{names}\n\n逐项执行、可随时取消（关闭窗口即停），失败项会标注原因。确定继续吗？") != true)
+                $"将按顺序安装以下 {targets.Count} 个软件：\n{names}\n\n"
+                + (preselectedIgnored > 0 ? $"其中 {preselectedIgnored} 个在忽略清单中，将被跳过。\n" : "")
+                + "逐项执行、可随时取消（关闭窗口即停），失败项会标注原因。确定继续吗？") != true)
         {
             AddLog("已取消批量安装。");
             timing.Complete(LogResult.Cancelled, LogLevel.Info, "批量安装：二次确认取消");
@@ -210,12 +214,20 @@ public partial class AppManagerViewModel
         _batchCts = batchCts;
 
         AddLog($"开始批量安装（共 {targets.Count} 项）…");
-        int ok = 0, fail = 0;
+        int ok = 0, fail = 0, skip = 0;
         bool wasCancelled = false;
         try
         {
             foreach (WingetPackageVm pkg in targets)
             {
+                if (_ignoreList.IsIgnored(pkg.Id, pkg.Model.Source, null))
+                {
+                    skip++;
+                    AddLog($"  ⏭ 已忽略：{pkg.Name}（按忽略清单跳过）");
+                    pkg.IsSelected = false;
+                    continue;
+                }
+
                 pkg.IsBusy = true;
                 try
                 {
@@ -251,13 +263,14 @@ public partial class AppManagerViewModel
                 }
             }
 
+            string skipText = skip > 0 ? $"，跳过 {skip}" : "";
             AddLog(fail == 0
-                ? $"✅ 批量安装完成：成功 {ok}/{targets.Count}。"
-                : $"⚠ 批量安装结束：成功 {ok}、失败 {fail}（明细见上方日志）。");
+                ? $"✅ 批量安装完成：成功 {ok}/{targets.Count}{skipText}。"
+                : $"⚠ 批量安装结束：成功 {ok}、失败 {fail}{skipText}（明细见上方日志）。");
             timing.Complete(
                 wasCancelled ? LogResult.Cancelled : fail == 0 ? LogResult.Success : LogResult.Failed,
                 wasCancelled || fail > 0 ? LogLevel.Warn : LogLevel.Info,
-                $"批量安装结束：成功 {ok}、失败 {fail}、共 {targets.Count} 项{(wasCancelled ? "（已取消中止）" : "")}");
+                $"批量安装结束：成功 {ok}、失败 {fail}、跳过 {skip}、共 {targets.Count} 项{(wasCancelled ? "（已取消中止）" : "")}");
             PersistAll();
             RecountSelection(); // 审查 O2：正常完成重算仍为 0；取消路径如实反映残留勾选
         }

@@ -40,8 +40,10 @@ public partial class AppManagerViewModel
             return;
         }
 
+        int preselectedIgnored = targets.Count(p => _ignoreList.IsIgnored(p.Id, p.Model.Source, null));
         if (ConfirmRequest?.Invoke("恢复环境确认",
                 $"环境「{archive.Name}」共有 {archive.Count} 个软件，其中 {targets.Count} 个未安装。\n" +
+                (preselectedIgnored > 0 ? $"其中 {preselectedIgnored} 个在忽略清单中，将被跳过。\n" : "") +
                 "将逐项自动安装（失败项标注原因）。确定继续吗？") != true)
         {
             AddLog($"已取消恢复环境：{archive.Name}");
@@ -51,7 +53,7 @@ public partial class AppManagerViewModel
         await AcquireOperationAsync();
 
         AddLog($"开始恢复环境「{archive.Name}」（待安装 {targets.Count} 项）…");
-        int ok = 0, fail = 0;
+        int ok = 0, fail = 0, skip = 0;
         // 审查 O3：与批量安装同款「关窗即停」——CancelBatchInstall 顺带覆盖本流程，
         // 防止关窗后 winget 子进程孤儿化 + VM 在退出路径继续改集合
         using CancellationTokenSource restoreCts = new();
@@ -60,6 +62,13 @@ public partial class AppManagerViewModel
         {
             foreach (WingetPackageVm pkg in targets)
             {
+                if (_ignoreList.IsIgnored(pkg.Id, pkg.Model.Source, null))
+                {
+                    skip++;
+                    AddLog($"  ⏭ 已忽略：{pkg.Name}（按忽略清单跳过）");
+                    continue;
+                }
+
                 pkg.IsBusy = true;
                 try
                 {
@@ -92,9 +101,10 @@ public partial class AppManagerViewModel
                 }
             }
 
+            string skipText = skip > 0 ? $"，跳过 {skip}" : "";
             AddLog(fail == 0
-                ? $"✅ 环境「{archive.Name}」恢复完成：成功 {ok}/{targets.Count}。"
-                : $"⚠ 环境「{archive.Name}」恢复结束：成功 {ok}、失败 {fail}。");
+                ? $"✅ 环境「{archive.Name}」恢复完成：成功 {ok}/{targets.Count}{skipText}。"
+                : $"⚠ 环境「{archive.Name}」恢复结束：成功 {ok}、失败 {fail}{skipText}。");
         }
         finally
         {

@@ -25,6 +25,10 @@ public partial class AppManagerViewModel : ObservableObject
     private readonly EnvListService _env;
     private readonly IWingetClient _winget;
     private readonly ILogger _logger;
+    private readonly PackageIgnoreStore _ignoreStore;
+
+    /// <summary>忽略清单（包级"永久忽略"）。🔴 判据只有 <see cref="PackageIgnoreList.IsIgnored"/> 一份。</summary>
+    private PackageIgnoreList _ignoreList = new PackageIgnoreList();
 
     /// <summary>winget 写操作串行闸（winget 有进程级互斥锁，并发调用互相报错）。</summary>
     private readonly SemaphoreSlim _wingetGate = new(1, 1);
@@ -34,11 +38,16 @@ public partial class AppManagerViewModel : ObservableObject
     /// <summary>进行中批量安装的取消令牌（BatchInstallAsync 赋值，结束置空；审查 2026-09-04 P2）。</summary>
     private CancellationTokenSource? _batchCts;
 
-    public AppManagerViewModel(EnvListService env, IWingetClient winget, ILogger? logger = null)
+    public AppManagerViewModel(
+        EnvListService env,
+        IWingetClient winget,
+        ILogger? logger = null,
+        PackageIgnoreStore? ignoreStore = null)
     {
         _env = env;
         _winget = winget;
         _logger = logger ?? NullLogger.Instance;
+        _ignoreStore = ignoreStore ?? new PackageIgnoreStore(log: AddLog);
         // winget 输出挂接日志面板；过滤进度刷新行（\r 回车 / \b 退格）
         _winget.OutputSink = line =>
         {
@@ -195,12 +204,26 @@ public partial class AppManagerViewModel : ObservableObject
 
         _initialized = true; // 仅在加载（或降级）成功后置位
 
+        // 忽略清单（与清单同目录）：读盘同样移出 UI 线程；失败按空清单继续（不影响主清单）
+        try
+        {
+            _ignoreList = await Task.Run(() => _ignoreStore.Load()).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("忽略清单加载失败，按空清单继续", ex);
+            _ignoreList = new PackageIgnoreList();
+        }
+
         StorePackages.Clear();
         ThirdPartyPackages.Clear();
         foreach (WingetPackage item in catalog.Winget)
         {
             var vm = new WingetPackageVm(item);
             HookSelectionCounter(vm);
+            HookIgnore(vm);
+            // 候选版本传 null：本轮 UI 只提供"永久忽略"，故只有永久条目会命中
+            vm.IsIgnored = _ignoreList.IsIgnored(vm.Id, vm.Model.Source, null);
             if (item.IsMsStore)
             {
                 StorePackages.Add(vm);
@@ -246,6 +269,7 @@ public partial class AppManagerViewModel : ObservableObject
             1 => vm.State == WingetPackageState.Installed,
             2 => vm.State == WingetPackageState.Updatable,
             3 => vm.State == WingetPackageState.NotInstalled,
+            4 => vm.IsIgnored,
             _ => true,
         };
     }
@@ -254,6 +278,122 @@ public partial class AppManagerViewModel : ObservableObject
     {
         StoreView?.Refresh();
         ThirdPartyView?.Refresh();
+    }
+
+    // ==================================================================
+    // 忽略清单（包级「永久忽略」）—— 落地计划 B4-①③
+    // 🔴 判据只有 PackageIgnoreList.IsIgnored 一份；此处固定传 null 候选版本，
+    //    即**只有"永久忽略"条目会命中**（"跳过此版本"的 UI 留后续批次，Core 已支持）。
+    // ==================================================================
+
+    /// <summary>挂接行内忽略命令（ContextMenu 回不到页 VM → 命令必须在项 VM 上）。</summary>
+    private void HookIgnore(WingetPackageVm vm) => vm.HookIgnore(IgnoreSingle, UnignoreSingle);
+
+    /// <summary>写入/移除一条忽略记录并（可选）落盘。</summary>
+    private bool SetIgnore(WingetPackageVm vm, bool ignored, bool persist = true)
+    {
+        if (ignored)
+        {
+            _ignoreList.AddOrUpdate(new PackageIgnoreEntry
+            {
+                Id = vm.Id,
+                Source = vm.Model.Source,
+                Scope = PackageIgnoreScope.Permanent,
+                RecordedAt = DateTimeOffset.UtcNow,
+            });
+        }
+        else
+        {
+            _ignoreList.Remove(vm.Id);
+        }
+
+        vm.IsIgnored = ignored;
+        return !persist || PersistIgnoreList();
+    }
+
+    /// <summary>落盘忽略清单。失败只留痕并回传 false（本次修改仍在内存生效，但不持久）。</summary>
+    private bool PersistIgnoreList()
+    {
+        try
+        {
+            _ignoreStore.Save(_ignoreList);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("保存忽略清单失败", ex);
+            AddLog($"⚠ 忽略清单保存失败：{ex.Message}（本次修改仅本次运行有效）");
+            return false;
+        }
+    }
+
+    /// <summary>重刷两个列表的筛选（忽略状态变化后行会进出"已忽略"视图）。</summary>
+    private void RefreshViews()
+    {
+        StoreView?.Refresh();
+        ThirdPartyView?.Refresh();
+    }
+
+    /// <summary>右键菜单：忽略单个软件。</summary>
+    private void IgnoreSingle(WingetPackageVm vm)
+    {
+        SetIgnore(vm, ignored: true);
+        RefreshViews();
+        AddLog($"已忽略：{vm.Name}（不再提示其更新；批量安装/恢复环境时会跳过）");
+    }
+
+    /// <summary>右键菜单：取消忽略。</summary>
+    private void UnignoreSingle(WingetPackageVm vm)
+    {
+        SetIgnore(vm, ignored: false);
+        RefreshViews();
+        AddLog($"已取消忽略：{vm.Name}");
+    }
+
+    /// <summary>批量栏：忽略所选（一次落盘，避免逐条写盘）。</summary>
+    [RelayCommand]
+    private void IgnoreSelected()
+    {
+        var targets = StorePackages.Concat(ThirdPartyPackages).Where(p => p.IsSelected).ToList();
+        if (targets.Count == 0)
+        {
+            AddLog("忽略未执行：未勾选任何软件。");
+            return;
+        }
+
+        foreach (WingetPackageVm vm in targets)
+        {
+            SetIgnore(vm, ignored: true, persist: false);
+        }
+
+        bool saved = PersistIgnoreList();
+        RefreshViews();
+        AddLog(saved
+            ? $"已忽略 {targets.Count} 个软件（不再提示其更新）。"
+            : $"已忽略 {targets.Count} 个软件（⚠ 未持久化，重启后失效）。");
+    }
+
+    /// <summary>批量栏：恢复所选（取消忽略，一次落盘）。</summary>
+    [RelayCommand]
+    private void UnignoreSelected()
+    {
+        var targets = StorePackages.Concat(ThirdPartyPackages).Where(p => p.IsSelected).ToList();
+        if (targets.Count == 0)
+        {
+            AddLog("恢复未执行：未勾选任何软件。");
+            return;
+        }
+
+        foreach (WingetPackageVm vm in targets)
+        {
+            SetIgnore(vm, ignored: false, persist: false);
+        }
+
+        bool saved = PersistIgnoreList();
+        RefreshViews();
+        AddLog(saved
+            ? $"已恢复 {targets.Count} 个软件（重新提示其更新）。"
+            : $"已恢复 {targets.Count} 个软件（⚠ 未持久化，重启后失效）。");
     }
 
     /// <summary>当前激活 Tab：0=微软商店 1=第三方 2=环境档案（View 切 Tab 时回写）。</summary>

@@ -144,6 +144,8 @@ Background="{DynamicResource Brush_Background}">
                              Content="有更新" Command="{Binding SetFilterCommand}" CommandParameter="2"/>
                 <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter"
                              Content="未安装" Command="{Binding SetFilterCommand}" CommandParameter="3"/>
+                <RadioButton Style="{DynamicResource FilterChip}" GroupName="StatusFilter"
+                             Content="已忽略" Command="{Binding SetFilterCommand}" CommandParameter="4"/>
                 <Button Style="{DynamicResource RowActionButton}" Height="26" Content="全选"
                         Command="{Binding SelectAllCommand}" Margin="6,0,0,0"/>
                 <Button Style="{DynamicResource RowActionButton}" Height="26" Content="反选"
@@ -196,7 +198,18 @@ Background="{DynamicResource Brush_Background}">
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   x:Name="StoreList" SizeChanged="OnListSizeChanged">
 <ListView.ItemContainerStyle>
-                            <Style BasedOn="{StaticResource ListItemRowTallStyle}" TargetType="ListViewItem"/>
+                            <Style BasedOn="{StaticResource ListItemRowTallStyle}" TargetType="ListViewItem">
+                                <Setter Property="ContextMenu">
+                                    <Setter.Value>
+                                        <ContextMenu>
+                                            <MenuItem Header="永久忽略（不再提示其更新）"
+                                                      Command="{Binding IgnoreCommand}" IsEnabled="{Binding CanIgnore}"/>
+                                            <MenuItem Header="取消忽略"
+                                                      Command="{Binding UnignoreCommand}" IsEnabled="{Binding CanUnignore}"/>
+                                        </ContextMenu>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
                         </ListView.ItemContainerStyle>
                             <ListView.View>
                                 <GridView ColumnHeaderContainerStyle="{StaticResource AppListHeader}">
@@ -252,9 +265,21 @@ Background="{DynamicResource Brush_Background}">
                                     <GridViewColumn Header="状态" Width="150">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Border Style="{StaticResource StatusTagBorder}" HorizontalAlignment="Center">
-                                                    <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource StatusTagText}"/>
-                                                </Border>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                    <Border Style="{StaticResource StatusTagBorder}" HorizontalAlignment="Center">
+                                                        <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource StatusTagText}"/>
+                                                    </Border>
+                                                    <Border Visibility="{Binding IsIgnored, Converter={StaticResource BoolToVis}}">
+                                                        <Border.Style>
+                                                            <Style BasedOn="{StaticResource StatusTagBorder}" TargetType="Border">
+                                                                <Setter Property="Margin" Value="{DynamicResource Space_XS}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="已忽略" FontSize="{DynamicResource Font_SizeCaption}"
+                                                                   Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                                    </Border>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
@@ -298,7 +323,18 @@ Background="{DynamicResource Brush_Background}">
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       SizeChanged="OnListSizeChanged">
 <ListView.ItemContainerStyle>
-                            <Style BasedOn="{StaticResource ListItemRowTallStyle}" TargetType="ListViewItem"/>
+                            <Style BasedOn="{StaticResource ListItemRowTallStyle}" TargetType="ListViewItem">
+                                <Setter Property="ContextMenu">
+                                    <Setter.Value>
+                                        <ContextMenu>
+                                            <MenuItem Header="永久忽略（不再提示其更新）"
+                                                      Command="{Binding IgnoreCommand}" IsEnabled="{Binding CanIgnore}"/>
+                                            <MenuItem Header="取消忽略"
+                                                      Command="{Binding UnignoreCommand}" IsEnabled="{Binding CanUnignore}"/>
+                                        </ContextMenu>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
                         </ListView.ItemContainerStyle>
                                 <ListView.View>
                                     <GridView ColumnHeaderContainerStyle="{StaticResource AppListHeader}">
@@ -504,6 +540,8 @@ Background="{DynamicResource Brush_Background}">
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold" Foreground="{DynamicResource Brush_OnDark}" VerticalAlignment="Center">
                     <Run Text="已选 "/><Run Text="{Binding SelectedCount, Mode=OneWay}"/><Run Text=" 项"/>
@@ -530,6 +568,10 @@ Background="{DynamicResource Brush_Background}">
                         Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
                         BorderThickness="0" Cursor="Hand" Margin="8,0,0,0"
                         Command="{Binding BatchInstallCommand}"/>
+                <Button Grid.Column="7" Style="{DynamicResource RowActionButton}" Content="忽略所选"
+                        Margin="{DynamicResource Space_XS}" Command="{Binding IgnoreSelectedCommand}"/>
+                <Button Grid.Column="8" Style="{DynamicResource RowActionButton}" Content="恢复所选"
+                        Margin="{DynamicResource Space_XS}" Command="{Binding UnignoreSelectedCommand}"/>
                 <Button Grid.Column="6" Content="取消当前操作" Command="{Binding CancelOperationCommand}"
                         Style="{DynamicResource CardButton}" Margin="{DynamicResource Space_XS}"
                         Foreground="{DynamicResource Brush_DangerText}"

@@ -1,5 +1,6 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Software.Models;
 
 namespace SystemToolkit.Modules.AppManager;
@@ -14,6 +15,11 @@ public partial class WingetPackageVm : ObservableObject
     private string _versionText = "";
     private bool _isBusy;
     private bool _isSelected;
+    private bool _isIgnored;
+
+    private Action<WingetPackageVm>? _ignoreRequest;
+
+    private Action<WingetPackageVm>? _unignoreRequest;
 
     public WingetPackageVm(WingetPackage model)
     {
@@ -89,6 +95,44 @@ public partial class WingetPackageVm : ObservableObject
         get => _isSelected;
         set => SetField(ref _isSelected, value);
     }
+
+    /// <summary>是否在忽略清单里（由页 VM 在加载/操作后回写；行内徽章与"已忽略"筛选用）。</summary>
+    public bool IsIgnored
+    {
+        get => _isIgnored;
+        set
+        {
+            if (SetField(ref _isIgnored, value))
+            {
+                OnPropertyChanged(nameof(CanIgnore));
+                OnPropertyChanged(nameof(CanUnignore));
+            }
+        }
+    }
+
+    /// <summary>右键菜单可用性：未忽略时可"永久忽略"。</summary>
+    public bool CanIgnore => !IsIgnored;
+
+    /// <summary>右键菜单可用性：已忽略时可"取消忽略"。</summary>
+    public bool CanUnignore => IsIgnored;
+
+    /// <summary>
+    /// 注入忽略/取消忽略回调。🔴 命令必须落在**项 VM** 上：
+    /// <c>ContextMenu</c> 自成一棵可视树，<c>FindAncestor</c> 回不到页 VM（本仓已固化的纪律）。
+    /// </summary>
+    public void HookIgnore(Action<WingetPackageVm> ignore, Action<WingetPackageVm> unignore)
+    {
+        _ignoreRequest = ignore;
+        _unignoreRequest = unignore;
+    }
+
+    /// <summary>右键菜单：永久忽略此软件。</summary>
+    [RelayCommand]
+    private void Ignore() => _ignoreRequest?.Invoke(this);
+
+    /// <summary>右键菜单：取消忽略。</summary>
+    [RelayCommand]
+    private void Unignore() => _unignoreRequest?.Invoke(this);
 
     /// <summary>状态徽章键：0=已安装(绿) 1=有更新(橙) 2=未安装(灰) 3=未知(灰)。XAML DataTrigger 用。</summary>
     public int StatusKey => State switch
