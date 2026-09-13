@@ -12,11 +12,30 @@ public sealed class TransferHistoryEntry
     /// <summary>对应的任务 ID（可用于与日志对齐）。</summary>
     public string TaskId { get; init; } = string.Empty;
 
-    /// <summary>文件名（不含路径）。</summary>
+    /// <summary>
+    /// 内容种类（文件 / 文本；B8a）。
+    /// <para>
+    /// 旧版本历史 JSON 无此字段 → 反序列化落到 <see cref="TransferKind.File"/>，
+    /// 与"那些记录本来就是文件"的事实一致，**不需要迁移代码**。
+    /// </para>
+    /// </summary>
+    public TransferKind Kind { get; init; }
+
+    /// <summary>
+    /// 文件名（不含路径）。
+    /// <para>
+    /// <see cref="Kind"/> = <see cref="TransferKind.Text"/> 时这里存的是
+    /// **<see cref="TransferText.PreviewLength"/> 字预览**，不是文件名——全文只进剪贴板，不入历史
+    /// （方案 §四·3）。取用方请先看 <see cref="Kind"/>。
+    /// </para>
+    /// </summary>
     public string FileName { get; init; } = string.Empty;
 
-    /// <summary>文件大小（字节）。</summary>
+    /// <summary>文件大小（字节）。文本条目这里记的是 UTF-8 字节数（与协议的限长口径一致）。</summary>
     public long FileSize { get; init; }
+
+    /// <summary>文本字符数（仅 <see cref="Kind"/> = <see cref="TransferKind.Text"/> 时有意义；文件条目为 0）。</summary>
+    public int TextLength { get; init; }
 
     /// <summary>发送还是接收。</summary>
     public TransferDirection Direction { get; init; }
@@ -51,6 +70,9 @@ public sealed class TransferHistoryEntry
     /// <summary>方向的中文本地化文本（与 TransferTask 的速度/进度文本同理，供界面直接绑定）。</summary>
     public string DirectionText => Direction == TransferDirection.Send ? "发送" : "接收";
 
+    /// <summary>种类的中文本地化文本（历史列表「类型」列直接绑定；B8a）。</summary>
+    public string KindText => Kind == TransferKind.Text ? "文本" : "文件";
+
     /// <summary>状态的中文本地化文本。</summary>
     public string StatusText => Status switch
     {
@@ -69,6 +91,11 @@ public sealed class TransferHistoryEntry
         ? ErrorMessage ?? string.Empty
         : $"{TransferReasonCodes.Describe(ReasonCode)}（{ReasonCode}）";
 
-    /// <summary>格式化的文件大小（界面直接绑定，免得再写一个转换器）。</summary>
-    public string SizeText => SystemToolkit.Core.Utilities.FormatUtil.FormatSize(FileSize);
+    /// <summary>
+    /// 「大小」列的显示文本。文本条目显示**字符数**（如 <c>137 字</c>）而不是字节——
+    /// 对用户来说"这段文字多长"才是有效信息（方案 §5.3）。
+    /// </summary>
+    public string SizeText => Kind == TransferKind.Text
+        ? $"{TextLength} 字"
+        : SystemToolkit.Core.Utilities.FormatUtil.FormatSize(FileSize);
 }

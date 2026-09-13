@@ -62,6 +62,15 @@ public sealed class TransferMessage
     /// 有效配对码；首个成功消费的发送方 IP 记入已配对列表，同批次后续文件免码。
     /// </summary>
     public string? PairCode { get; init; }
+
+    /// <summary>
+    /// 文本内容（**仅 <see cref="TransferMessageType.Text"/> 携带**，2026-09-13 批次 B8a）。
+    /// <para>
+    /// 文件类消息恒为 null。文本走 metadata 通道、**没有消息体** —— 这是它与文件的本质差别：
+    /// 不需要分片、不需要断点续传、不需要落盘（直接进剪贴板）。
+    /// </para>
+    /// </summary>
+    public string? Text { get; init; }
 }
 
 /// <summary>传输协议消息类型。</summary>
@@ -100,6 +109,19 @@ public enum TransferMessageType
 
     /// <summary>恢复传输（协议 §4.2，双向）。收到即解除挂起，双方状态回到「传输中」。</summary>
     Resume,
+
+    /// <summary>
+    /// 一条文本（FT-3，B8a）。发送方 → 接收方，**无消息体**，内容在
+    /// <see cref="TransferMessage.Text"/>。
+    /// <para>
+    /// 复用文件路径的确认门（接收端开 <c>RequireReceiveConfirmation</c> 时同样弹窗），
+    /// 因此超时/拒绝的原因码与文件完全一致。
+    /// </para>
+    /// </summary>
+    Text,
+
+    /// <summary>文本已交付（对应文件的 CompleteAck）。接收方在**成功写入剪贴板之后**才回它。</summary>
+    TextAck,
 
     /// <summary>错误。</summary>
     Error,

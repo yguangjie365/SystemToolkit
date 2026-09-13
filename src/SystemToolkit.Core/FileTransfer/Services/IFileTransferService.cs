@@ -137,6 +137,25 @@ public sealed record TransferRequestEventArgs(
 
     /// <summary>发送方设备名（取自设备发现在线列表；查不到或对端不在列表时为空）。</summary>
     public string PeerDeviceName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// 内容种类（B8a）。文件请求为 <see cref="TransferKind.File"/>（默认值，既有行为不变）；
+    /// 文本请求为 <see cref="TransferKind.Text"/>，此时 <see cref="FileName"/> / <see cref="FileSize"/>
+    /// 与磁盘预检 / 同名冲突诸字段**均无意义**，弹窗应按 <see cref="Kind"/> 整块隐藏它们。
+    /// </summary>
+    public TransferKind Kind { get; init; }
+
+    /// <summary>
+    /// 文本全文（仅 <see cref="Kind"/> = <see cref="TransferKind.Text"/> 时非空）。
+    /// <para>
+    /// 🔴 **不受历史预览长度限制**：用户要判断"接不接"必须看到全貌（方案 §5.2），
+    /// 只给前 120 字等于让用户在信息不全的情况下点头。
+    /// </para>
+    /// </summary>
+    public string? Text { get; init; }
+
+    /// <summary>文本的字符数与 UTF-8 字节数（仅文本请求有意义；弹窗显示「137 字（UTF-8 412 B）」）。</summary>
+    public int TextLength { get; init; }
 }
 
 /// <summary>
@@ -150,9 +169,25 @@ public sealed record TransferRequestEventArgs(
 /// <param name="Conflict">本次的同名处理方式（仅在 <paramref name="Accept"/> 为 true 时有意义）。</param>
 public sealed record TransferDecision(bool Accept, TransferConflictPolicy Conflict = TransferConflictPolicy.Rename)
 {
+    /// <summary>
+    /// 拒绝时随 <c>Error</c> 回传给对端的原因码（B8a）。
+    /// <para>
+    /// 默认 null → 沿用 <see cref="TransferReasonCodes.UserReject"/>（**既有行为一字不变**）。
+    /// 文本通道需要它是因为"拒绝"有两种截然不同的成因：用户不要（<c>USER_REJECT</c>），
+    /// 与"接受了但剪贴板写不进去"（<c>CLIPBOARD_WRITE_FAILED</c>）—— 后者若也报"被拒绝"，
+    /// 发送方会得出错误的处置结论（以为对面不收，实际是该重试）。
+    /// </para>
+    /// </summary>
+    public string? ReasonCode { get; init; }
+
     /// <summary>拒绝接收。</summary>
     public static TransferDecision Reject { get; } = new(false);
 
     /// <summary>接受并按指定方式处理同名。</summary>
     public static TransferDecision AcceptWith(TransferConflictPolicy conflict) => new(true, conflict);
+
+    /// <summary>拒绝并附带原因码（B8a；对端会原样收到这个码）。</summary>
+    /// <param name="reasonCode">见 <see cref="TransferReasonCodes"/>；null / 空时等价于 <see cref="Reject"/>。</param>
+    /// <returns>带原因码的拒绝决定。</returns>
+    public static TransferDecision RejectWith(string reasonCode) => new(false) { ReasonCode = reasonCode };
 }

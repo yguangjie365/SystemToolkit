@@ -55,6 +55,21 @@ public static class TransferReasonCodes
     /// <summary>暂停超过上限自动取消（见 <c>TransferSettings.PauseTimeoutMinutes</c>）。</summary>
     public const string PauseTimeout = "PAUSE_TIMEOUT";
 
+    /// <summary>
+    /// 文本超出单条上限（见 <see cref="TransferText.MaxBytes"/>）——本地超限不发；
+    /// 收到对端超限的文本时用本码拒绝接收，**绝不静默截断后当成功**。
+    /// </summary>
+    public const string TextTooLong = "TEXT_TOO_LONG";
+
+    /// <summary>
+    /// 接收方写入剪贴板失败：文本**已收到但未能交付**（剪贴板是单例且可能被别的进程占用）。
+    /// <para>
+    /// 与 <see cref="UserReject"/> 的区别是给发送方看的：前者是"对面不要"，
+    /// 本码是"对面要了但没接住"——处置建议完全不同（重发 vs 让对端关掉占用的程序）。
+    /// </para>
+    /// </summary>
+    public const string ClipboardWriteFailed = "CLIPBOARD_WRITE_FAILED";
+
     /// <summary>原因码的中文说明（UI/日志直接可用；未知码原样返回，绝不吞）。</summary>
     public static string Describe(string? code) => code switch
     {
@@ -72,6 +87,8 @@ public static class TransferReasonCodes
         UserCancel => "已取消",
         PeerDisconnected => "对端断开连接",
         PauseTimeout => "暂停超时，已自动取消",
+        TextTooLong => "文本超出单条上限",
+        ClipboardWriteFailed => "接收方写入剪贴板失败（文本未交付）",
         null or "" => string.Empty,
         _ => code,
     };

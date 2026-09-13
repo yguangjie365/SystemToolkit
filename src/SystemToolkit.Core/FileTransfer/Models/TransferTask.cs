@@ -10,6 +10,29 @@ public enum TransferDirection
     Receive,
 }
 
+/// <summary>
+/// 传输内容的**种类**（2026-09-13 批次 B8a 新增）。
+/// <para>
+/// 与 <see cref="TransferDirection"/> 正交：方向回答"谁发给谁"，种类回答"发的是什么"。
+/// 引入它的原因：文本既没有文件路径也没有落盘动作，若继续沿用文件那套字段，
+/// 历史列表里就会出现「文件名为一段文本、大小为 412 B」的语义错乱。
+/// </para>
+/// <para>
+/// 🔴 **成员顺序即磁盘契约**：本枚举写入历史 JSON 时按**数值**序列化
+/// （与 <see cref="TransferStatus"/> / <see cref="TransferDirection"/> 同款，
+/// <c>TransferHistoryService</c> 的 JsonOpts 未挂字符串枚举转换器）→
+/// **不得重排、不得删除既有成员**，新增只能追加。
+/// </para>
+/// </summary>
+public enum TransferKind
+{
+    /// <summary>文件。**默认值 0** —— 旧版本历史 JSON 没有这个字段，反序列化即落到此值，语义正确。</summary>
+    File,
+
+    /// <summary>文本 / 剪贴板。</summary>
+    Text,
+}
+
 /// <summary>传输任务状态。</summary>
 public enum TransferStatus
 {
