@@ -739,6 +739,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             long.TryParse(ctx.Request.Query["size"], out long size);
             long.TryParse(ctx.Request.Query["mtime"], out long mtime);
             long.TryParse(ctx.Request.Query["offset"], out long offset);
+            // W1a：把 rel / uploadId 提到 try 外——失败分支要在 catch 里推 transferUpdate，
+            // 而 try 内声明的局部变量在 catch 中不可见。
+            string? rel = null;
+            string uploadId = string.Empty;
             try
             {
                 if (size <= 0 || size > UploadLimitBytes)
@@ -749,7 +753,8 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 }
 
                 // 防目录穿越：允许子目录（目录上传），但必须是共享目录之内的安全相对路径
-                string? rel = SanitizeRelativePath(name);
+                // （rel 已在 try 外声明——失败分支要在 catch 里推送终态，见上方注释）
+                rel = SanitizeRelativePath(name);
                 if (rel is null)
                 {
                     return Results.BadRequest(new { error = "非法的上传路径。" });
@@ -761,11 +766,17 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 // 磁盘预检只在第一块做：后续块的剩余空间已在首块核算过，重复检查徒增 IO
                 if (offset == 0 && DiskSpaceUtil.Check(root, size) == DiskSpaceCheck.Insufficient)
                 {
+                    // 这条是"传输未能开始"，属真实失败（有既有原因码），推送让其它浏览器也看得见
+                    await BroadcastTransferUpdateAsync(
+                        ComputeUploadId(rel, size, mtime), rel, offset, size,
+                        nameof(TransferStatus.Failed),
+                        reasonCode: TransferReasonCodes.InsufficientDisk,
+                        errorMessage: "接收目录所在磁盘空间不足");
                     return Results.Json(new { error = "接收目录所在磁盘空间不足，请清理后重试。" }, statusCode: 507);
                 }
 
                 // 指纹与 status 端点一致，统一用净化后的 rel
-                string uploadId = ComputeUploadId(rel, size, mtime);
+                uploadId = ComputeUploadId(rel, size, mtime);
                 string partPath = Path.Combine(root, $".upload_{uploadId}.part");
 
                 // 同一 uploadId 串行化：避免并发块写入把文件写乱（前端本就逐块传，这里防的是异常重试与多端同传）
@@ -810,6 +821,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                     long received = new FileInfo(partPath).Length;
                     if (received < size)
                     {
+                        // 每落定一块推一次进度（块大小 8 MB，推送频率天然被网络吞吐限住）
+                        await BroadcastTransferUpdateAsync(
+                            uploadId, rel, received, size, nameof(TransferStatus.Transferring));
                         // 还有后续块：返回后由 finally 递减引用计数；若仍有排队者则闸门保留复用
                         return Results.Ok(new { received, total = size, done = false });
                     }
@@ -849,6 +863,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                         _logger.Info($"Web 分块上传完成：{finalName}（{size:N0} 字节，SHA256={hash[..12]}…）。");
                     }
 
+                    // 🔴 终态以**服务端**为准推送：连接若在定稿响应途中断掉，本机会误判失败，
+                    //    而文件其实已经落盘——这条推送是纠正这一误判的唯一途径。
+                    //    「跳过」独推 Skipped（不得报成 Completed：目标目录里没有新增文件）。
+                    await BroadcastTransferUpdateAsync(
+                        uploadId, finalName, received, size,
+                        skipped ? nameof(TransferStatus.Skipped) : nameof(TransferStatus.Completed),
+                        skipped: skipped,
+                        reasonCode: skipped ? TransferReasonCodes.ConflictSkip : null);
+
                     // 传输结束后顺手清一次超期断点（协议 §4.3 🟠）。刚定稿的 .part 已在
                     // FinalizeUpload 里被改名/删除，故这里通常什么都不做——只在目录里
                     // 确实躺着过期残片时才真删（单目录 glob，代价可忽略）。
@@ -882,15 +905,22 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
             catch (OperationCanceledException)
             {
+                // 客户端主动断开（手机锁屏 / 用户取消）：无接收方意义，不推（见推送助手 remarks）
                 return Results.StatusCode(499);
             }
             catch (IOException ex)
             {
+                // 写盘类失败。⚠️ 刻意**不**贴 InsufficientDisk 原因码：IOException 也可能来自
+                // 写入中断而非空间不足，贴错码会让界面给出错误的处置建议（宁可只给说明文字）。
+                await BroadcastTransferUpdateAsync(
+                    uploadId, rel ?? name, offset, size, nameof(TransferStatus.Failed), errorMessage: ex.Message);
                 return Results.Json(new { error = ex.Message }, statusCode: 507);
             }
             catch (Exception ex)
             {
                 _logger.Warn($"Web 上传异常：{ex.Message}");
+                await BroadcastTransferUpdateAsync(
+                    uploadId, rel ?? name, offset, size, nameof(TransferStatus.Failed), errorMessage: ex.Message);
                 return Results.Json(new { error = "上传失败，" + ex.Message }, statusCode: 500);
             }
         });

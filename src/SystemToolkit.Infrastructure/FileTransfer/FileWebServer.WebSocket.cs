@@ -128,6 +128,68 @@ public sealed partial class FileWebServer
         }
     }
 
+    /// <summary>
+    /// 推送一次「上传状态更新」（<c>transferUpdate</c>）给所有已连接浏览器。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 🔴 **前端分支早已存在、服务端从未发送**（<c>app.js</c> 的 <c>handleWsMessage</c> 里有
+    /// <c>case "transferUpdate"</c>，注释自承"当前 UI 不直接展示传输任务，仅 toast 提示"）——
+    /// 2026-09-11 的 <c>browserList</c> 是同一种洞。本方法把它补上，作为**web 上传通道的权威状态源**。
+    /// </para>
+    /// <para>
+    /// <b>它的定位（不要误解成"给上传者看进度"）</b>：上传者本机有 <c>xhr.upload</c> 的本地进度，
+    /// 比服务端往返更流畅。这条推送真正解决三件事：① 其它已连浏览器也能看到"有人在传 X"；
+    /// ② 终态以**服务端**为准（连接在定稿响应途中断掉时，本机会误判失败，而文件其实已落盘）；
+    /// ③ 后续"电脑 → 手机推文件"没有本地进度可依，必须靠推送。
+    /// </para>
+    /// <para>
+    /// <b>不推的场合</b>：参数校验类拒绝（非法路径 / 大小超限 / 偏移不匹配）——那是**请求错误**，
+    /// 不是传输失败，调用方当场就拿到了 HTTP 错误；客户端主动断开（499）同理不推（无接收方意义）。
+    /// </para>
+    /// <para>
+    /// <b>失败不回传调用方</b>：进度是附加信息，不是数据面——推送失败只留痕，绝不能把上传搞崩。
+    /// </para>
+    /// </remarks>
+    /// <param name="uploadId">服务端算出的上传指纹（同一文件续传时稳定）。</param>
+    /// <param name="fileName">展示用文件名（净化后的相对路径）。</param>
+    /// <param name="transferredBytes">已落盘字节数（进度推送时=服务端已确认接收量；失败时=失败前确认量）。</param>
+    /// <param name="totalBytes">文件总字节数。</param>
+    /// <param name="status">状态名（对齐 <c>TransferStatus</c> 枚举名：Transferring/Completed/Skipped/Failed）。</param>
+    /// <param name="skipped">是否按同名冲突策略跳过（未写入目标目录）。</param>
+    /// <param name="reasonCode">机器可读原因码（可空；见 <c>TransferReasonCodes</c>）。</param>
+    /// <param name="errorMessage">给人看的失败说明（可空）。</param>
+    private async Task BroadcastTransferUpdateAsync(
+        string uploadId,
+        string fileName,
+        long transferredBytes,
+        long totalBytes,
+        string status,
+        bool skipped = false,
+        string? reasonCode = null,
+        string? errorMessage = null)
+    {
+        try
+        {
+            await BroadcastJsonAsync(BuildEnvelope("transferUpdate", new
+            {
+                TransferId = uploadId,
+                FileName = fileName,
+                TransferredBytes = transferredBytes,
+                TotalBytes = totalBytes,
+                Status = status,
+                Skipped = skipped,
+                ReasonCode = reasonCode,
+                ErrorMessage = errorMessage,
+                At = DateTimeOffset.UtcNow,
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[FileWebServer] 上传状态推送失败（不影响上传本身）：{ex.Message}");
+        }
+    }
+
     /// <summary>设备上下线/更新 → 广播给所有已连接浏览器（单个连接失败不影响其余）。</summary>
     private async Task BroadcastDeviceChangeAsync(DeviceChangeEventArgs e)
     {

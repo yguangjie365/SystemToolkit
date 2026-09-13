@@ -1136,4 +1136,149 @@ public class FileWebServerTests
             DeleteTempDir(dir);
         }
     }
+
+    // ==================================================================
+    // W1a：上传状态推送（transferUpdate）
+    // ==================================================================
+
+    /// <summary>
+    /// 连上 <c>/ws</c> 并吃掉首帧三连（deviceList → browserList → serverInfo），
+    /// 之后 <c>ReceiveTextAsync</c> 拿到的就是业务推送。
+    /// </summary>
+    private static async Task<System.Net.WebSockets.ClientWebSocket> ConnectWsAsync(int port, string token)
+    {
+        var ws = new System.Net.WebSockets.ClientWebSocket();
+        await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={token}"), CancellationToken.None);
+        string first = await ReceiveTextAsync(ws);
+        string second = await ReceiveTextAsync(ws);
+        string third = await ReceiveTextAsync(ws);
+        Assert.Contains("\"type\":\"deviceList\"", first);
+        Assert.Contains("\"type\":\"browserList\"", second);
+        Assert.Contains("\"type\":\"serverInfo\"", third);
+        return ws;
+    }
+
+    /// <summary>
+    /// W1a：分块上传应在「每块落定」时推 <c>Transferring</c>、在「定稿」时推 <c>Completed</c>。
+    /// <para>
+    /// 反向验证：移除 upload-chunk 端点里的两处 <c>BroadcastTransferUpdateAsync</c> → 本用例超时/断言失败变红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task UploadChunk_ProgressThenFinalize_BroadcastsTransferUpdate()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+
+            // 两块文件：第一块只落一半 → 服务端必须推一条「传输中」的真实进度
+            byte[] data = new byte[80];
+            HttpResponseMessage first = await PostChunkAsync(http, port, server.Token, "chat.bin", 80, 1, 0, data[..40]);
+            Assert.True(first.IsSuccessStatusCode);
+
+            string progress = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"transferUpdate\"", progress);
+            Assert.Contains("\"status\":\"Transferring\"", progress);
+            Assert.Contains("\"fileName\":\"chat.bin\"", progress);
+            Assert.Contains("\"transferredBytes\":40", progress);
+            Assert.Contains("\"totalBytes\":80", progress);
+
+            // 第二块收尾 → 定稿，推「已完成」
+            HttpResponseMessage second = await PostChunkAsync(http, port, server.Token, "chat.bin", 80, 1, 40, data[40..]);
+            Assert.True(second.IsSuccessStatusCode);
+
+            string done = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"transferUpdate\"", done);
+            Assert.Contains("\"status\":\"Completed\"", done);
+            Assert.Contains("\"skipped\":false", done);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W1a：「按同名策略跳过」必须推 <c>Skipped</c> 且带原因码 ——
+    /// 推成 <c>Completed</c> 就是状态欺骗（目标目录里并没有新增文件）。
+    /// </summary>
+    [Fact]
+    public async Task UploadChunk_ConflictSkip_BroadcastsSkippedWithReasonCode()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            TransferSettings settings = MakeSettings(port);
+            settings.ConflictPolicy = SystemToolkit.Core.FileTransfer.Models.TransferConflictPolicy.Skip;
+            await using var server = new FileWebServer();
+            await server.StartAsync(settings, dir);
+
+            await File.WriteAllTextAsync(Path.Combine(dir, "dup.txt"), "已存在的旧内容");
+
+            using var http = new HttpClient();
+            using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+
+            byte[] data = Encoding.UTF8.GetBytes("新内容");
+            HttpResponseMessage resp = await PostChunkAsync(http, port, server.Token, "dup.txt", data.Length, 3, 0, data);
+            Assert.True(resp.IsSuccessStatusCode);
+
+            string frame = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"transferUpdate\"", frame);
+            Assert.Contains("\"status\":\"Skipped\"", frame);
+            Assert.Contains("\"skipped\":true", frame);
+            Assert.Contains("\"reasonCode\":\"CONFLICT_SKIP\"", frame);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W1a：**参数校验类拒绝不推**（这里是文件大小超限 413）。
+    /// <para>
+    /// 理由：那是"请求错误"而非传输失败，调用方当场就拿到了 HTTP 错误；
+    /// 推给所有已连浏览器只是噪音，还会让"有人在传大文件失败"的错觉扩散。<br/>
+    /// 断言手法：拒绝之后紧跟一次 <c>ping</c>——若中间推过任何东西，
+    /// <c>pong</c> 之前就会先收到那一帧（次序断言，不靠等待超时，避免用例抖动）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task UploadChunk_ValidationRejection_DoesNotBroadcastTransferUpdate()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+
+            byte[] data = new byte[4];
+            HttpResponseMessage bad = await PostChunkAsync(http, port, server.Token, "huge.bin", long.MaxValue, 1, 0, data);
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, bad.StatusCode);
+
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes("{\"type\":\"ping\"}"),
+                System.Net.WebSockets.WebSocketMessageType.Text,
+                endOfMessage: true,
+                CancellationToken.None);
+
+            string next = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"pong\"", next);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
 }
