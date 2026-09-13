@@ -23,4 +23,15 @@ public sealed record WebSessionInfo(
     string Ip,
     DateTimeOffset CreatedAt,
     DateTimeOffset LastSeenAt,
-    bool IsLocalPreview = false);
+    bool IsLocalPreview = false)
+{
+    /// <summary>
+    /// 是否免配对会话（来自「记住此设备」的长期凭据，P3 ⑲）。
+    /// 界面据此显示「已记住 N 天」而不是「本次会话」——两种授权的失效时机完全不同，
+    /// 混在一起显示会让用户以为"踢一下就完了"，而长期凭据还在（其实踢出会一并删除，但用户需要看到这一点）。
+    /// </summary>
+    public bool Trusted { get; init; }
+
+    /// <summary>到期时间（免配对 = 长期凭据到期；普通会话 = 本运行期的 8 小时）。</summary>
+    public DateTimeOffset ExpiresAt { get; init; }
+}

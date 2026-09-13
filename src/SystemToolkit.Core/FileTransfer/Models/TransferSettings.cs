@@ -56,6 +56,15 @@ public sealed class TransferSettings
     /// </summary>
     public bool RequirePairing { get; set; } = true;
 
+    /// <summary>
+    /// 免配对有效期（天，P3 ⑲）：手机端勾选「记住此设备」后，凭据在此时长内跨重启有效。
+    /// <para>
+    /// 默认 30 天。为什么不设"永久"：长期凭据是安全面，而家庭局域网的使用频率远低于 30 天一次，
+    /// 过期后重扫一次码的代价很小；无上限则意味着"一台丢失的手机永久持有访问权"。
+    /// </para>
+    /// </summary>
+    public int TrustedDeviceDays { get; set; } = 30;
+
     /// <summary>共享目录路径（空则使用当前用户的「下载」文件夹）。</summary>
     public string? ShareDirectory { get; set; }
 

@@ -52,6 +52,8 @@ public partial class FileTransferView : UserControl
                 return dialog.Decision; // 关窗/Esc 都收场为「拒绝」（窗口默认值）
             };
             Vm.Desktop.PickFiles = PickFiles;
+            // 历史导出（P3 ⑮）：保存路径由 View 选，VM 只负责生成内容与写盘
+            Vm.Desktop.PickExportPath = PickExportPath;
             await Vm.LoadAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -72,6 +74,20 @@ public partial class FileTransferView : UserControl
             CheckFileExists = true,
         };
         return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileNames : null;
+    }
+
+    /// <summary>导出历史的保存路径（取消返回 null）。默认落到「下载」目录，文件名带时间戳。</summary>
+    private string? PickExportPath(string suggestedFileName)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出传输历史",
+            FileName = suggestedFileName,
+            DefaultExt = ".csv",
+            Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*",
+            InitialDirectory = SystemToolkit.Core.Utilities.UserFolders.GetDownloadsFolder(),
+        };
+        return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
     }
 
     private void OnPickReceiveDirectory(object sender, RoutedEventArgs e)

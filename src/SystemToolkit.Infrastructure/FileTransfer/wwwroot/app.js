@@ -12,6 +12,11 @@
     // 访问令牌：优先用本机已保存的（扫码配对后写入 localStorage）。
     // URL 上只允许出现**短期配对码**（?c=...），不再放长期令牌——二维码容易被截图外泄。
     const TOKEN_STORAGE_KEY = "stk_web_token";
+    // 「记住此设备」的用户意愿（P3 ⑲）：跨刷新保留，下次扫码配对时随请求带给服务端
+    const REMEMBER_KEY = "stk_remember_device";
+    // 免配对到期时间（服务端签发时告知，P3 ⑲）：仅用于在页面上如实显示"剩余 N 天"
+    const TRUSTED_UNTIL_KEY = "stk_trusted_until";
+    let REMEMBER = localStorage.getItem(REMEMBER_KEY) === "1";
     let TOKEN = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
     // 兼容旧的直接带令牌的链接（如电脑端"打开网页"按钮）
     const TOKEN_FROM_URL = new URLSearchParams(window.location.search).get("t") || "";
@@ -292,9 +297,11 @@
     function handleAuthFailure() {
         if (TOKEN) {
             localStorage.removeItem(TOKEN_STORAGE_KEY);
+            // 免配对的到期记录也要清：否则页面会继续显示"已记住"，而服务端其实已经不认了
+            localStorage.removeItem(TRUSTED_UNTIL_KEY);
             TOKEN = "";
         }
-        showToast("访问令牌已失效（电脑端重启过 Web 服务），请重新扫码", "error");
+        showToast("访问令牌已失效（电脑端重启过服务，或在「已授权设备」里撤销了本机），请重新扫码", "error");
     }
 
     /**
@@ -1555,12 +1562,22 @@
                 const resp = await fetch(API_BASE + "/api/pair", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ code: code }),
+                    // remember 由用户在页面上勾选（默认不勾 = 最小授权）；服务端未启用该能力时会
+                    // 回 remembered:false，页面据此如实说"未记住"，不假装成功。
+                    body: JSON.stringify({ code: code, remember: REMEMBER }),
                 });
                 if (resp.ok) {
                     const data = await resp.json();
                     TOKEN = data.token || "";
                     localStorage.setItem(TOKEN_STORAGE_KEY, TOKEN);
+                    if (data.remembered) {
+                        localStorage.setItem(TRUSTED_UNTIL_KEY, String(data.expiresAtUtcMs || 0));
+                    } else {
+                        localStorage.removeItem(TRUSTED_UNTIL_KEY);
+                        if (REMEMBER) {
+                            showToast("已配对，但电脑端未启用「记住此设备」，本次仅限当前会话", "info");
+                        }
+                    }
                 } else {
                     TOKEN = "";
                 }
@@ -1576,6 +1593,60 @@
         return !!TOKEN;
     }
 
+    /**
+     * 配对状态条（P3 ⑲）：如实显示"这台设备凭什么能访问"，并给"记住/忘记"的入口。
+     * 三种状态互斥：未配对 / 已记住（N 天）/ 本次会话。
+     */
+    function initPairState() {
+        const box = document.getElementById("pairState");
+        const text = document.getElementById("pairStateText");
+        const rememberRow = document.getElementById("rememberRow");
+        const remember = document.getElementById("rememberDevice");
+        const forgetBtn = document.getElementById("forgetDevice");
+        if (!box || !text || !rememberRow || !remember || !forgetBtn) return;
+
+        const until = Number(localStorage.getItem(TRUSTED_UNTIL_KEY) || 0);
+        const trustedDaysLeft = until > Date.now()
+            ? Math.max(1, Math.ceil((until - Date.now()) / 86400000))
+            : 0;
+
+        box.hidden = false;
+        remember.checked = REMEMBER;
+        remember.addEventListener("change", () => {
+            REMEMBER = remember.checked;
+            localStorage.setItem(REMEMBER_KEY, REMEMBER ? "1" : "0");
+        });
+
+        if (!TOKEN) {
+            text.textContent = "未配对：请扫描电脑上的二维码";
+            rememberRow.hidden = false;
+            forgetBtn.hidden = true;
+            return;
+        }
+
+        if (trustedDaysLeft > 0) {
+            text.textContent = "已记住此设备 · 剩余 " + trustedDaysLeft + " 天";
+            // 已记住时不再显示勾选框：再勾也没有"升级"空间，留着只会让人以为能改
+            rememberRow.hidden = true;
+            forgetBtn.hidden = false;
+        } else {
+            text.textContent = "本次会话：电脑端重启应用或 8 小时后需重新扫码";
+            rememberRow.hidden = false;
+            forgetBtn.hidden = true;
+        }
+
+        forgetBtn.addEventListener("click", async () => {
+            try {
+                // 服务端删掉长期凭据 + 当前会话（只删自己，不能凭此接口踢别人）
+                await fetch(API_BASE + "/api/sessions/forget?t=" + encodeURIComponent(TOKEN), { method: "POST" });
+            } catch (e) { /* 网络失败也要清本地：用户的意图是"忘掉" */ }
+            localStorage.removeItem(TOKEN_STORAGE_KEY);
+            localStorage.removeItem(TRUSTED_UNTIL_KEY);
+            showToast("已忘记此设备，请重新扫码配对", "info");
+            setTimeout(() => window.location.reload(), 800);
+        });
+    }
+
     async function init() {
         // 必须先配对再初始化：WS_URL / API 都依赖 TOKEN
         const paired = await tryPair();
@@ -1588,6 +1659,7 @@
         renderBreadcrumb();
         initUploadZone();
         initVisibilityHandler();
+        initPairState(); // 配对状态条（P3 ⑲）：未配对/已记住/本次会话三态如实显示
 
         // 证书指纹核对（协议 §6.3）：免令牌端点，故与配对结果无关，先挂上不影响主流程
         checkCertFingerprint();

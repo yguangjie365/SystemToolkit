@@ -25,6 +25,23 @@ public sealed class FileTransferModule : ModuleBase
     public override object CreateView(IServiceProvider services) =>
         services.GetRequiredService<FileTransferView>();
 
+    /// <summary>
+    /// 应用启动钩子（2026-09-13 批次 P3 ⑰）：只有「手机通道的 Web 服务随应用启动」需要它。
+    /// <para>
+    /// 为什么放在这里而不是页面 Loaded：VM 是按需创建的（页面首次打开才解析），
+    /// 挂在 Loaded 上等于"不点开互传页，手机就永远连不上"——那不叫随应用启动。
+    /// </para>
+    /// <para>
+    /// 是否真的启动由**配置**决定（<c>AutoStartWithApp</c>），本钩子不替用户做选择；
+    /// 钩子内不抛异常（宿主会兜底记日志，但别依赖它）。
+    /// </para>
+    /// </summary>
+    public override async Task OnAppStartupAsync(IServiceProvider services, CancellationToken ct = default)
+    {
+        FileTransferViewModel vm = services.GetRequiredService<FileTransferViewModel>();
+        await vm.Mobile.TryAutoStartWithAppAsync();
+    }
+
     public override void RegisterServices(IServiceCollection services)
     {
         // 可观测日志（键控注册，审查 2026-09-04 纪律）

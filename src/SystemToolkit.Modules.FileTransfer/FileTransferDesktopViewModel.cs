@@ -13,7 +13,7 @@ using SystemToolkit.Core.Utilities;
 namespace SystemToolkit.Modules.FileTransfer;
 
 /// <summary>局域网已发现设备行投影。</summary>
-public sealed class DiscoveredDeviceRowVm
+public partial class DiscoveredDeviceRowVm : ObservableObject
 {
     public DiscoveredDevice Model { get; }
 
@@ -24,6 +24,13 @@ public sealed class DiscoveredDeviceRowVm
     public string EndpointText => $"{Model.IPAddress}:{Model.TransferPort}";
 
     public string OnlineText => Model.IsOnline ? "在线" : "离线";
+
+    /// <summary>
+    /// 是否已在「已知设备」列表里（2026-09-13 批次 P3 ⑭）。由 VM 在设备列表刷新与
+    /// 已知列表增删后统一重算——判断"是否已加入"的依据只能有一处。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isKnown;
 }
 
 /// <summary>已知设备（记忆的常用对端）行 VM，可编辑并持久化。</summary>
@@ -152,6 +159,11 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         _transfer.TaskCompleted += OnTaskCompleted;
         _transfer.TransferRequested += OnTransferRequested;
         _discovery.DeviceChanged += OnDeviceChanged;
+
+        // 历史筛选视图（P3 ⑮）：建在构造里、绑到 XAML 的 Desktop.HistoryView，
+        // 这样"筛选条件"只有一处真相（VM），XAML 不参与过滤逻辑。
+        HistoryView = System.Windows.Data.CollectionViewSource.GetDefaultView(HistoryEntries);
+        HistoryView.Filter = FilterHistory;
     }
 
     /// <summary>
@@ -210,6 +222,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     // ── 服务与配置 ──
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PortEffectHint))]
     private bool _isTransferRunning;
 
     [ObservableProperty]
@@ -217,6 +230,72 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     [ObservableProperty]
     private string _receiveDirectory = "";
+
+    /// <summary>
+    /// 接收目录所在盘剩余空间文案（2026-09-13 批次 P3 ⑯）。与接收前磁盘预检同一数据源
+    /// （<c>DiskSpaceUtil</c>）——用户看到的数字与预检的判据必须是同一份事实。
+    /// </summary>
+    [ObservableProperty]
+    private string _receiveDirectoryFreeText = "";
+
+    partial void OnReceiveDirectoryChanged(string value) => RefreshReceiveDirectoryFreeSpace();
+
+    private void RefreshReceiveDirectoryFreeSpace()
+    {
+        string dir = ReceiveDirectory?.Trim() ?? string.Empty;
+        if (dir.Length == 0 || !Directory.Exists(dir))
+        {
+            // 目录还没建（服务未启动）时如实留空，不猜、不显示 0
+            ReceiveDirectoryFreeText = string.Empty;
+            return;
+        }
+
+        long? free = DiskSpaceUtil.TryGetAvailableFreeBytes(dir);
+        ReceiveDirectoryFreeText = free is null
+            ? "剩余空间无法判定（网络路径或卷未就绪）"
+            : $"剩余 {FormatUtil.FormatSize(free.Value)}";
+    }
+
+    // ── 端口（2026-09-13 批次 P3 ⑱） ──
+
+    // 🔴 用**字符串**承载输入而不是直接绑 int：WPF 把 "" / "18" 这样的中间态转 int 会失败，
+    // 失败是静默的（用户看到自己打的字被"吞"），且异常只在 Output 窗口可见。
+    [ObservableProperty]
+    private string _tcpPortText = "18889";
+
+    [ObservableProperty]
+    private string _discoveryPortText = "18888";
+
+    /// <summary>端口校验错误文案（空串 = 无错）。</summary>
+    [ObservableProperty]
+    private string _portErrorText = "";
+
+    /// <summary>校验通过的 TCP 端口（非法时为 0；调用方必须先看 <see cref="PortErrorText"/>）。</summary>
+    public int TcpPort => int.TryParse(TcpPortText?.Trim(), out int port) ? port : 0;
+
+    /// <summary>校验通过的发现端口（非法时为 0）。</summary>
+    public int DiscoveryPort => int.TryParse(DiscoveryPortText?.Trim(), out int port) ? port : 0;
+
+    partial void OnTcpPortTextChanged(string value) => SaveAndValidatePorts();
+
+    partial void OnDiscoveryPortTextChanged(string value) => SaveAndValidatePorts();
+
+    /// <summary>服务在跑时改端口必须重启才生效——界面要明说。</summary>
+    public string PortEffectHint => IsTransferRunning
+        ? "已改，重启服务后生效"
+        : "启动服务时生效";
+
+    private void SaveAndValidatePorts()
+    {
+        PortErrorText = PortValidator.Validate(
+            ("TCP 端口", TcpPort), ("UDP 端口", DiscoveryPort)) ?? string.Empty;
+        OnPropertyChanged(nameof(TcpPort));
+        OnPropertyChanged(nameof(DiscoveryPort));
+        if (string.IsNullOrEmpty(PortErrorText))
+        {
+            _ = TryPersistConfig(out _); // 只落盘合法值，免得手滑时把坏值写进配置
+        }
+    }
 
     [ObservableProperty]
     private bool _requireKnownPeer = true;
@@ -304,6 +383,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         Initialized = true;
         LoadConfig();
         ReloadHistory();
+        RefreshReceiveDirectoryFreeSpace(); // 目录剩余空间（P3 ⑯）：进页面就给，不必等服务启动
         _log($"[互传] 本机设备 ID：{_discovery.LocalDeviceId}");
     }
 
@@ -316,9 +396,15 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         RefreshToggleCanExecute();
         try
         {
+            if (!string.IsNullOrEmpty(PortErrorText))
+            {
+                _log($"[互传] ⚠️ 端口设置非法，未启动：{PortErrorText}");
+                return;
+            }
+
             var settings = new TransferSettings
             {
-                TransferPort = 18889,
+                TransferPort = TcpPort,
                 ReceiveDirectory = ReceiveDirectory,
                 RequireKnownPeer = RequireKnownPeer,
                 RequireReceiveConfirmation = RequireReceiveConfirmation,
@@ -341,19 +427,19 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
             catch (Exception ex)
             {
-                _log($"[互传] ❌ 传输服务启动失败（TCP 18889 可能被占用）：{ex.Message}");
+                _log($"[互传] ❌ 传输服务启动失败（TCP {TcpPort} 可能被占用）：{ex.Message}");
                 _logger.Error("传输服务启动失败", ex);
                 throw;
             }
 
-            _transferPort = 18889;
+            _transferPort = TcpPort;
             OnPropertyChanged(nameof(TransferPortText));
             try
             {
                 var discoverySettings = new TransferSettings
                 {
-                    DiscoveryPort = 18888,
-                    TransferPort = 18889,
+                    DiscoveryPort = DiscoveryPort,
+                    TransferPort = TcpPort,
                     HeartbeatInterval = TimeSpan.FromSeconds(3),
                     OfflineTimeout = TimeSpan.FromSeconds(10),
                 };
@@ -365,7 +451,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
             catch (Exception ex)
             {
-                _log($"[互传] ❌ 设备发现服务启动失败（UDP 18888 可能被占用）：{ex.Message}");
+                _log($"[互传] ❌ 设备发现服务启动失败（UDP {DiscoveryPort} 可能被占用）：{ex.Message}");
                 _logger.Error("设备发现服务启动失败", ex);
 
                 // 传输服务已起来但发现服务没起来：不回滚会留下"停止按钮不可用、服务却在跑"的僵局
@@ -384,7 +470,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
 
             IsTransferRunning = true;
-            _log("[互传] ✅ 传输与设备发现服务已启动（TCP 18889 / UDP 18888）");
+            RefreshReceiveDirectoryFreeSpace(); // 目录此刻已被服务创建，剩余空间才有得算
+            _log($"[互传] ✅ 传输与设备发现服务已启动（TCP {TcpPort} / UDP {DiscoveryPort}）");
             _logger.Info("互传服务启动");
         }
         catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
@@ -498,6 +585,15 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                     RequireReceiveConfirmation = config.RequireReceiveConfirmation;
                     ConflictPolicy = config.ConflictPolicy;
                     PauseTimeoutMinutes = config.PauseTimeoutMinutes > 0 ? config.PauseTimeoutMinutes : 30;
+                    // 端口只在合法时采纳：配置文件被手改坏时退回默认值，而不是拿非法值去绑定
+                    if (PortValidator.IsInRange(config.TcpPort))
+                    {
+                        TcpPortText = config.TcpPort.ToString();
+                    }
+                    if (PortValidator.IsInRange(config.DiscoveryPort))
+                    {
+                        DiscoveryPortText = config.DiscoveryPort.ToString();
+                    }
                     KnownPeers.Clear();
                     foreach (KnownPeerEntry peer in config.KnownPeers)
                     {
@@ -515,6 +611,25 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [RelayCommand]
     private void SaveConfig()
     {
+        if (TryPersistConfig(out string error))
+        {
+            _log("[互传] 配置已保存");
+        }
+        else
+        {
+            _log("[互传] ❌ 配置保存失败：" + error);
+        }
+    }
+
+    /// <summary>
+    /// 落盘配置（无日志，供端口/选项变更时的**静默自动保存**使用）。
+    /// <para>
+    /// 为什么要拆：端口是逐字符输入的，若每次变更都打一条「配置已保存」，日志会被刷成噪声；
+    /// 但保存动作本身必须真的发生（否则"改完不生效"要等重启才发现）。
+    /// </para>
+    /// </summary>
+    private bool TryPersistConfig(out string error)
+    {
         try
         {
             var config = new ModuleConfig
@@ -524,15 +639,19 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 RequireReceiveConfirmation = RequireReceiveConfirmation,
                 ConflictPolicy = ConflictPolicy,
                 PauseTimeoutMinutes = PauseTimeoutMinutes,
+                TcpPort = TcpPort,
+                DiscoveryPort = DiscoveryPort,
                 KnownPeers = KnownPeers.Select(p => new KnownPeerEntry(p.Name, p.Ip, p.Port)).ToList(),
             };
             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
             AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(config, JsonOpts));
-            _log("[互传] 配置已保存");
+            error = string.Empty;
+            return true;
         }
         catch (Exception ex)
         {
-            _log("[互传] ❌ 配置保存失败：" + ex.Message);
+            error = ex.Message;
+            return false;
         }
     }
 
@@ -552,6 +671,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         if (SelectedKnownPeer is not null)
         {
             KnownPeers.Remove(SelectedKnownPeer);
+            RefreshDeviceKnownFlags(); // 移除后设备行应重新出现「加入已知」
+            _ = TryPersistConfig(out _);
             _log($"[互传] 已移除已知设备：{SelectedKnownPeer.Name}");
         }
     }
@@ -579,10 +700,51 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             Ip = ip,
             Port = SelectedDevice.Model.TransferPort,
         });
+        RefreshDeviceKnownFlags();
         _log($"[互传] 已将 {SelectedDevice.Model.Name} 加入已知设备（记得点保存）");
     }
 
     // ── 设备发现 ──
+
+    /// <summary>
+    /// 一键把已发现设备加入「已知设备」（2026-09-13 批次 P3 ⑭）。
+    /// <para>
+    /// 与「添加」按钮的区别：那个要求用户手抄 IP，多网段 / 名字相近时很容易填错；
+    /// 这里的 IP 与端口直接取自发现结果，不可能抄错。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private void AddDeviceToKnown(DiscoveredDeviceRowVm? row)
+    {
+        if (row is null)
+        {
+            _log("[互传] ⚠️ 请先选择要加入的设备");
+            return;
+        }
+
+        string ip = row.Model.IPAddress.ToString();
+        int port = row.Model.TransferPort;
+        if (KnownPeers.Any(p => p.Ip == ip && p.Port == port))
+        {
+            _log($"[互传] ⚠️ {row.Model.Name} 已在已知设备列表中");
+            return;
+        }
+
+        KnownPeers.Add(new KnownPeerRowVm { Name = row.Model.Name, Ip = ip, Port = port });
+        RefreshDeviceKnownFlags();
+        _ = TryPersistConfig(out _); // 静默落盘：本操作意图明确，不该再要求用户点「保存」
+        _log($"[互传] 已将 {row.Model.Name}（{ip}:{port}）加入已知设备");
+    }
+
+    /// <summary>重算每台已发现设备是否已在已知列表（设备列表刷新、已知列表增删后各调一次）。</summary>
+    private void RefreshDeviceKnownFlags()
+    {
+        foreach (DiscoveredDeviceRowVm row in DiscoveredDevices)
+        {
+            string ip = row.Model.IPAddress.ToString();
+            row.IsKnown = KnownPeers.Any(p => p.Ip == ip && p.Port == row.Model.TransferPort);
+        }
+    }
 
     private void OnDeviceChanged(object? sender, DeviceChangeEventArgs e)
     {
@@ -594,6 +756,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             {
                 DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
             }
+
+            RefreshDeviceKnownFlags();
 
             if (e.ChangeType == DeviceChangeType.Discovered)
             {
@@ -612,6 +776,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             {
                 DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
             }
+
+            RefreshDeviceKnownFlags();
 
             _log($"[互传] 已刷新：{_discovery.Devices.Count} 台在线设备");
         }
@@ -905,6 +1071,107 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     // ── 历史 ──
 
+    /// <summary>历史列表的筛选视图（P3 ⑮）：筛选只影响显示，不动存储。</summary>
+    public System.ComponentModel.ICollectionView HistoryView { get; }
+
+    /// <summary>方向筛选项（首项 = 不限）。</summary>
+    public IReadOnlyList<string> HistoryDirectionOptions { get; } = ["全部方向", "仅发送", "仅接收"];
+
+    /// <summary>状态筛选项（首项 = 不限；与任务状态一一对应）。</summary>
+    public IReadOnlyList<string> HistoryStatusOptions { get; } = ["全部状态", "完成", "失败", "已跳过", "已取消"];
+
+    [ObservableProperty]
+    private string _historyDirectionFilter = "全部方向";
+
+    [ObservableProperty]
+    private string _historyStatusFilter = "全部状态";
+
+    [ObservableProperty]
+    private string _historySearchText = "";
+
+    partial void OnHistoryDirectionFilterChanged(string value) => HistoryView.Refresh();
+
+    partial void OnHistoryStatusFilterChanged(string value) => HistoryView.Refresh();
+
+    partial void OnHistorySearchTextChanged(string value) => HistoryView.Refresh();
+
+    private bool FilterHistory(object item)
+    {
+        if (item is not TransferHistoryEntry entry)
+        {
+            return false;
+        }
+
+        if (HistoryDirectionFilter == "仅发送" && entry.Direction != TransferDirection.Send)
+        {
+            return false;
+        }
+        if (HistoryDirectionFilter == "仅接收" && entry.Direction != TransferDirection.Receive)
+        {
+            return false;
+        }
+        if (HistoryStatusFilter != "全部状态" && entry.StatusText != HistoryStatusFilter)
+        {
+            return false;
+        }
+
+        string keyword = HistorySearchText?.Trim() ?? string.Empty;
+        if (keyword.Length > 0
+            && entry.FileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0
+            && entry.PeerEndpoint.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 导出**当前筛选结果**为 CSV（P3 ⑮）。
+    /// <para>
+    /// 导出的是"屏幕上的那批"而不是全部：用户先筛出失败的几笔再导出，是最常见的用法；
+    /// 若导出全部，他会得到一份与眼前不一致的文件——那比没有导出更糟。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private void ExportHistoryCsv()
+    {
+        var rows = HistoryView.Cast<TransferHistoryEntry>().ToList();
+        if (rows.Count == 0)
+        {
+            _log("[互传] ⚠️ 当前筛选结果为空，没有可导出的记录");
+            return;
+        }
+
+        if (PickExportPath is null)
+        {
+            _log("[互传] ⚠️ 导出不可用（未接入保存对话框）");
+            return;
+        }
+
+        string? path = PickExportPath($"{TransferHistoryCsv.FileNamePrefix}{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        if (string.IsNullOrEmpty(path))
+        {
+            return; // 用户取消，不是错误
+        }
+
+        try
+        {
+            // 🔴 带 BOM 的 UTF-8：不加的话 Excel 打开中文列名与文件名会变乱码
+            // （用 AtomicFile.WriteAllBytes 满足本仓"新增文件写入必须走 AtomicFile"的守卫）
+            AtomicFile.WriteAllBytes(path, new System.Text.UTF8Encoding(true).GetBytes(TransferHistoryCsv.Build(rows)));
+            _log($"[互传] ✅ 已导出 {rows.Count} 条历史：{path}");
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ❌ 导出失败：{ex.Message}");
+            _logger.Error("导出传输历史失败", ex);
+        }
+    }
+
+    /// <summary>导出保存对话框回调（View 注入；参数为建议文件名，返回 null = 用户取消）。</summary>
+    public Func<string, string?>? PickExportPath { get; set; }
+
     private void ReloadHistory()
     {
         HistoryEntries.Clear();
@@ -912,6 +1179,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         {
             HistoryEntries.Add(entry);
         }
+
+        HistoryView.Refresh(); // 重新加载后按当前筛选条件重算
     }
 
     [RelayCommand]
@@ -941,6 +1210,12 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
         /// <summary>暂停超时（分钟；0 或负 = 不限）。</summary>
         public int PauseTimeoutMinutes { get; set; } = 30;
+
+        /// <summary>电脑通道 TCP 端口（2026-09-13 批次 P3 ⑱）。</summary>
+        public int TcpPort { get; set; } = 18889;
+
+        /// <summary>设备发现 UDP 端口。</summary>
+        public int DiscoveryPort { get; set; } = 18888;
 
         public List<KnownPeerEntry> KnownPeers { get; set; } = new();
     }

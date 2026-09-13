@@ -18,6 +18,70 @@
             <Setter Property="Margin" Value="0,6,0,0"/>
         </Style>
 
+        <!-- P3（2026-09-13）：端口输入与行内提示。尺寸与间距全在 Setter 内 → 不占棘轮额度 -->
+        <Style x:Key="PortInput" TargetType="TextBox" BasedOn="{StaticResource FieldInput}">
+            <Setter Property="MinWidth" Value="68"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontFamily" Value="{DynamicResource Font_Mono}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+        </Style>
+        <Style x:Key="InlineHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+        <Style x:Key="InlineError" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <!-- 无错误时整行收起，避免界面永远挂着一块空白 -->
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Desktop.PortErrorText}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- P3 ⑭：设备行内的「加入已知」。用 Style.Triggers 判 IsKnown，省掉一个反向转换器 -->
+        <Style x:Key="DeviceRowJoinButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsKnown}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DeviceRowKnownMark" TargetType="TextBlock">
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="Text" Value="已加入"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsKnown}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- P3 ⑮：历史筛选行与导出。间距同样走 Setter（棘轮额度已顶满） -->
+        <Style x:Key="HistoryFilterRow" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="HistorySearchBox" TargetType="TextBox" BasedOn="{StaticResource FieldInput}">
+            <Setter Property="MinWidth" Value="200"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </Style>
+        <Style x:Key="HistoryClearButton" TargetType="Button" BasedOn="{StaticResource CardButton}">
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </Style>
+
         <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
              🔴 本文件的令牌棘轮额度**已顶满**（margin 44/44 · width 25/25 · padding 3/3 ·
              height 6/6 · border 2/2），因此这张卡片的所有间距一律写进 Style Setter：
@@ -39,6 +103,13 @@
         </Style>
         <Style x:Key="SessionKickButton" TargetType="Button" BasedOn="{StaticResource CompactDangerButton}">
             <Setter Property="Margin" Value="12,0,0,0"/>
+        </Style>
+        <!-- P3 ⑲：会话行的授权性质（已记住 / 本次会话） -->
+        <Style x:Key="SessionTrustCell" TargetType="TextBlock">
+            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
         </Style>
         <Style x:Key="CertRow" TargetType="StackPanel">
             <Setter Property="Margin" Value="0,6,0,0"/>
@@ -148,7 +219,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <TextBlock Text="设备 ID：" Style="{DynamicResource KvLabel}"/>
                                     <TextBlock Text="{Binding Desktop.DeviceId}" Style="{DynamicResource MonoText}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Desktop.TransferPortText, StringFormat=· TCP 端口 {0}}" Style="{DynamicResource KvLabel}" Margin="10,0,0,0"/>
                                 </StackPanel>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -165,6 +235,22 @@
                                     <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickReceiveDirectory"/>
                                     <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Click="OnOpenReceiveDirectory"/>
                                 </Grid>
+                                <!-- 目录所在盘剩余空间（P3 ⑯）：与接收前磁盘预检同一数据源，用户看到的数字即预检的判据 -->
+                                <TextBlock Text="{Binding Desktop.ReceiveDirectoryFreeText}" Style="{DynamicResource InlineHint}"/>
+                                <!-- 端口可配（P3 ⑱）：改完即写配置，服务在跑时需重启才生效 -->
+                                <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                    <TextBlock Text="端口" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <TextBox Style="{DynamicResource PortInput}"
+                                             Text="{Binding Desktop.TcpPortText, UpdateSourceTrigger=LostFocus}"
+                                             ToolTip="文件传输 TCP 端口"/>
+                                    <TextBlock Text="TCP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <TextBox Style="{DynamicResource PortInput}"
+                                             Text="{Binding Desktop.DiscoveryPortText, UpdateSourceTrigger=LostFocus}"
+                                             ToolTip="设备发现 UDP 端口"/>
+                                    <TextBlock Text="UDP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Desktop.PortEffectHint}" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Desktop.PortErrorText}" Style="{DynamicResource InlineError}"/>
                                 <StackPanel Style="{StaticResource ReceiveSettingRow}">
                                     <TextBlock Text="同名文件" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
                                     <ComboBox Style="{DynamicResource ThemedComboBox}"
@@ -330,6 +416,12 @@
                                                 <TextBlock Text="{Binding EndpointText}" FontSize="{DynamicResource Font_SizeBodySm}" Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <TextBlock Text="{Binding OnlineText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="10,0,0,0"
                                                            Foreground="{DynamicResource Brush_SuccessText}"/>
+                                                <!-- 一键加入已知（P3 ⑭）：IP 与端口取自发现结果，不可能抄错 -->
+                                                <Button Style="{StaticResource DeviceRowJoinButton}" Content="加入已知"
+                                                        ToolTip="把这台设备记入「已知设备」，下次不用再找"
+                                                        Command="{Binding DataContext.Desktop.AddDeviceToKnownCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <TextBlock Style="{StaticResource DeviceRowKnownMark}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
@@ -337,8 +429,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Style="{DynamicResource RowPrimaryButton}" Content="发送文件到所选设备"
                                             Command="{Binding Desktop.SendToSelectedDeviceCommand}"/>
-                                    <Button Style="{DynamicResource CompactActionButton}" Content="加入已知" 
-                                            Command="{Binding Desktop.AddDiscoveredToKnownCommand}" Margin="8,0,0,0"/>
                                     <TextBlock Text="提示：也可把文件拖到目标设备行上" FontSize="{DynamicResource Font_SizeMicro}"
                                                Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                 </StackPanel>
@@ -424,15 +514,33 @@
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="200"/>
                             </Grid.RowDefinitions>
                             <Grid Grid.Row="0" Margin="0,0,0,10">
                                 <TextBlock Text="传输历史" Style="{DynamicResource CardTitle}"/>
-                                <Button HorizontalAlignment="Right" Style="{DynamicResource CardButton}" Content="清空"
-                                        Command="{Binding Desktop.ClearHistoryCommand}"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Style="{DynamicResource CardButton}" Content="导出 CSV"
+                                            Command="{Binding Desktop.ExportHistoryCsvCommand}"
+                                            ToolTip="按当前筛选结果导出（所见即所得）"/>
+                                    <Button Style="{StaticResource HistoryClearButton}" Content="清空"
+                                            Command="{Binding Desktop.ClearHistoryCommand}"/>
+                                </StackPanel>
                             </Grid>
-                            <ListBox Grid.Row="1"
-                                     ItemsSource="{Binding Desktop.HistoryEntries}"
+                            <!-- 历史筛选（P3 ⑮）：方向 + 状态 + 关键字，三者可叠加；只影响显示 -->
+                            <StackPanel Grid.Row="1" Style="{StaticResource HistoryFilterRow}">
+                                <ComboBox Style="{DynamicResource ThemedComboBox}" MinWidth="110" VerticalAlignment="Center"
+                                          ItemsSource="{Binding Desktop.HistoryDirectionOptions}"
+                                          SelectedItem="{Binding Desktop.HistoryDirectionFilter}"/>
+                                <ComboBox Style="{DynamicResource ThemedComboBox}" MinWidth="110" VerticalAlignment="Center"
+                                          ItemsSource="{Binding Desktop.HistoryStatusOptions}"
+                                          SelectedItem="{Binding Desktop.HistoryStatusFilter}"/>
+                                <TextBox Style="{StaticResource HistorySearchBox}"
+                                         Text="{Binding Desktop.HistorySearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="按文件名或对端 IP/端口搜索"/>
+                            </StackPanel>
+                            <ListBox Grid.Row="2"
+                                     ItemsSource="{Binding Desktop.HistoryView}"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
@@ -549,6 +657,32 @@
                                         <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickShareDirectory"/>
                                         <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Command="{Binding Mobile.OpenShareDirectoryCommand}"/>
                                     </Grid>
+                                    <!-- 共享目录所在盘剩余空间（P3 ⑯）：上传会落在这里 -->
+                                    <TextBlock Text="{Binding Mobile.ShareDirectoryFreeText}" Style="{DynamicResource InlineHint}"/>
+                                    <!-- 端口与 HTTPS（P3 ⑱）：改完即写配置，服务在跑时需重启才生效 -->
+                                    <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                        <TextBlock Text="端口" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                        <TextBox Style="{DynamicResource PortInput}"
+                                                 Text="{Binding Mobile.WebPortText, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip="Web 服务 HTTP 端口"/>
+                                        <TextBlock Text="HTTP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                        <TextBox Style="{DynamicResource PortInput}"
+                                                 Text="{Binding Mobile.HttpsPortText, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip="Web 服务 HTTPS 端口（勾选「启用 HTTPS」后才监听）"/>
+                                        <TextBlock Text="HTTPS" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Mobile.PortEffectHint}" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Mobile.PortErrorText}" Style="{DynamicResource InlineError}"/>
+                                    <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                        <CheckBox Content="启用 HTTPS（自签证书，手机需先信任一次）" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
+                                                  IsChecked="{Binding Mobile.UseHttps}"/>
+                                    </StackPanel>
+                                    <StackPanel Style="{StaticResource ReceiveSettingRow}">
+                                        <CheckBox Content="随应用启动" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
+                                                  IsChecked="{Binding Mobile.AutoStartWithApp}"
+                                                  ToolTip="应用一开就拉起 Web 服务，不必先进这一页；关闭应用时服务随之停止（本版不做托盘常驻）"/>
+                                        <TextBlock Text="（关闭应用即停止服务，不做托盘常驻）" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                     <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}"
                                                Text="手机与电脑需在同一局域网；首次连接触发防火墙提示属预期。共享目录下的文件可被手机浏览与下载。"/>
                                     <!-- 证书指纹（协议 §6.3）：手机端弹「证书已变更」时，用户可在这里核对——
@@ -643,6 +777,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource SessionNameCell}"
                                                            Foreground="{DynamicResource Brush_TextPrimary}" ToolTip="{Binding DetailTip}"/>
@@ -651,12 +786,15 @@
                                                            Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <TextBlock Grid.Column="2" Text="{Binding LastSeenText}" Style="{StaticResource SessionCell}"
                                                            FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                                <!-- 踢出：命令在页 VM（Mobile.*）上，项 VM 自身没有 → 经 AncestorType=UserControl
+                                                <!-- 授权性质（P3 ⑲）：免配对 vs 本次会话，失效时机不同必须分开显示 -->
+                                                <TextBlock Grid.Column="3" Text="{Binding TrustText}" Style="{StaticResource SessionTrustCell}"
+                                                           ToolTip="「已记住」= 30 天内免扫码（凭据存在电脑上）；「本次会话」= 重启后失效"/>
+                                                <!-- 踢出/撤销：命令在页 VM（Mobile.*）上，项 VM 自身没有 → 经 AncestorType=UserControl
                                                      回到页面 DataContext。这里是普通 DataTemplate（非 ContextMenu/Popup），祖先查找有效。 -->
-                                                <Button Grid.Column="3" Content="踢出" Style="{StaticResource SessionKickButton}"
+                                                <Button Grid.Column="4" Content="{Binding RevokeText}" Style="{StaticResource SessionKickButton}"
                                                         Command="{Binding DataContext.Mobile.KickSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
-                                                        AutomationProperties.Name="踢出此设备"/>
+                                                        AutomationProperties.Name="撤销此设备的访问权"/>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

@@ -145,6 +145,11 @@ public partial class App : Application
         // 正常启动：错过的定时备份补做（关机期间错过的规则，启动后自动补做一次）
         _ = RunDueScheduledBackupsSafeAsync();
 
+        // 模块启动钩子（2026-09-13）：模块 VM 是按需创建的，所以"开机即生效"的后台能力
+        // （目前是文件互传的手机通道 Web 服务）必须由宿主在启动时叫一次，否则不点开那一页就永不生效。
+        // fire-and-forget + 自身兜底异常：启动路径上不能因为某个模块失败而卡住或崩掉。
+        _ = RunModuleStartupHooksSafeAsync(_services);
+
         CrashLog.Info("服务容器构建完成，正在解析 MainWindow...");
         MainWindow window = _services.GetRequiredService<MainWindow>();
         MainWindow = window;
@@ -215,6 +220,10 @@ public partial class App : Application
     /// </summary>
     public static void RegisterSharedInfrastructure(IServiceCollection services)
     {
+        // 文件互传：手机端「记住此设备」的长期凭据（P3 ⑲）。DPAPI 加密落盘、只存令牌哈希；
+        // 注册在 FileWebServer 之前，DI 才能把它注入那条可选构造参数。
+        services.AddSingleton<SystemToolkit.Core.FileTransfer.Services.ITrustedWebDeviceStore,
+            SystemToolkit.Infrastructure.FileTransfer.DpapiTrustedWebDeviceStore>();
         services.AddSingleton<SystemToolkit.Core.FileTransfer.Services.IFileWebServer,
             SystemToolkit.Infrastructure.FileTransfer.FileWebServer>();
         // MUSIC-4：音乐播放引擎（Infrastructure 实现，Core 契约；模块经 DI 延迟解析）。
@@ -327,6 +336,37 @@ public partial class App : Application
         catch (Exception ex)
         {
             CrashLog.Write("定时备份补做失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 逐个调用模块的启动钩子（2026-09-13）。
+    /// <para>
+    /// 🔴 逐个 try/catch：一个模块启动失败**不得**影响其它模块，也不得让应用启动失败——
+    /// 启动路径上的异常代价最大（用户看到的是"程序打不开"）。
+    /// </para>
+    /// <para>
+    /// 串行调用而非并行：钩子都应是"提交一个任务"级别的快操作（见 <see cref="IModule.OnAppStartupAsync"/> 约束），
+    /// 串行能让日志顺序与用户心智一致，也避免多个模块同时抢资源。
+    /// </para>
+    /// <para>
+    /// ⚠️ 刻意**不**用 <c>ConfigureAwait(false)</c>：本方法由 OnStartup 在 UI 线程发起，钩子实现里会写
+    /// VM 的 observable 属性（绑定的最终读者是 WPF），续体留在 UI 线程能避免"后台线程改绑定源"这类
+    /// 只在真机偶发的崩溃。
+    /// </para>
+    /// </summary>
+    private async Task RunModuleStartupHooksSafeAsync(IServiceProvider services)
+    {
+        foreach (IModule module in KnownModules())
+        {
+            try
+            {
+                await module.OnAppStartupAsync(services);
+            }
+            catch (Exception ex)
+            {
+                CrashLog.Write($"模块启动钩子失败（{module.Id}）", ex);
+            }
         }
     }
 

@@ -136,6 +136,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <summary>HTTPS 自签证书（仅启用 HTTPS 时非空）——对外暴露指纹用（协议 §6.3）。</summary>
     private X509Certificate2? _cert;
 
+    /// <summary>长期凭据存储（P3 ⑲）；null = 该能力关闭（勾了也不跨重启生效，界面会如实说明）。</summary>
+    private readonly ITrustedWebDeviceStore? _trustedStore;
+
+    /// <summary>已记住设备的长期凭据（内存镜像；与 <see cref="_sessionGate"/> 同一把锁保护）。</summary>
+    private readonly List<TrustedWebDevice> _trustedDevices = new();
+
+    /// <summary>免配对有效期（天；由 <see cref="TransferSettings.TrustedDeviceDays"/> 决定）。</summary>
+    private int _trustedDays = 30;
+
     /// <summary>上传断点文件的保留期：超过即视为孤儿（协议 §4.3 🟠）。</summary>
     private static readonly TimeSpan OrphanPartRetention = TimeSpan.FromDays(7);
 
@@ -163,6 +172,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
 
         /// <summary>本机预览会话（桌面「打开网页」）——不列入可踢出的手机列表。</summary>
         public bool IsLocalPreview { get; init; }
+
+        /// <summary>
+        /// 长期凭据记录 Id（P3 ⑲）：非空表示本会话来自「已记住 30 天」的免配对凭据。
+        /// 撤销时必须连磁盘上的记录一起删——否则下次访问又免配对，用户会以为撤销没生效。
+        /// </summary>
+        public string? TrustedId { get; init; }
+
+        /// <summary>是否免配对会话（界面据此显示「已记住 N 天」而不是「本次会话」）。</summary>
+        public bool IsTrusted => TrustedId is not null;
     }
 
     /// <inheritdoc/>
@@ -209,7 +227,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 return _sessions.Values
                     .Where(s => !s.IsLocalPreview)
                     .OrderByDescending(s => s.LastSeenAt)
-                    .Select(s => new WebSessionInfo(s.Id, s.Label, s.Ip, s.CreatedAt, s.LastSeenAt))
+                    .Select(s => new WebSessionInfo(s.Id, s.Label, s.Ip, s.CreatedAt, s.LastSeenAt)
+                    {
+                        Trusted = s.IsTrusted,
+                        ExpiresAt = s.ExpiresAt,
+                    })
                     .ToList();
             }
         }
@@ -227,14 +249,28 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         }
 
         bool removed;
+        string? trustedId = null;
         lock (_sessionGate)
         {
+            if (_sessions.TryGetValue(sessionId, out WebSession? session))
+            {
+                trustedId = session.TrustedId;
+            }
+
             removed = _sessions.Remove(sessionId);
         }
 
         if (!removed)
         {
             return false;
+        }
+
+        // 主人裁定（2026-09-13）：撤销 = 长期凭据与当前会话**一起失效**。
+        // 只删一边会出现"点了撤销，下次访问又免配对"——用户会认为撤销坏了。
+        if (trustedId is not null)
+        {
+            RemoveTrustedDevice(trustedId);
+            _logger.Info($"已同时删除磁盘上的长期凭据（{trustedId}）：该设备下次需重新扫码配对。");
         }
 
         _logger.Info($"已撤销 Web 访问会话 {sessionId}：该设备的访问令牌立即失效，需重新扫码配对。");
@@ -246,12 +282,18 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     public int RevokeAllSessions()
     {
         int removed = 0;
+        List<string> trustedIds = new();
         lock (_sessionGate)
         {
             // 保留本机预览会话（IsLocalPreview）——撤掉它会让桌面「打开网页」按钮失效，
             // 而它不是"来访设备"，踢它没有意义。
-            foreach (string id in _sessions.Where(kv => !kv.Value.IsLocalPreview).Select(kv => kv.Key).ToList())
+            foreach ((string id, WebSession session) in _sessions.Where(kv => !kv.Value.IsLocalPreview).ToList())
             {
+                if (session.TrustedId is not null)
+                {
+                    trustedIds.Add(session.TrustedId);
+                }
+
                 if (_sessions.Remove(id))
                 {
                     removed++;
@@ -259,9 +301,18 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
         }
 
-        if (removed > 0)
+        // 「全部踢出」同样要清掉长期凭据，否则被踢的设备下一次请求会自动重建会话
+        // （看起来像"踢出无效"——比不提供该按钮更糟）
+        foreach (string trustedId in trustedIds)
         {
-            _logger.Info($"已撤销全部 Web 访问会话（{removed} 个）：所有已配对设备都需重新扫码。");
+            RemoveTrustedDevice(trustedId);
+        }
+
+        if (removed > 0 || trustedIds.Count > 0)
+        {
+            _logger.Info(
+                $"已撤销全部 Web 访问会话（{removed} 个，其中免配对凭据 {trustedIds.Count} 条）："
+                + "所有已配对设备都需重新扫码。");
             RaiseSessionsChanged();
         }
 
@@ -271,18 +322,106 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <inheritdoc/>
     public string CertFingerprint => _cert?.GetCertHashString(HashAlgorithmName.SHA256) ?? string.Empty;
 
+    // ── 长期凭据（「记住此设备，30 天免配对」，P3 ⑲） ──
+
+    /// <summary>启动时读回长期凭据表，并顺手清掉已过期条目（免得文件只增不减）。</summary>
+    private void LoadTrustedDevices()
+    {
+        lock (_sessionGate)
+        {
+            _trustedDevices.Clear();
+            if (_trustedStore is null)
+            {
+                return;
+            }
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            _trustedDevices.AddRange(_trustedStore.Load().Where(d => d.IsValid(now)));
+            _trustedStore.Save(_trustedDevices.ToList());
+            if (_trustedDevices.Count > 0)
+            {
+                _logger.Info($"已载入 {_trustedDevices.Count} 台免配对设备（有效期 {_trustedDays} 天）。");
+            }
+        }
+    }
+
+    /// <summary>新增一条长期凭据（只存令牌**哈希**）并整表落盘。</summary>
+    private TrustedWebDevice AddTrustedDevice(
+        string trustedId, string token, string label, string ip, DateTimeOffset expiresAt)
+    {
+        var record = new TrustedWebDevice
+        {
+            Id = trustedId,
+            TokenHash = HashToken(token),
+            Label = label,
+            Ip = ip,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = expiresAt,
+        };
+        lock (_sessionGate)
+        {
+            _trustedDevices.Add(record);
+            _trustedStore?.Save(_trustedDevices.ToList());
+        }
+
+        return record;
+    }
+
+    /// <summary>删除一条长期凭据并整表落盘（撤销路径调用）。</summary>
+    private void RemoveTrustedDevice(string trustedId)
+    {
+        lock (_sessionGate)
+        {
+            if (_trustedDevices.RemoveAll(d => string.Equals(d.Id, trustedId, StringComparison.Ordinal)) > 0)
+            {
+                _trustedStore?.Save(_trustedDevices.ToList());
+            }
+        }
+    }
+
+    /// <summary>令牌是否命中长期凭据（命中即返回记录，用于免配对重建会话）。</summary>
+    private TrustedWebDevice? TryMatchTrustedDevice(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        string hash = HashToken(token);
+        lock (_sessionGate)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            return _trustedDevices.FirstOrDefault(d => d.IsValid(now) && TimeConstantEquals(d.TokenHash, hash));
+        }
+    }
+
+    /// <summary>令牌哈希（SHA-256 十六进制小写）——落盘只存它，明文令牌绝不写磁盘。</summary>
+    private static string HashToken(string token)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+    /// <summary>时间常量比较（与令牌鉴权同款，规避按字符提前返回的时序侧信道）。</summary>
+    private static bool TimeConstantEquals(string left, string right)
+        => CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(left), Encoding.UTF8.GetBytes(right));
+
     /// <summary>
     /// 构造 Web 文件服务。
     /// </summary>
     /// <param name="discovery">设备发现服务（可选；注入后 <c>/api/devices</c> 返回其在线快照，缺省返回空列表）。</param>
     /// <param name="pairing">配对码服务（可选，缺省自建一个；注入共享实例可让 Web 通道与桌面 TCP 通道使用同一枚配对码）。</param>
     /// <param name="logger">日志（可选，缺省静默——测试场景用）。</param>
+    /// <param name="trustedStore">
+    /// 「已记住设备」长期凭据存储（可选；缺省为 null = 该能力关闭，配对仍然可用，
+    /// 只是勾了「记住此设备」也不会跨重启生效——界面上的勾选框会如实说明这一点）。
+    /// </param>
     public FileWebServer(IDeviceDiscoveryService? discovery = null, PairingService? pairing = null,
-        SystemToolkit.Core.Contracts.ILogger? logger = null)
+        SystemToolkit.Core.Contracts.ILogger? logger = null,
+        ITrustedWebDeviceStore? trustedStore = null)
     {
         _discovery = discovery;
         _pairing = pairing ?? new PairingService();
         _logger = logger ?? NullLogger.Instance;
+        _trustedStore = trustedStore;
     }
 
     /// <inheritdoc/>
@@ -296,12 +435,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         _shareDirectory = shareDirectory;
         _port = settings.WebPort;
         _httpsEnabled = settings.UseHttps;
+        _trustedDays = Math.Max(1, settings.TrustedDeviceDays);
         // 询问在手机端无法交互 → 记下已降级的实际策略，别把"用户的意向"当成"会发生的事"
         _conflictPolicy = settings.ConflictPolicy == TransferConflictPolicy.Ask
             ? TransferConflictPolicy.Rename
             : settings.ConflictPolicy;
         string lanIp = DetectLanIp();
         _lanIp = lanIp;
+
+        LoadTrustedDevices(); // 长期凭据跨重启生效（P3 ⑲）：启动时读回，并顺手清掉过期的
 
         // 授权态重置：每次启动都是干净的开始（"服务停过"即等于"上面所有会话都已作废"）。
         lock (_sessionGate)
@@ -411,7 +553,29 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
 
             // 时间常量比较，规避时序侧信道；逐个会话比对（会话数是个位数，代价可忽略）
-            string? sessionId = MatchSession(ctx.Request.Query["t"].ToString());
+            string providedToken = ctx.Request.Query["t"].ToString();
+            string? sessionId = MatchSession(providedToken);
+
+            // 未命中内存会话时，再查**长期凭据**（P3 ⑲）：命中的意思是"这台设备之前勾过记住我"，
+            // 于是免配对重建一个会话。注意这里只认哈希命中，且到期即失效。
+            if (sessionId is null && TryMatchTrustedDevice(providedToken) is { } trusted)
+            {
+                WebSession rebuilt = NewSession(
+                    trusted.Label,
+                    ctx.Connection.RemoteIpAddress?.ToString() ?? trusted.Ip,
+                    isLocalPreview: false,
+                    trustedId: trusted.Id,
+                    expiresAt: trusted.ExpiresAt);
+                lock (_sessionGate)
+                {
+                    _sessions[rebuilt.Id] = rebuilt;
+                }
+
+                _logger.Info($"免配对凭据命中：{trusted.Label} 直接建立会话 {rebuilt.Id}（有效期至 {trusted.ExpiresAt.ToLocalTime():yyyy-MM-dd}）。");
+                RaiseSessionsChanged();
+                sessionId = rebuilt.Id;
+            }
+
             if (sessionId is null)
             {
                 ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -737,12 +901,20 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         app.MapPost("/api/pair", async (HttpContext ctx) =>
         {
             string code = string.Empty;
+            bool remember = false;
             try
             {
                 using JsonDocument doc = await JsonDocument.ParseAsync(ctx.Request.Body, cancellationToken: ctx.RequestAborted);
                 if (doc.RootElement.TryGetProperty("code", out JsonElement node))
                 {
                     code = node.GetString() ?? string.Empty;
+                }
+
+                // 「记住此设备」（P3 ⑲）：只有**显式**传 true 才记；缺字段一律按不记（默认最小授权）
+                if (doc.RootElement.TryGetProperty("remember", out JsonElement rememberNode)
+                    && rememberNode.ValueKind == JsonValueKind.True)
+                {
+                    remember = true;
                 }
             }
             catch (JsonException)
@@ -772,7 +944,28 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
 
             // 配对成功 → 签发**本设备专属**会话（协议 §5.3）：令牌各自独立，
             // 于是"踢出某台手机"不会连累别人，会话列表也才有对象可列。
-            WebSession session = NewSession(DescribeClient(ctx.Request), clientIp, isLocalPreview: false);
+            string label = DescribeClient(ctx.Request);
+            string? trustedId = null;
+            DateTimeOffset? trustedExpiry = null;
+            if (remember && _trustedStore is not null)
+            {
+                trustedId = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+                trustedExpiry = DateTimeOffset.UtcNow.AddDays(_trustedDays);
+            }
+
+            WebSession session = NewSession(
+                label, clientIp, isLocalPreview: false, trustedId: trustedId, expiresAt: trustedExpiry);
+            if (trustedId is not null && trustedExpiry is not null)
+            {
+                AddTrustedDevice(trustedId, session.Token, label, clientIp, trustedExpiry.Value);
+                _logger.Info($"{label} 已勾选「记住此设备」：免配对有效期 {_trustedDays} 天（凭据只存令牌哈希，可随时在会话列表撤销）。");
+            }
+            else if (remember)
+            {
+                // 诚实告知：勾了但服务端没开这个能力，绝不能返回"已记住"
+                _logger.Warn("手机端勾选「记住此设备」，但服务端未启用长期凭据存储 → 本次按普通会话处理（重启后需重新配对）。");
+            }
+
             lock (_sessionGate)
             {
                 _sessions[session.Id] = session;
@@ -781,7 +974,31 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             RaiseSessionsChanged();
 
             int expiresInMinutes = Math.Max(1, (int)Math.Ceiling((expiresAt - DateTimeOffset.UtcNow).TotalMinutes));
-            return Results.Ok(new { token = session.Token, expiresInMinutes });
+            return Results.Ok(new
+            {
+                token = session.Token,
+                expiresInMinutes,
+                // 手机端据此显示「已记住 · 剩余 N 天」；remembered=false 时前端**不得**显示已记住
+                remembered = trustedId is not null,
+                trustedDays = trustedId is not null ? _trustedDays : 0,
+                expiresAtUtcMs = trustedExpiry?.ToUnixTimeMilliseconds() ?? 0L,
+            });
+        });
+
+        // ── 手机端「忘记此设备」（P3 ⑲）：清掉自己那条长期凭据 + 当前会话 ──
+        // 必须带上自己的令牌（走鉴权中间件），且只能删自己——不能凭此接口踢别人。
+        app.MapPost("/api/sessions/forget", (HttpContext ctx) =>
+        {
+            string token = ctx.Request.Query["t"].ToString();
+            string? sessionId = MatchSession(token);
+            if (sessionId is null)
+            {
+                return Results.Json(new { error = "会话已失效。" }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            bool removed = RevokeSession(sessionId);
+            _logger.Info($"手机端主动忘记本设备：会话 {sessionId} 与长期凭据已一并删除（{removed}）。");
+            return Results.Ok(new { forgotten = removed });
         });
 
         app.MapGet("/api/devices", () => Results.Ok(SnapshotDevices()));
@@ -1201,7 +1418,8 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// 新建一个会话（**尚未入表**，调用方负责在锁内入表）。
     /// <para>令牌 16 字节随机（32 位 hex）与会话 Id 分离——Id 只用于展示与「踢出」，不是凭据。</para>
     /// </summary>
-    private static WebSession NewSession(string label, string ip, bool isLocalPreview)
+    private static WebSession NewSession(
+        string label, string ip, bool isLocalPreview, string? trustedId = null, DateTimeOffset? expiresAt = null)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new WebSession
@@ -1214,8 +1432,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             LastSeenAt = now,
             // 本机预览会话不设过期：它从不出现在网络上（只在桌面自己的 localhost 链接里），
             // 过期只会让「打开网页」按钮在某天莫名要求重新配对。
-            ExpiresAt = isLocalPreview ? DateTimeOffset.MaxValue : now + SessionLifetime,
+            // 免配对会话用长期凭据的到期时间（P3 ⑲）：这样"列表里写着已记住 30 天"与实际失效时刻一致。
+            ExpiresAt = expiresAt
+                ?? (isLocalPreview ? DateTimeOffset.MaxValue : now + SessionLifetime),
             IsLocalPreview = isLocalPreview,
+            TrustedId = trustedId,
         };
     }
 

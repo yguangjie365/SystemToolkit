@@ -81,9 +81,27 @@ public partial class FileTransferMobileViewModel : ObservableObject
 
     private static readonly System.Text.Json.JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
-    private sealed record MobileConfig(string? ShareDirectory);
+    /// <summary>
+    /// 手机通道配置（2026-09-13 批次 P3 扩容：共享目录 → 共享目录 + 四个端口相关项 + 随应用启动）。
+    /// <para>
+    /// 🔴 端口必须落盘：协议 §6.1 写明端口"待定"，用户改了端口却重启后回到默认值，等于每次都要重设。
+    /// </para>
+    /// </summary>
+    private sealed record MobileConfig(string? ShareDirectory)
+    {
+        public int WebPort { get; init; } = 18890;
 
-    /// <summary>页面 Loaded：恢复上次共享目录（审查 🟠-3 采纳——手机通道免每次重选）。</summary>
+        public int HttpsPort { get; init; } = 18891;
+
+        public bool UseHttps { get; init; }
+
+        /// <summary>随应用启动：应用一开就拉起 Web 服务（不做托盘常驻——关掉应用服务即停）。</summary>
+        public bool AutoStartWithApp { get; init; }
+    }
+
+    /// <summary>
+    /// 页面 Loaded **或宿主启动钩子**都会调用（幂等）：恢复配置、刷新会话与证书指纹。
+    /// </summary>
     public void Initialize()
     {
         try
@@ -92,9 +110,23 @@ public partial class FileTransferMobileViewModel : ObservableObject
             {
                 MobileConfig? config = System.Text.Json.JsonSerializer.Deserialize<MobileConfig>(
                     File.ReadAllText(MobileConfigPath), JsonOpts);
-                if (!string.IsNullOrWhiteSpace(config?.ShareDirectory))
+                if (config is not null)
                 {
-                    ShareDirectory = config.ShareDirectory;
+                    if (!string.IsNullOrWhiteSpace(config.ShareDirectory))
+                    {
+                        ShareDirectory = config.ShareDirectory;
+                    }
+                    // 只在范围合法时采纳：配置文件被手改坏时退回默认端口，而不是拿一个非法值去绑定
+                    if (PortValidator.IsInRange(config.WebPort))
+                    {
+                        WebPortText = config.WebPort.ToString();
+                    }
+                    if (PortValidator.IsInRange(config.HttpsPort))
+                    {
+                        HttpsPortText = config.HttpsPort.ToString();
+                    }
+                    UseHttps = config.UseHttps;
+                    AutoStartWithApp = config.AutoStartWithApp;
                 }
             }
         }
@@ -103,18 +135,26 @@ public partial class FileTransferMobileViewModel : ObservableObject
             _log("[手机] ⚠️ 配置读取失败（使用默认值）：" + ex.Message);
         }
 
+        RefreshShareDirectoryFreeSpace();
+
         // 页面重入（切 Tab 回来）时把会话列表与证书指纹拉成当前状态
         RefreshSessions();
     }
 
-    /// <summary>Web 启动成功即持久化共享目录（原子写）。</summary>
-    private void SaveShareDirectory()
+    /// <summary>配置持久化（共享目录 + 端口 + 随应用启动；原子写）。</summary>
+    private void SaveConfig()
     {
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(MobileConfigPath)!);
-            AtomicFile.WriteAllText(MobileConfigPath,
-                System.Text.Json.JsonSerializer.Serialize(new MobileConfig(ShareDirectory), JsonOpts));
+            AtomicFile.WriteAllText(MobileConfigPath, System.Text.Json.JsonSerializer.Serialize(
+                new MobileConfig(ShareDirectory)
+                {
+                    WebPort = WebPort,
+                    HttpsPort = HttpsPort,
+                    UseHttps = UseHttps,
+                    AutoStartWithApp = AutoStartWithApp,
+                }, JsonOpts));
         }
         catch (Exception ex)
         {
@@ -122,14 +162,132 @@ public partial class FileTransferMobileViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 宿主启动钩子调用入口（2026-09-13 批次 P3）：勾了「随应用启动」且共享目录可用才拉起 Web 服务。
+    /// <para>
+    /// 幂等：已在跑则什么都不做；共享目录不可用**不静默**——记一条日志说明为什么没起来
+    /// （用户勾了开关却看不到服务，必须能从日志追到原因）。
+    /// </para>
+    /// </summary>
+    public async Task TryAutoStartWithAppAsync()
+    {
+        Initialize();
+        if (!AutoStartWithApp || IsWebRunning)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ShareDirectory) || !Directory.Exists(ShareDirectory))
+        {
+            _log("[手机] ⚠️ 已勾选「随应用启动」，但共享目录不存在 → 本次未启动 Web 服务");
+            return;
+        }
+
+        await StartWebAsync().ConfigureAwait(true);
+    }
+
     /// <summary>确认对话框回调（由组合根转接）。</summary>
     public Func<string, string, bool>? ConfirmRequest { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PortEffectHint))]
     private bool _isWebRunning;
 
     [ObservableProperty]
     private string _shareDirectory = "";
+
+    /// <summary>
+    /// 共享目录所在盘剩余空间文案（2026-09-13 批次 P3 ⑯）。上传会落在这里，
+    /// 用户看到"还剩多少"才知道该不该清盘；无法判定时如实说"无法判定"，不用 0 冒充。
+    /// </summary>
+    [ObservableProperty]
+    private string _shareDirectoryFreeText = "";
+
+    // ── 端口与启动行为（2026-09-13 批次 P3 ⑰⑱） ──
+
+    // 🔴 用字符串承载输入（同桌面 VM）：绑定 int 时 "" / "18" 这类中间态转换失败是静默的
+    [ObservableProperty]
+    private string _webPortText = "18890";
+
+    [ObservableProperty]
+    private string _httpsPortText = "18891";
+
+    [ObservableProperty]
+    private bool _useHttps;
+
+    /// <summary>随应用启动（不做托盘常驻：关掉应用服务即停，手机端会断）。</summary>
+    [ObservableProperty]
+    private bool _autoStartWithApp;
+
+    /// <summary>端口校验错误文案（空串 = 无错）。</summary>
+    [ObservableProperty]
+    private string _portErrorText = "";
+
+    /// <summary>校验通过的 Web 端口（非法时为 0；调用方先看 <see cref="PortErrorText"/>）。</summary>
+    public int WebPort => int.TryParse(WebPortText?.Trim(), out int port) ? port : 0;
+
+    /// <summary>校验通过的 HTTPS 端口（非法时为 0）。</summary>
+    public int HttpsPort => int.TryParse(HttpsPortText?.Trim(), out int port) ? port : 0;
+
+    partial void OnWebPortTextChanged(string value) => SaveAndValidatePorts();
+
+    partial void OnHttpsPortTextChanged(string value) => SaveAndValidatePorts();
+
+    partial void OnUseHttpsChanged(bool value) => SaveAndValidatePorts();
+
+    partial void OnAutoStartWithAppChanged(bool value)
+    {
+        SaveConfig();
+        _log($"[手机] 随应用启动：{(value ? "已开启（应用启动即拉起 Web 服务；关闭应用则服务停止）" : "已关闭")}");
+    }
+
+    private void SaveAndValidatePorts()
+    {
+        PortErrorText = PortValidator.Validate(
+            ("Web 端口", WebPort), ("HTTPS 端口", HttpsPort)) ?? string.Empty;
+        OnPropertyChanged(nameof(WebPort));
+        OnPropertyChanged(nameof(HttpsPort));
+        if (string.IsNullOrEmpty(PortErrorText))
+        {
+            SaveConfig();
+        }
+    }
+
+    /// <summary>服务在跑时改端口必须重启才生效——界面要明说，不能让用户以为已生效。</summary>
+    public string PortEffectHint => IsWebRunning
+        ? "已改，重启 Web 服务后生效"
+        : "启动 Web 服务时生效";
+
+    private void RefreshUrlPreview()
+    {
+        if (!IsWebRunning)
+        {
+            return;
+        }
+
+        UrlText = _web.LanUrl;
+    }
+
+    private void RefreshShareDirectoryFreeSpace()
+    {
+        string dir = ShareDirectory?.Trim() ?? string.Empty;
+        if (dir.Length == 0 || !Directory.Exists(dir))
+        {
+            ShareDirectoryFreeText = string.Empty;
+            return;
+        }
+
+        long? free = DiskSpaceUtil.TryGetAvailableFreeBytes(dir);
+        ShareDirectoryFreeText = free is null
+            ? "剩余空间无法判定（网络路径或卷未就绪）"
+            : $"剩余 {FormatUtil.FormatSize(free.Value)}（手机上传会落在这里）";
+    }
+
+    partial void OnShareDirectoryChanged(string value)
+    {
+        RefreshShareDirectoryFreeSpace();
+        SaveConfig();
+    }
 
     [ObservableProperty]
     private string _urlText = "";
@@ -173,17 +331,33 @@ public partial class FileTransferMobileViewModel : ObservableObject
             return;
         }
 
+        if (!string.IsNullOrEmpty(PortErrorText))
+        {
+            _log($"[手机] ⚠️ 端口设置非法，未启动：{PortErrorText}");
+            return;
+        }
+
         _busy = true;
         RefreshToggleCanExecute();
         try
         {
-            await _web.StartAsync(new TransferSettings(), ShareDirectory.Trim()).ConfigureAwait(true);
+            // 端口与 HTTPS 从设置传入（原实现传 `new TransferSettings()` = 全默认值，
+            // 用户在界面改的端口会被无声忽略——那正是"界面在骗人"）
+            var settings = new TransferSettings
+            {
+                WebPort = WebPort,
+                HttpsPort = HttpsPort,
+                UseHttps = UseHttps,
+                ShareDirectory = ShareDirectory.Trim(),
+            };
+            await _web.StartAsync(settings, ShareDirectory.Trim()).ConfigureAwait(true);
             IsWebRunning = true;
             UrlText = _web.LanUrl;
             QrImage = RenderQr(_web.LanUrl);
             RefreshPairingDisplay();
             EnsureCodeTimer();
-            SaveShareDirectory();
+            SaveConfig();
+            RefreshShareDirectoryFreeSpace();
             _log($"[手机] ✅ Web 服务已启动：{_web.LanUrl}（{(_web.IsHttps ? "HTTPS 加密" : "⚠️ HTTP 未加密")}），配对码 10 分钟轮换");
             RefreshSessions(); // 取当前证书指纹（会话列表此刻还是空的，配对后才会有）
         }
@@ -368,6 +542,36 @@ public partial class FileTransferMobileViewModel : ObservableObject
         /// <summary>悬停提示：签发时间（何时开始有权访问）。</summary>
         public string DetailTip => "签发于 " + _info.CreatedAt.ToLocalTime()
             .ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// 授权性质文案（P3 ⑲）：免配对显示「已记住 · 剩余 N 天」，否则「本次会话 8 小时」。
+        /// <para>
+        /// 必须区分开：两者失效时机完全不同（一个重启后仍然有效、一个重启即失效），
+        /// 混成一句话会让用户对"这台设备还能不能访问"判断错误。
+        /// </para>
+        /// </summary>
+        public string TrustText
+        {
+            get
+            {
+                if (!_info.Trusted)
+                {
+                    return "本次会话 8 小时";
+                }
+
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                int days = _info.ExpiresAt <= now
+                    ? 0
+                    : (int)Math.Ceiling((_info.ExpiresAt - now).TotalDays);
+                return days <= 0 ? "已记住（今日到期）" : $"已记住 · 剩余 {days} 天";
+            }
+        }
+
+        /// <summary>是否免配对（XAML 用它在行上挂不同底色/徽章）。</summary>
+        public bool IsTrusted => _info.Trusted;
+
+        /// <summary>操作按钮文案：免配对是「撤销」，普通会话是「踢出」（撤销会连磁盘凭据一起删）。</summary>
+        public string RevokeText => _info.Trusted ? "撤销" : "踢出";
 
         private static string DescribeRelative(DateTimeOffset when)
         {

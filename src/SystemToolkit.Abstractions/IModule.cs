@@ -45,6 +45,17 @@ public interface IModule
     /// </summary>
     /// <param name="services">已构建的服务容器（模块从中解析自己的 View）。</param>
     object? CreateView(IServiceProvider services);
+
+    /// <summary>
+    /// 应用启动钩子（2026-09-13 新增）：宿主在容器构建完成后调用一次，用于"开机即生效"的后台能力。
+    /// <para>
+    /// 🔴 用**默认接口实现**而不是抽象成员：本仓有测试替身等直接实现 <see cref="IModule"/> 的类型，
+    /// 加抽象成员会把它们全部编译打断，而它们与启动行为毫无关系。语义与约束见
+    /// <see cref="ModuleBase.OnAppStartupAsync"/>。
+    /// </para>
+    /// </summary>
+    Task OnAppStartupAsync(IServiceProvider services, CancellationToken ct = default)
+        => Task.CompletedTask;
 }
 
 /// <summary>
@@ -95,4 +106,19 @@ public abstract class ModuleBase : IModule
     /// </para>
     /// </summary>
     public virtual object? CreateView(IServiceProvider services) => null;
+
+    /// <summary>
+    /// 应用启动钩子（2026-09-13 新增，为「Web 服务随应用启动」而加）：宿主在容器构建完成后调用一次。
+    /// <para>
+    /// 为什么需要它：模块 VM 是**按需**创建的（页面首次打开才解析），所以「用户希望开机即生效」的
+    /// 后台能力（如手机通道的 Kestrel 服务）不能挂在页面的 <c>Loaded</c> 上——那样不点开那一页就永远不生效。
+    /// </para>
+    /// <para>
+    /// 约束：实现必须**永不抛异常**（宿主只记日志、不重试也不回滚）、必须幂等、必须是**快**的
+    /// （宿主在启动路径上等待它完成，长活请自行 fire-and-forget 并自行兜底异常）；
+    /// 默认实现为空 = 不需要启动动作的模块不用写。
+    /// </para>
+    /// </summary>
+    public virtual Task OnAppStartupAsync(IServiceProvider services, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

@@ -42,6 +42,17 @@
             <button type="button" class="cert-banner__btn" id="certBannerAck">知道了（记录当前指纹）</button>
         </div>
 
+        <!-- 配对状态条（P3 ⑲「记住此设备」）：把"这台设备凭什么能访问"如实写在页面上。
+             免配对与本次会话的失效时机完全不同，混成一句会让用户判断错。 -->
+        <section class="pair-state" id="pairState" aria-live="polite" hidden>
+            <span class="pair-state__text" id="pairStateText"></span>
+            <label class="pair-state__remember" id="rememberRow">
+                <input type="checkbox" id="rememberDevice" />
+                <span>记住此设备（30 天免配对）</span>
+            </label>
+            <button type="button" class="pair-state__forget" id="forgetDevice" hidden>忘记此设备</button>
+        </section>
+
         <!-- ============ 主内容区（三栏面板） ============ -->
         <main class="main" role="main">
 

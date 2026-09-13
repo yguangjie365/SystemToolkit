@@ -628,6 +628,41 @@ a {
 .upload-task__status.is-done { color: var(--success); }
 .upload-task__status.is-fail { color: var(--danger); }
 .upload-task__status.is-skipped { color: var(--warning); }
+
+/* 配对状态条（P3 ⑲）：如实说明"这台设备凭什么能访问"，并给记住/忘记入口 */
+.pair-state {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-alt);
+}
+
+.pair-state__text {
+    color: var(--text-primary);
+}
+
+.pair-state__remember {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.pair-state__forget {
+    margin-left: auto;
+    padding: 3px 10px;
+    border: 1px solid var(--danger);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--danger);
+    font-size: 12px;
+    cursor: pointer;
+}
 .upload-task__status.is-queued { color: var(--warning); }
 
 /* ============ 待续传区块（2026-09-13） ============
