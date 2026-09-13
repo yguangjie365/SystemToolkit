@@ -119,6 +119,7 @@
 | `NAudio` | MIT | 音乐播放内核（WASAPI / WaveOut） |
 | `TagLibSharp` | **LGPL-2.1-only** | 音频标签读取（标题/艺术家/专辑/时长/内嵌封面）——见下方 §4.2 的 LGPL 义务说明 |
 | `Serilog` + `Serilog.Sinks.File` + `Serilog.Formatting.Compact` | Apache-2.0 | 日志落盘引擎（按日/按量滚动文本 + Compact JSONL，LOG-1） |
+| `Microsoft.Windows.CsWin32` | MIT | **编译期** Win32 互操作生成器（`PrivateAssets=all`，**不随应用分发**）——见下方 §4.3 |
 
 ### 4.1 ⚠️ LibreHardwareMonitorLib（MPL-2.0）义务说明
 
@@ -158,6 +159,19 @@ LibreHardwareMonitor 的底层驱动封装涉及 **WinRing0 / PawnIO**。本项�
 `LGPL-2.1-only`，合规链条完整，故取代 ATL。详见 ADR-002 §5.4 音乐中心条目。
 
 ---
+
+### 4.3 Microsoft.Windows.CsWin32（MIT，编译期生成器）
+
+- **许可证**：MIT（NuGet 包 `Microsoft.Windows.CsWin32`，Microsoft 出品）。
+- **引入方式**：NuGet 包引用 + `PrivateAssets="all"`；它**只在编译期运行**，把官方 Win32 metadata
+  里的函数签名、结构体布局、枚举值**生成**成 C# 源码（生成的类型一律 `internal`，不进本仓公开 API 面）。
+- **为什么需要它**：手写 Win32 互操作的错误面是「文档/记忆 vs 真实签名」的落差，且**只在真机调用时才暴露**
+  —— NET-6 两次实机事故即实证（`GetIpNetTable2` 多塞一个参数恒返 87、`SendARP` 的 `SrcIP` 传值恒得 1168）。
+  生成器把这类错误前置到**编译期**。纪律条文见 `AGENTS.md` §二·五 与
+  `Docs/40-开发规范/02-架构与依赖规范.md` §9.5。
+- **分发影响：无**。生成物是本仓自己的编译产物，运行期不依赖该包的任何程序集，也不分发其代码。
+- **首个引入的产品工程**：`SystemToolkit.Core`（落地计划 B7b，`Network/Connections/` 的 TCP 连接表）；
+  此前仅测试工程用它做 NET-6 的布局回归锁。依赖登记见 `Docs/50-决策/ADR-002-驱动中心技术来源与第三方代码引入规范.md` §5.3。
 
 ## 五、字体文件目录约定
 

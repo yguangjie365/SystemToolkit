@@ -1,0 +1,19 @@
+// CsWin32 生成清单（Core 产品工程，2026-09-13，落地计划 B7b）
+//
+// 用途：「进程 ↔ 网络连接归属」——用 GetExtendedTcpTable 读本机 TCP 连接表（每行含 owning PID），
+// 与进程名关联后回答"谁在占端口 / 谁在用内网链路"。
+// 生成器会连带生成依赖类型（MIB_TCPTABLE_OWNER_PID 等），不必逐条列出。
+//
+// ⚠️ 本工程是**首个引入 CsWin32 的产品工程**（此前仅测试工程用它钉布局）：
+//    它只是**编译期**生成器（PrivateAssets=all），不进下游依赖、不随应用分发；
+//    登记见 ADR-002 §5.3 依赖清单 与 NOTICE.md §4.3。
+//
+// ⚠️ 本批只做 **IPv4 TCP**：IPv6（MIB_TCP6TABLE_OWNER_PID）与 UDP（MIB_UDPTABLE_OWNER_PID）
+//    见 TASKS.md 的 OL-B7 备注，按后续批次补。
+// ⚠️ 不列 FreeMibTable：GetExtendedTcpTable 的缓冲区由**调用方**分配，没有系统分配的表要释放
+//    （FreeMibTable 是给 GetIfTable2 那类 API 用的）。
+GetExtendedTcpTable
+MIB_TCPTABLE_OWNER_PID
+MIB_TCPROW_OWNER_PID
+TCP_TABLE_CLASS
+ADDRESS_FAMILY

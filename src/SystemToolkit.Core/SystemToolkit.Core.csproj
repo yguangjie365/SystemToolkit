@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
       <!-- 01 §一：公开 API 必须有 XML doc（实测 CS1591=0，全量已达标） -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CsWin32 生成的是 unsafe 代码（落地计划 B7b：TCP 连接表）。仅编译期生成，见 ADR-002 §5.3 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!-- 内部实现（winget 参数构造等）需要对测试可见 -->
@@ -21,6 +23,13 @@
     <PackageReference Include="TagLibSharp" />
     <PackageReference Include="WatsonTcp" />
     <PackageReference Include="System.Management" />
+    <!-- 编译期 Win32 互操作生成器（PrivateAssets=all：不进下游、不随应用分发）。
+         AGENTS §二·五 / 架构规范 §9.5 强制：新增 Win32 互操作一律由它生成，禁止手写 [DllImport]。
+         本工程是首个引入它的**产品工程**，登记见 ADR-002 §5.3 与 NOTICE.md §4.3。 -->
+    <PackageReference Include="Microsoft.Windows.CsWin32">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
   <!-- 网络域内置数据（落地计划 B3-①）：IEEE 官方 OUI 注册表的紧凑形态（每行 `前缀|厂商名`）。
        由 Tools/oui-gen/generate_oui.py 生成；来源 URL / 抓取日期 / 体积 / SHA-256 / 许可判断见该目录 README。 -->
