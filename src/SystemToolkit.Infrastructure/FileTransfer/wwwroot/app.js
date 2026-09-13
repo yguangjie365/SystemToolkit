@@ -32,6 +32,14 @@
     // 同时上传的文件数上限（2026-09-13 主人要求）：超出**排队等待**，不拒绝。
     // 只闸「文件级」并发——每个文件内部仍逐块串行（见 postChunkWithRetry）。
     const UPLOAD_CONCURRENCY = 3;
+    // 文本通道（W2b）：端点与上限。
+    // 🔴 上限按 **UTF-8 字节** 与服务端 TransferText.MaxBytes 同一口径（中文 3 字节/字，
+    //    按字符限长会让中文轻易超出传输层实际能承受的体积）。
+    const TEXT_ENDPOINT = "/api/text";
+    const TEXT_MAX_BYTES = 256 * 1024;
+    // 输入框长高的像素上限（须与 .chat-composer__input 的 max-height 保持一致，
+    // 两处不一致会出现"JS 以为还能长、CSS 已经封顶"的错位）
+    const TEXT_INPUT_MAX_PX = 122;
     // 未完成上传的持久化键：下拉刷新/重载后仍能列出「待续传」。
     // 用 sessionStorage（关标签页即清）——长期残留无意义，服务端 .part 另有清理策略。
     const PENDING_STORAGE_KEY = "stk_pending_uploads";
@@ -88,6 +96,10 @@
         chatAddBtn: $("chatAddBtn"),
         chatActionSheet: $("chatActionSheet"),
         chatSheetCancel: $("chatSheetCancel"),
+        // W2b：文本输入框 / 发送按钮 / 超限提示行
+        chatInput: $("chatInput"),
+        chatSendBtn: $("chatSendBtn"),
+        chatComposerMeta: $("chatComposerMeta"),
     };
 
     /* ============ 应用状态 ============ */
@@ -1475,6 +1487,261 @@
         if (dom.chatAddBtn) dom.chatAddBtn.setAttribute("aria-expanded", "false");
     }
 
+    /* ============================================================
+       文本通道（W2b）：发送 / 接收气泡 / 点击复制
+       ============================================================ */
+
+    /** 文本的 UTF-8 字节数（与服务端 TransferText 同一口径）。 */
+    function byteLength(str) {
+        return new TextEncoder().encode(str || "").length;
+    }
+
+    /**
+     * 最近一次本机发出的文本 + 时刻。
+     * <para>
+     * 🔴 它存在的唯一理由：`serverInfo` 帧（携带 clientId）到达之前的那个窗口里，
+     * 服务端认不出"这条是本机发的"，会**退化为广播给所有人**（W2a 的既定取舍：宁可多一条重复，
+     * 也不让"别人发了消息我这没显示"）。前端必须承担这个后果——否则用户会看到自己的气泡出现两次。
+     * 窗口极小（首帧三连几乎瞬时），但"几乎"不等于不会。
+     * </para>
+     */
+    let lastSentEcho = { text: null, at: 0 };
+
+    function isLocalEcho(text) {
+        return !!lastSentEcho.text
+            && lastSentEcho.text === text
+            && (Date.now() - lastSentEcho.at) < 10000;
+    }
+
+    /** 只显示时分（气泡头部用；完整时间在会话流里是噪音）。 */
+    function formatClock(ts) {
+        const d = ts ? new Date(ts) : new Date();
+        if (isNaN(d.getTime())) return "";
+        const pad = (n) => String(n).padStart(2, "0");
+        return pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+
+    /** 输入框按内容长高：先归零再按 scrollHeight 设高，否则删除文字时不会缩回。 */
+    function autoGrowChatInput() {
+        if (!dom.chatInput) return;
+        dom.chatInput.style.height = "auto";
+        dom.chatInput.style.height = Math.min(dom.chatInput.scrollHeight, TEXT_INPUT_MAX_PX) + "px";
+    }
+
+    /** 刷新发送按钮与提示行：空输入 / 超限都禁用发送（禁用理由要在提示行里说清楚）。 */
+    function refreshChatSendState() {
+        if (!dom.chatInput || !dom.chatSendBtn) return;
+        const bytes = byteLength(dom.chatInput.value);
+        const empty = dom.chatInput.value.trim() === "";
+        const over = bytes > TEXT_MAX_BYTES;
+        dom.chatSendBtn.disabled = empty || over;
+
+        if (!dom.chatComposerMeta) return;
+        if (over) {
+            dom.chatComposerMeta.hidden = false;
+            dom.chatComposerMeta.textContent =
+                "文本过大（" + formatFileSize(bytes) + "），单条上限 " + (TEXT_MAX_BYTES / 1024) + " KB";
+            dom.chatComposerMeta.classList.add("is-over");
+        } else if (bytes >= TEXT_MAX_BYTES * 0.9) {
+            dom.chatComposerMeta.hidden = false;
+            dom.chatComposerMeta.textContent =
+                "已输入 " + formatFileSize(bytes) + " / " + (TEXT_MAX_BYTES / 1024) + " KB";
+            dom.chatComposerMeta.classList.remove("is-over");
+        } else {
+            dom.chatComposerMeta.hidden = true;
+            dom.chatComposerMeta.textContent = "";
+            dom.chatComposerMeta.classList.remove("is-over");
+        }
+    }
+
+    /**
+     * 落一条文本气泡。
+     * @param {{text:string, origin:string, from:string, at:number|string}} p 消息体
+     * @param {boolean} local true = 本机刚发出的（带"发送中/已送达/失败"状态行）
+     */
+    function appendTextBubble(p, local) {
+        if (!dom.uploadList || !p || typeof p.text !== "string") return null;
+        const out = p.origin === "phone";
+        const fullText = p.text;
+
+        const el = document.createElement("div");
+        el.className = "chat-bubble " + (out ? "is-out" : "is-in");
+
+        const head = document.createElement("div");
+        head.className = "chat-bubble__head";
+        head.textContent = (out ? "我" : (p.from || "电脑")) + " · " + formatClock(p.at);
+
+        const body = document.createElement("div");
+        body.className = "chat-bubble__text";
+        // 🔴 textContent 而非 innerHTML：用户文本一律不拼进 HTML（天然免疫 XSS）
+        body.textContent = fullText;
+
+        el.appendChild(head);
+        el.appendChild(body);
+
+        let foot = null;
+        if (local) {
+            foot = document.createElement("div");
+            foot.className = "chat-bubble__foot";
+            el.appendChild(foot);
+        }
+        dom.uploadList.appendChild(el);
+
+        // 折叠判断必须在**入 DOM 之后**做：元素未进文档流时 scrollHeight/clientHeight 都是 0
+        if (body.scrollHeight > body.clientHeight + 1) {
+            const expand = document.createElement("div");
+            expand.className = "chat-bubble__expand";
+            expand.textContent = "展开全文";
+            el.insertBefore(expand, foot || null);
+            expand.addEventListener("click", (e) => {
+                e.stopPropagation(); // 别把这下点击传到气泡的"复制"上
+                el.classList.add("is-expanded");
+                expand.remove();
+            });
+        }
+
+        // 点击气泡：失败态 = 重试，其余 = 复制
+        el.addEventListener("click", async () => {
+            if (el.classList.contains("is-failed")) {
+                await postChatText(fullText, el);
+                return;
+            }
+            if (el.classList.contains("is-pending")) return; // 还在飞，复制了也只是本地那份
+            const ok = await copyToClipboard(fullText);
+            showToast(ok ? "已复制到剪贴板" : "复制失败，请长按文字手动选择", ok ? "info" : "error");
+        });
+
+        scrollChatToBottom();
+        return el;
+    }
+
+    /**
+     * 写剪贴板。
+     * 🔴 局域网多是 `http://192.168.x.x` —— 那里**不是安全上下文**，`navigator.clipboard` 是
+     *    undefined。只写异步 API 会出现"点了没反应"，而用户以为已经复制成功（状态欺骗）。
+     *    故必须保留 `execCommand("copy")` 兜底路径。
+     */
+    async function copyToClipboard(text) {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (e) {
+            // 落到下面的兜底路径
+        }
+
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.setAttribute("readonly", "");
+            // 定位在视口内但不可见：iOS 对 display:none / visibility:hidden 的节点拒绝 select()
+            ta.style.position = "fixed";
+            ta.style.top = "0";
+            ta.style.left = "0";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+            const ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            return ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** 改气泡状态行（发送中 / 已送达 / 失败）。 */
+    function setBubbleState(bubble, stateName, note) {
+        if (!bubble) return;
+        bubble.classList.remove("is-pending", "is-failed");
+        if (stateName === "pending") bubble.classList.add("is-pending");
+        if (stateName === "failed") bubble.classList.add("is-failed");
+        const foot = bubble.querySelector(".chat-bubble__foot");
+        if (foot) foot.textContent = note || "";
+        scrollChatToBottom();
+    }
+
+    /**
+     * POST 一条文本。
+     * 🔴 终态以**服务端响应**为准，不本地猜：200 才认"已送达电脑"。
+     *    （注意 200 的语义是"电脑已收下"，不是"已写进电脑剪贴板"——是否写由电脑端决定。）
+     */
+    async function postChatText(text, bubble) {
+        setBubbleState(bubble, "pending", "发送中…");
+        try {
+            // buildUrl 自带 ?t=<会话令牌>（见其实现），无需再重复传一次
+            const resp = await fetch(buildUrl(TEXT_ENDPOINT), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: text, clientId: state.clientId }),
+            });
+            if (!resp.ok) {
+                let detail = "";
+                try {
+                    const body = await resp.json();
+                    detail = body && body.error ? body.error : "";
+                } catch (e) {
+                    // 非 JSON 错误体：用状态码兜底
+                }
+                setBubbleState(bubble, "failed",
+                    "发送失败" + (detail ? "：" + detail : "（HTTP " + resp.status + "）") + "，点此重试");
+                return false;
+            }
+            setBubbleState(bubble, "sent", "已送达电脑");
+            return true;
+        } catch (e) {
+            setBubbleState(bubble, "failed", "网络错误，点此重试");
+            return false;
+        }
+    }
+
+    /** 发送输入框里的文本。 */
+    async function sendChatText() {
+        if (!dom.chatInput) return;
+        const text = dom.chatInput.value;
+        if (text.trim() === "") {
+            showToast("请输入内容", "info");
+            return;
+        }
+        if (byteLength(text) > TEXT_MAX_BYTES) {
+            showToast("文本过大，单条上限 " + (TEXT_MAX_BYTES / 1024) + " KB", "error");
+            return;
+        }
+
+        // 记下"这条是我刚发的"：仅供 clientId 未就绪时的回声去重用（见 isLocalEcho）
+        lastSentEcho = { text: text, at: Date.now() };
+
+        const bubble = appendTextBubble(
+            { text: text, origin: "phone", from: "我", at: Date.now() }, true);
+
+        const ok = await postChatText(text, bubble);
+        // 成功才清空：失败时输入框内容保留，用户可改可重发（气泡本身也能点重试）
+        if (ok) {
+            dom.chatInput.value = "";
+            autoGrowChatInput();
+            refreshChatSendState();
+        }
+    }
+
+    function initChatComposer() {
+        if (!dom.chatInput || !dom.chatSendBtn) return;
+        dom.chatInput.addEventListener("input", () => {
+            autoGrowChatInput();
+            refreshChatSendState();
+        });
+        dom.chatInput.addEventListener("keydown", (e) => {
+            // Enter 换行（手机习惯）；Ctrl/Cmd+Enter 发送（桌面快捷，不与换行冲突）
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendChatText();
+            }
+        });
+        dom.chatSendBtn.addEventListener("click", sendChatText);
+        autoGrowChatInput();
+        refreshChatSendState();
+    }
+
     function handleWsMessage(msg) {
         if (!msg || typeof msg !== "object") return;
         switch (msg.type) {
@@ -1519,6 +1786,17 @@
             case "transferUpdate": {
                 // 上传状态（OL-B11 / W1a 起服务端真的会推；W1b 起前端真的消费）
                 applyTransferUpdate(msg.payload);
+                break;
+            }
+            case "chatMessage": {
+                // 文本消息（W2b）：电脑或**同机其它标签页**发来的，落成气泡。
+                // 自己发的那条通常不会被推回来（服务端按 clientId 排除）；唯独 clientId 尚未
+                // 就绪时服务端认不出发送方、会广播给所有人 —— 那个窗口里要靠 isLocalEcho 去重。
+                const p = msg.payload;
+                if (p && typeof p.text === "string") {
+                    if (!state.clientId && p.origin === "phone" && isLocalEcho(p.text)) break;
+                    appendTextBubble(p, false);
+                }
                 break;
             }
             case "serverInfo": {
@@ -1761,6 +2039,7 @@
         initHostInfo();
         renderBreadcrumb();
         initUploadZone();
+        initChatComposer(); // W2b：文本输入框（发送按钮初始为禁用态）
         initVisibilityHandler();
         initPairState(); // 配对状态条（P3 ⑲）：未配对/已记住/本次会话三态如实显示
 

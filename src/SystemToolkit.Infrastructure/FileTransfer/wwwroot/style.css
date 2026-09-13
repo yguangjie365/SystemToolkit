@@ -1255,7 +1255,7 @@ a {
 /* 空流占位：`:empty` 只在**没有任何子节点**时命中——首条记录进来即自动消失。
    这样空状态由 CSS 表达，不需要 JS 再维护一处状态（少一处状态就少一处不同步）。 */
 .chat-stream:empty::after {
-    content: "还没有传输记录。点下方 + 发送文件。";
+    content: "还没有消息。输入文字，或点 + 发送文件。";
     display: block;
     padding: var(--sp-2xl) var(--sp-lg);
     text-align: center;
@@ -1279,6 +1279,75 @@ a {
 .chat-notice.is-warn { color: var(--warning); }
 
 .chat-notice.is-error { color: var(--danger); }
+
+/* ============ 文本气泡（W2b） ============
+   我发的贴右（与文件气泡同侧），电脑或同机其它标签页发来的贴左。
+   🔴 点击气泡**才**复制：移动浏览器要求剪贴板写入发生在用户手势里，自动写会被拒绝。 */
+.chat-bubble {
+    display: flex;
+    flex-direction: column;
+    max-width: 84%;
+    padding: var(--sp-sm) var(--sp-md);
+    border-radius: var(--r-lg);
+    cursor: pointer;
+    /* 长链接/长串不撑破气泡：break-word 给常规文本，anywhere 兜住连续无空格的串 */
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.chat-bubble.is-out {
+    align-self: flex-end;
+    background: var(--accent-soft);
+    border-bottom-right-radius: var(--r-sm);
+}
+
+.chat-bubble.is-in {
+    align-self: flex-start;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: var(--r-sm);
+}
+
+.chat-bubble__head {
+    margin-bottom: 2px;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 正文：pre-wrap 保留用户敲的换行与连续空格（聊天文本不该被折叠成一行） */
+.chat-bubble__text {
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    /* 折叠阈值：12em = 12 × 14px ≈ 8 行。展开与否由 JS 按实际高度判断 */
+    max-height: 12em;
+    overflow: hidden;
+}
+
+.chat-bubble.is-expanded .chat-bubble__text { max-height: none; }
+
+.chat-bubble__expand {
+    align-self: flex-start;
+    margin-top: 2px;
+    font-size: var(--fs-caption);
+    color: var(--accent);
+}
+
+.chat-bubble__foot {
+    margin-top: 2px;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 发送中：半透明，让"还没落地"看得见 */
+.chat-bubble.is-pending { opacity: 0.6; }
+
+/* 失败：红边 + 红字，整块可点重试 */
+.chat-bubble.is-failed { border: 1px solid var(--danger); }
+
+.chat-bubble.is-failed .chat-bubble__foot { color: var(--danger); }
 
 /* 我发出的文件：右对齐气泡。
    ⚠️ 类名沿用 .upload-task —— app.js 的进度、状态判定与汇总计数全都按它查询
@@ -1319,11 +1388,18 @@ a {
     color: var(--text-muted);
 }
 
-/* 底部输入区 */
+/* 手机上整块隐藏拖放提示（W2b）：手机不可能"拖入文件"，它只是一条占着一行高度的白块；
+   进文件的入口是「+」动作单。桌面（≥768px）保留——那里拖放才真的可用。 */
+@media (max-width: 767px) {
+    .upload-zone--slim { display: none; }
+}
+
+/* 底部输入区（W2b）：+ / 文本框 / 发送 */
 .chat-composer {
     display: flex;
-    align-items: center;
-    gap: var(--sp-md);
+    /* flex-end：输入框长成多行时按钮贴在底边，不随文字块垂直居中漂移 */
+    align-items: flex-end;
+    gap: var(--sp-sm);
     margin-top: var(--sp-lg);
     padding-top: var(--sp-lg);
     border-top: 1px solid var(--divider);
@@ -1353,12 +1429,66 @@ a {
     border-color: var(--accent);
 }
 
-.chat-composer__hint {
+/* 文本输入框：起始 1 行、随内容长高到 5 行封顶，之后框内滚动。
+   🔴 font-size 不得小于 16px：iOS Safari 对 <16px 的输入框会在聚焦时**自动放大整个页面**，
+   一进输入框就跳版。这是硬约束，不是审美偏好。 */
+.chat-composer__input {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: var(--touch-min);
+    max-height: 122px;
+    padding: var(--sp-sm) var(--sp-md);
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    resize: none;
+    overflow-y: auto;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.chat-composer__input::placeholder { color: var(--text-muted); }
+
+.chat-composer__input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.chat-composer__send {
+    flex: 0 0 auto;
+    min-height: var(--touch-min);
+    padding: 0 var(--sp-lg);
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text-on-accent);
+    background: var(--accent);
+    border-radius: var(--r-md);
+    transition: background var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+
+.chat-composer__send:hover:not(:disabled) { background: var(--accent-hover); }
+
+/* 禁用态（空输入 / 超限）：本主题下"几乎不可见"的禁用样式等于骗人——
+   降到 0.45 仍然看得出是按钮，但一眼知道按不动。 */
+.chat-composer__send:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* 输入提示行：平时隐藏，只在贴近上限或超限时出现 */
+.chat-composer__meta {
+    margin-top: var(--sp-xs);
     font-size: var(--fs-caption);
     color: var(--text-muted);
 }
+
+.chat-composer__meta[hidden] { display: none; }
+
+.chat-composer__meta.is-over { color: var(--danger); }
 
 /* 「+」动作单 */
 .chat-sheet {

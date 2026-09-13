@@ -90,14 +90,25 @@
                     <button type="button" class="toolbar-btn" id="clearUploadsBtn">清除记录</button>
                 </div>
 
-                <!-- 底部输入区：+ 发文件。文本发送随下一批上线——**刻意不放假输入框**：
-                     一个点了没反应的输入框比看得见的"未上线"更糟。 -->
+                <!-- 底部输入区（W2b）：+ 发文件 / 文本框发文本 / 发送。
+                     🔴 两条与桌面端不同的已定差异：
+                     ① 网页端**没有确认门**（用户在场即确认）；
+                     ② **不自动写剪贴板**（移动浏览器要求用户手势）→ 由「点气泡复制」触发。 -->
                 <div class="chat-composer">
                     <button type="button" class="chat-composer__add" id="chatAddBtn"
                             aria-expanded="false" aria-controls="chatActionSheet"
                             aria-label="添加文件">+</button>
-                    <div class="chat-composer__hint">文本发送随下一批上线</div>
+                    <!-- 多行输入：Enter 换行（手机习惯），Ctrl/Cmd+Enter 发送。
+                         rows=1 起步、由 JS 按内容长高（最多 5 行后内部滚动）。 -->
+                    <textarea class="chat-composer__input" id="chatInput" rows="1"
+                              placeholder="输入文字…" aria-label="输入文本"
+                              enterkeyhint="enter" autocomplete="off"></textarea>
+                    <button type="button" class="chat-composer__send" id="chatSendBtn"
+                            aria-label="发送文本" disabled>发送</button>
                 </div>
+
+                <!-- 输入提示行：只在「接近上限 / 超限」时出现（平时不占视觉份额） -->
+                <div class="chat-composer__meta" id="chatComposerMeta" hidden></div>
 
                 <!-- 「+」动作单（默认收起，点 + 展开） -->
                 <div class="chat-sheet" id="chatActionSheet" hidden>
