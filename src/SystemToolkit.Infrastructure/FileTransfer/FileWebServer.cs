@@ -195,6 +195,12 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
 
         /// <summary>是否免配对会话（界面据此显示「已记住 N 天」而不是「本次会话」）。</summary>
         public bool IsTrusted => TrustedId is not null;
+
+        /// <summary>
+        /// 设备指纹（见 <see cref="DeviceFingerprint"/>）：同一台设备只允许有一条会话，
+        /// 新会话建立时会把同指纹的旧会话顶掉。本机预览会话为空串（不参与去重）。
+        /// </summary>
+        public string Fingerprint { get; init; } = string.Empty;
     }
 
     /// <inheritdoc/>
@@ -353,8 +359,17 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             }
 
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            _trustedDevices.AddRange(_trustedStore.Load().Where(d => d.IsValid(now)));
-            _trustedStore.Save(_trustedDevices.ToList());
+            var loaded = _trustedStore.Load().Where(d => d.IsValid(now)).ToList();
+            int before = loaded.Count;
+            loaded = DedupeTrustedDevices(loaded);
+            _trustedDevices.AddRange(loaded);
+            _trustedStore.Save(loaded);
+            if (before != loaded.Count)
+            {
+                // 一次性把历史遗留的重复项清掉：升级前攒下的同设备多条凭据不会自己消失
+                _logger.Info($"已清理 {before - loaded.Count} 条重复的免配对凭据（同一设备只保留最新一条）。");
+            }
+
             if (_trustedDevices.Count > 0)
             {
                 _logger.Info($"已载入 {_trustedDevices.Count} 台免配对设备（有效期 {_trustedDays} 天）。");
@@ -362,9 +377,35 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         }
     }
 
-    /// <summary>新增一条长期凭据（只存令牌**哈希**）并整表落盘。</summary>
-    private TrustedWebDevice AddTrustedDevice(
-        string trustedId, string token, string label, string ip, DateTimeOffset expiresAt)
+    /// <summary>
+    /// 按"设备"去重：同一台设备只保留**最新一条**长期凭据（2026-09-14）。
+    /// <para>
+    /// 去重键：有指纹用指纹；**本字段引入之前的旧记录没有指纹** → 退回 <c>Ip + Label</c>。
+    /// 后者不是精确判据，但它存在的意义就是让主人升级前攒下的那 21 条能一次清干净
+    /// ——保留"精确不了就不去重"的忠厚，等于把问题永远留在用户机器上。
+    /// </para>
+    /// </summary>
+    private static List<TrustedWebDevice> DedupeTrustedDevices(List<TrustedWebDevice> devices)
+    {
+        var kept = new List<TrustedWebDevice>();
+        foreach (IGrouping<string, TrustedWebDevice> group in devices.GroupBy(d =>
+            d.Fingerprint.Length > 0 ? d.Fingerprint : $"legacy:{d.Ip}|{d.Label}"))
+        {
+            kept.Add(group.OrderByDescending(d => d.CreatedAt).First());
+        }
+
+        return kept;
+    }
+
+    /// <summary>
+    /// 记下一条长期凭据（只存令牌**哈希**）并整表落盘，**同时顶掉同一设备指纹的旧凭据**。
+    /// <para>
+    /// 🔴 2026-09-14：此前是纯 <c>Add</c>，于是反复扫码配对会在磁盘上攒出一串同设备凭据
+    /// （主人实测 21 条）。顶掉旧凭据不会影响手机——它 localStorage 里存的是最新那枚令牌。
+    /// </para>
+    /// </summary>
+    private TrustedWebDevice AddOrReplaceTrustedDevice(
+        string trustedId, string token, string label, string ip, DateTimeOffset expiresAt, string fingerprint)
     {
         var record = new TrustedWebDevice
         {
@@ -374,9 +415,15 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             Ip = ip,
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = expiresAt,
+            Fingerprint = fingerprint,
         };
         lock (_sessionGate)
         {
+            if (fingerprint.Length > 0)
+            {
+                _trustedDevices.RemoveAll(d => string.Equals(d.Fingerprint, fingerprint, StringComparison.Ordinal));
+            }
+
             _trustedDevices.Add(record);
             _trustedStore?.Save(_trustedDevices.ToList());
         }
@@ -415,6 +462,31 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <summary>令牌哈希（SHA-256 十六进制小写）——落盘只存它，明文令牌绝不写磁盘。</summary>
     private static string HashToken(string token)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+    /// <summary>
+    /// 设备指纹 = <c>SHA256(来源 IP | User-Agent)</c> 的前 16 位十六进制。
+    /// <para>
+    /// 🔴 它唯一的作用是**去重**：同一台手机反复配对/重连（服务重启后会话表清空，
+    /// 下一次页面加载凭长期凭据重建会话）会在列表里堆出一串一模一样的条目
+    /// —— 主人 2026-09-14 实测「21 条 Android · Chrome，其实是同一台」。
+    /// </para>
+    /// <para>
+    /// <b>为什么是"IP + UA"</b>：浏览器端拿不到稳定的硬件标识，而重复配对恰恰是
+    /// "客户端自己都不知情"的场景（它在 localStorage 里存着上次的令牌，只是服务端认不出它）。
+    /// 用服务端能看见的两个信号拼一个指纹，是无需客户端配合的可行解。
+    /// </para>
+    /// <para>
+    /// <b>已知局限（如实记下，别当成完美方案）</b>：① 同一台手机浏览器**大版本升级**会换 UA
+    /// → 会再出现一条（旧的 30 天后自然过期）；② 同一 IP 下 UA 完全一致的两台设备会被当成同一台
+    /// —— 局域网内极少见，且"少列一条、多顶掉一次会话"比"列表里堆 21 条"危害小得多。
+    /// </para>
+    /// <para>只存哈希不存 UA 明文：UA 属可识别信息，会话表与磁盘里都没有必要留原文。</para>
+    /// </summary>
+    /// <param name="ip">来源 IP（取不到时传空串，仍可与 UA 组成指纹）。</param>
+    /// <param name="userAgent">完整 User-Agent（缺省时传空串——此时同 IP 的所有请求视为同一台）。</param>
+    private static string DeviceFingerprint(string ip, string userAgent)
+        => Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(ip + "|" + userAgent)))[..16].ToLowerInvariant();
 
     /// <summary>时间常量比较（与令牌鉴权同款，规避按字符提前返回的时序侧信道）。</summary>
     private static bool TimeConstantEquals(string left, string right)
@@ -577,18 +649,25 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             // 于是免配对重建一个会话。注意这里只认哈希命中，且到期即失效。
             if (sessionId is null && TryMatchTrustedDevice(providedToken) is { } trusted)
             {
+                string rebuiltIp = ctx.Connection.RemoteIpAddress?.ToString() ?? trusted.Ip;
                 WebSession rebuilt = NewSession(
                     trusted.Label,
-                    ctx.Connection.RemoteIpAddress?.ToString() ?? trusted.Ip,
+                    rebuiltIp,
                     isLocalPreview: false,
                     trustedId: trusted.Id,
-                    expiresAt: trusted.ExpiresAt);
-                lock (_sessionGate)
-                {
-                    _sessions[rebuilt.Id] = rebuilt;
-                }
+                    expiresAt: trusted.ExpiresAt,
+                    fingerprint: DeviceFingerprint(rebuiltIp, ctx.Request.Headers.UserAgent.ToString()));
+                // 🔴 必须走 PutSession（顶掉同设备旧会话）：服务重启后 _sessions 是空的，
+                // 而手机每次加载页面都会带着 localStorage 里的长期凭据走到这里 ——
+                // 用 _sessions[id] = ... 直接插入的话，列表会以"每加载一次多一条"膨胀。
+                int displaced = PutSession(rebuilt);
 
                 _logger.Info($"免配对凭据命中：{trusted.Label} 直接建立会话 {rebuilt.Id}（有效期至 {trusted.ExpiresAt.ToLocalTime():yyyy-MM-dd}）。");
+                if (displaced > 0)
+                {
+                    _logger.Info($"已顶掉同一设备（{trusted.Label}）的 {displaced} 条旧会话。");
+                }
+
                 RaiseSessionsChanged();
                 sessionId = rebuilt.Id;
             }
@@ -1000,11 +1079,16 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 trustedExpiry = DateTimeOffset.UtcNow.AddDays(_trustedDays);
             }
 
+            // 设备指纹：同一台手机反复扫码时用它顶掉旧会话与旧凭据（否则列表堆成一串同设备条目）
+            string fingerprint = DeviceFingerprint(clientIp, ctx.Request.Headers.UserAgent.ToString());
+
             WebSession session = NewSession(
-                label, clientIp, isLocalPreview: false, trustedId: trustedId, expiresAt: trustedExpiry);
+                label, clientIp, isLocalPreview: false, trustedId: trustedId, expiresAt: trustedExpiry,
+                fingerprint: fingerprint);
             if (trustedId is not null && trustedExpiry is not null)
             {
-                AddTrustedDevice(trustedId, session.Token, label, clientIp, trustedExpiry.Value);
+                AddOrReplaceTrustedDevice(
+                    trustedId, session.Token, label, clientIp, trustedExpiry.Value, fingerprint);
                 _logger.Info($"{label} 已勾选「记住此设备」：免配对有效期 {_trustedDays} 天（凭据只存令牌哈希，可随时在会话列表撤销）。");
             }
             else if (remember)
@@ -1013,11 +1097,13 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 _logger.Warn("手机端勾选「记住此设备」，但服务端未启用长期凭据存储 → 本次按普通会话处理（重启后需重新配对）。");
             }
 
-            lock (_sessionGate)
-            {
-                _sessions[session.Id] = session;
-            }
+            int replaced = PutSession(session);
             _logger.Info($"Web 配对成功：签发会话 {session.Id}（{session.Label}，来自 {clientIp}）。");
+            if (replaced > 0)
+            {
+                _logger.Info($"已顶掉同一设备（{label}）的 {replaced} 条旧会话——重复配对不再堆积。");
+            }
+
             RaiseSessionsChanged();
 
             int expiresInMinutes = Math.Max(1, (int)Math.Ceiling((expiresAt - DateTimeOffset.UtcNow).TotalMinutes));
@@ -1599,7 +1685,8 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <para>令牌 16 字节随机（32 位 hex）与会话 Id 分离——Id 只用于展示与「踢出」，不是凭据。</para>
     /// </summary>
     private static WebSession NewSession(
-        string label, string ip, bool isLocalPreview, string? trustedId = null, DateTimeOffset? expiresAt = null)
+        string label, string ip, bool isLocalPreview, string? trustedId = null, DateTimeOffset? expiresAt = null,
+        string fingerprint = "")
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new WebSession
@@ -1617,7 +1704,48 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 ?? (isLocalPreview ? DateTimeOffset.MaxValue : now + SessionLifetime),
             IsLocalPreview = isLocalPreview,
             TrustedId = trustedId,
+            Fingerprint = fingerprint,
         };
+    }
+
+    /// <summary>
+    /// 把会话放进表里，**并顶掉同一设备指纹的旧会话**（2026-09-14）。
+    /// <para>
+    /// 为什么必须有这一步：同一台手机每次配对/每次凭长期凭据重建会话，都会产生一个新 Id，
+    /// 而旧会话此前一直留在表里 —— 列表于是堆成一串"同一台设备"。
+    /// 顶掉意味着**旧令牌立即失效**，这正是我们想要的：旧令牌本就不再被客户端使用
+    /// （localStorage 里只留最新那个），留着它只是多一个可被滥用的凭据。
+    /// </para>
+    /// <para>指纹为空（本机预览、或调用方没传）时不参与去重，行为与改动前一致。</para>
+    /// </summary>
+    /// <param name="session">待写入的会话。</param>
+    /// <returns>被顶掉的旧会话数（0 = 该设备此前不在列表里）。</returns>
+    private int PutSession(WebSession session)
+    {
+        int replaced = 0;
+        lock (_sessionGate)
+        {
+            if (session.Fingerprint.Length > 0)
+            {
+                // 先快照 Id 再删：不能在遍历 _sessions 的同时改它
+                var stale = _sessions
+                    .Where(kv => !kv.Value.IsLocalPreview
+                        && string.Equals(kv.Value.Fingerprint, session.Fingerprint, StringComparison.Ordinal))
+                    .Select(kv => kv.Key)
+                    .ToList();
+                foreach (string id in stale)
+                {
+                    if (_sessions.Remove(id))
+                    {
+                        replaced++;
+                    }
+                }
+            }
+
+            _sessions[session.Id] = session;
+        }
+
+        return replaced;
     }
 
     /// <summary>

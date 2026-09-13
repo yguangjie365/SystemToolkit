@@ -26,6 +26,19 @@ public sealed record TrustedWebDevice
     /// <summary>最近一次看到的来源 IP。</summary>
     public string Ip { get; init; } = string.Empty;
 
+    /// <summary>
+    /// 设备指纹（来源 IP + User-Agent 的哈希，2026-09-14 加）。
+    /// <para>
+    /// 存在的唯一理由是**去重**：同一台手机反复扫码配对时，旧记录此前从不清理，
+    /// 列表里会堆出一串一模一样的条目（主人实测：21 条 "Android · Chrome"）。
+    /// </para>
+    /// <para>
+    /// 空串 = 本字段引入之前写入的旧记录。去重时退回用 <see cref="Ip"/> + <see cref="Label"/> 认人
+    /// ——否则用户升级前攒下的那批重复项永远清不掉。
+    /// </para>
+    /// </summary>
+    public string Fingerprint { get; init; } = string.Empty;
+
     /// <summary>首次记住的时间。</summary>
     public DateTimeOffset CreatedAt { get; init; }
 
