@@ -233,7 +233,12 @@ public partial class FileTransferMobileViewModel : ObservableObject
 
     partial void OnHttpsPortTextChanged(string value) => SaveAndValidatePorts();
 
-    partial void OnUseHttpsChanged(bool value) => SaveAndValidatePorts();
+    partial void OnUseHttpsChanged(bool value)
+    {
+        SaveAndValidatePorts();
+        // 勾选状态直接决定「证书指纹」行的可见性（未启用 HTTPS 时没有证书可核对）
+        OnPropertyChanged(nameof(ShowCertFingerprint));
+    }
 
     partial void OnAutoStartWithAppChanged(bool value)
     {
@@ -253,9 +258,15 @@ public partial class FileTransferMobileViewModel : ObservableObject
         }
     }
 
-    /// <summary>服务在跑时改端口必须重启才生效——界面要明说，不能让用户以为已生效。</summary>
+    /// <summary>
+    /// 端口生效时机提示。
+    /// <para>
+    /// 🔴 2026-09-13 实机反馈修正：与电脑互传页同样的缺陷——原文案恒为「已改，重启 Web 服务后生效」，
+    /// 判据却是"服务是否在运行"，**没改过也会说"已改"**。改为只描述当前状态与下一步动作。
+    /// </para>
+    /// </summary>
     public string PortEffectHint => IsWebRunning
-        ? "已改，重启 Web 服务后生效"
+        ? "Web 服务运行中：改端口后需先「停止 Web 服务」再「启动」才生效"
         : "启动 Web 服务时生效";
 
     private void RefreshUrlPreview()
@@ -319,6 +330,15 @@ public partial class FileTransferMobileViewModel : ObservableObject
     /// <summary>完整证书指纹（「复制」用；界面上显示完整 64 位会被截断得没法核对）。</summary>
     [ObservableProperty]
     private string _certFingerprintFull = "";
+
+    /// <summary>
+    /// 是否显示「证书指纹」行。
+    /// <para>
+    /// 🔴 2026-09-13 实机反馈：「未启用 HTTPS」时这一行仍是 `证书指纹 — [复制]` ——
+    /// 一个破折号配一个点了没用的复制按钮，看着像坏掉的控件。没有证书就整行不出现。
+    /// </para>
+    /// </summary>
+    public bool ShowCertFingerprint => UseHttps && !string.IsNullOrEmpty(CertFingerprintFull);
 
     private System.Windows.Threading.DispatcherTimer? _codeTimer;
 
@@ -509,6 +529,8 @@ public partial class FileTransferMobileViewModel : ObservableObject
         string fingerprint = _web.CertFingerprint;
         CertFingerprintFull = fingerprint;
         CertFingerprintText = FormatFingerprintShort(fingerprint);
+        // 指纹到货/消失都直接决定「证书指纹」那一行显不显示
+        OnPropertyChanged(nameof(ShowCertFingerprint));
     });
 
     /// <summary>

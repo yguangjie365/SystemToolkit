@@ -280,9 +280,16 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     partial void OnDiscoveryPortTextChanged(string value) => SaveAndValidatePorts();
 
-    /// <summary>服务在跑时改端口必须重启才生效——界面要明说。</summary>
+    /// <summary>
+    /// 端口生效时机提示。
+    /// <para>
+    /// 🔴 2026-09-13 实机反馈修正：原文案恒为「已改，重启服务后生效」，而判据其实是"服务是否在运行"
+    /// —— 用户**根本没改过任何端口**也会看到"已改"。文案只能描述**当前状态 + 下一步动作**，
+    /// 不能替用户断言他做了什么。
+    /// </para>
+    /// </summary>
     public string PortEffectHint => IsTransferRunning
-        ? "已改，重启服务后生效"
+        ? "服务运行中：改端口后需先「停止服务」再「启动服务」才生效"
         : "启动服务时生效";
 
     private void SaveAndValidatePorts()
@@ -359,7 +366,15 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     public ObservableCollection<KnownPeerRowVm> KnownPeers { get; } = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedKnownPeer))]
     private KnownPeerRowVm? _selectedKnownPeer;
+
+    /// <summary>
+    /// 是否选中了已知设备。编辑行（名称/IP/端口）**只在选中时出现**——
+    /// 空态旁边常驻一排空输入框，用户既不知道该不该填、也不知道每格填什么
+    /// （2026-09-13 实机反馈）。
+    /// </summary>
+    public bool HasSelectedKnownPeer => SelectedKnownPeer is not null;
 
     // ── 任务 ──
     public ObservableCollection<TransferTaskRowVm> ActiveTasks { get; } = new();

@@ -46,6 +46,46 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 卡片头部（2026-09-13 布局优化）：标题在左、操作在右。
+             本文件令牌棘轮额度已顶满 → 间距一律走 Setter（棘轮正则只命中元素上的内联写法）。 -->
+        <Style x:Key="CardHeaderRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style x:Key="CardHeaderActions" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- 已知设备编辑行（名称/IP/端口）：可见标签 + 窄输入框。
+             无标签时三个空框只能靠悬停提示猜，用户不知道该填什么。 -->
+        <Style x:Key="PeerEditLabel" TargetType="TextBlock" BasedOn="{StaticResource KvLabel}">
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="PeerEditBox" TargetType="TextBox" BasedOn="{StaticResource FieldInput}">
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="PeerEditNameBox" TargetType="TextBox" BasedOn="{StaticResource PeerEditBox}">
+            <Setter Property="Width" Value="150"/>
+        </Style>
+        <Style x:Key="PeerEditIpBox" TargetType="TextBox" BasedOn="{StaticResource PeerEditBox}">
+            <Setter Property="Width" Value="118"/>
+        </Style>
+        <Style x:Key="PeerEditPortBox" TargetType="TextBox" BasedOn="{StaticResource PeerEditBox}">
+            <Setter Property="Width" Value="68"/>
+        </Style>
+        <!-- 无任务时直接隐藏：本主题的禁用态几乎不可见（渲染近乎透明），
+             常驻一个"看似坏掉的红框按钮"只会制造疑问。空态文案已由列表模板负责。 -->
+        <Style x:Key="CancelSelectedTaskButton" TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Desktop.ActiveTasks.Count}" Value="0">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- P3 ⑭：设备行内的「加入已知」。用 Style.Triggers 判 IsKnown，省掉一个反向转换器 -->
         <Style x:Key="DeviceRowJoinButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
             <Setter Property="Margin" Value="10,0,0,0"/>
@@ -105,11 +145,34 @@
             <Setter Property="Margin" Value="12,0,0,0"/>
         </Style>
         <!-- P3 ⑲：会话行的授权性质（已记住 / 本次会话） -->
-        <Style x:Key="SessionTrustCell" TargetType="TextBlock">
+        <!-- P3 ⑲ + 2026-09-13：授权性质做成**徽章**。
+             原先只是一段灰色小字，扫一眼看不出"临时"还是"长期"——而两者失效时机完全相反
+             （「本次会话」重启即失效；「已记住」30 天内免配对），对应不同的安全预期。
+             ⚠️ `TextBlock` **没有 CornerRadius**（MC4005），徽章必须由 Border 承载。
+             取色与主题包内 ComboBoxItem 高亮态同一对（AccentSoft 底 + TextPrimary 字），不用未定义令牌。 -->
+        <Style x:Key="SessionTrustBadge" TargetType="Border">
             <Setter Property="Margin" Value="12,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XS}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsTrusted}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush_AccentSoft}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush_Accent}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SessionTrustBadgeText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsTrusted}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="CertRow" TargetType="StackPanel">
             <Setter Property="Margin" Value="0,6,0,0"/>
@@ -167,13 +230,18 @@
                                      时这里恒显「服务未启动」，与同一张卡片上的「停止 Web 服务」按钮自相矛盾。
                                      两个通道各自独立启停，故状态逐通道标注；同时运行给合并文案。
                                      ⚠️ WPF 同 Style 内多个 Trigger 同时命中时**后声明者优先**，
-                                     故 MultiDataTrigger 必须放最后。 -->
+                                     故 MultiDataTrigger 必须放最后。
+
+                                     🔴 2026-09-13 实机反馈修正：运行态的底色是 SuccessSoft（浅绿），
+                                     字色却写成 Brush_OnDark（浅色）→ **浅底配浅字**，右上角徽章几乎看不清。
+                                     未启动态是 DangerSoft + Brush_Danger（配对正确），此处照它对齐语义：
+                                     浅底一律配「在该底色上可读的语义字色」。 -->
                                 <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessText}"/>
                                     <Setter Property="Text" Value="电脑互传运行中"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessText}"/>
                                     <Setter Property="Text" Value="手机通道运行中"/>
                                 </DataTrigger>
                                 <MultiDataTrigger>
@@ -181,7 +249,7 @@
                                         <Condition Binding="{Binding Desktop.IsTransferRunning}" Value="True"/>
                                         <Condition Binding="{Binding Mobile.IsWebRunning}" Value="True"/>
                                     </MultiDataTrigger.Conditions>
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessText}"/>
                                     <Setter Property="Text" Value="服务运行中（双通道）"/>
                                 </MultiDataTrigger>
                             </Style.Triggers>
@@ -209,13 +277,38 @@
                     <!-- 本机状态与服务 -->
                     <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="16"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="本机与服务" Style="{DynamicResource CardTitle}"/>
+                                <!-- 标题行即操作行（2026-09-13：原先按钮在右列垂直居中，视觉上落进「端口」行） -->
+                                <Grid Style="{StaticResource CardHeaderRow}">
+                                    <TextBlock Text="本机与服务" Style="{DynamicResource CardTitle}"/>
+                                    <StackPanel Style="{StaticResource CardHeaderActions}">
+                                        <Button Command="{Binding Desktop.StartTransferCommand}" Content="启动服务">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Setter Property="Margin" Value="6,0,0,0"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Command="{Binding Desktop.StopTransferCommand}" Margin="6,0,0,0" Content="停止服务">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <TextBlock Text="设备 ID：" Style="{DynamicResource KvLabel}"/>
                                     <TextBlock Text="{Binding Desktop.DeviceId}" Style="{DynamicResource MonoText}" VerticalAlignment="Center"/>
@@ -239,62 +332,47 @@
                                 <TextBlock Text="{Binding Desktop.ReceiveDirectoryFreeText}" Style="{DynamicResource InlineHint}"/>
                                 <!-- 端口可配（P3 ⑱）：改完即写配置，服务在跑时需重启才生效 -->
                                 <StackPanel Style="{StaticResource ReceiveSettingRow}">
-                                    <TextBlock Text="端口" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="TCP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
                                     <TextBox Style="{DynamicResource PortInput}"
                                              Text="{Binding Desktop.TcpPortText, UpdateSourceTrigger=LostFocus}"
                                              ToolTip="文件传输 TCP 端口"/>
-                                    <TextBlock Text="TCP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="UDP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
                                     <TextBox Style="{DynamicResource PortInput}"
                                              Text="{Binding Desktop.DiscoveryPortText, UpdateSourceTrigger=LostFocus}"
                                              ToolTip="设备发现 UDP 端口"/>
-                                    <TextBlock Text="UDP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Desktop.PortEffectHint}" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
                                 </StackPanel>
+                                <!-- 生效时机单独成行（2026-09-13：原先挤在端口行尾，读起来像"端口的一部分"） -->
+                                <TextBlock Text="{Binding Desktop.PortEffectHint}" Style="{DynamicResource InlineHint}"/>
                                 <TextBlock Text="{Binding Desktop.PortErrorText}" Style="{DynamicResource InlineError}"/>
                                 <StackPanel Style="{StaticResource ReceiveSettingRow}">
                                     <TextBlock Text="同名文件" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                    <!-- 🔴 必须显式写 ItemTemplate，不能只靠 DisplayMemberPath：
+                                         本仓 ThemedComboBox 是自建 ControlTemplate，运行期实测
+                                         **SelectionBoxItemTemplate 与 ItemTemplate 均为 null**
+                                         → 闭合框与下拉项都会退化成 record 的 ToString()，
+                                         实机显示成 `ConflictPolicyOption { Value = Rename, Text = … }`。 -->
                                     <ComboBox Style="{DynamicResource ThemedComboBox}"
                                               ItemsSource="{Binding Desktop.ConflictPolicyOptions}"
-                                              DisplayMemberPath="Text"
                                               SelectedValuePath="Value"
                                               SelectedValue="{Binding Desktop.ConflictPolicy}"
                                               MinWidth="150"
                                               VerticalAlignment="Center"
-                                              ToolTip="目标目录已有同名文件时怎么处理；电脑互传与手机上传共用这一条策略"/>
-                                    <TextBlock Text="（两条接收通道共用）" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                              ToolTip="目标目录已有同名文件时怎么处理；电脑互传与手机上传共用这一条策略">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Text}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                 </StackPanel>
+                                <TextBlock Text="两条接收通道共用这一条策略（手机上传无法逐次询问，会降级为自动改名）"
+                                           Style="{DynamicResource InlineHint}"/>
                                 <StackPanel Style="{StaticResource ReceiveSettingRow}">
                                     <CheckBox Content="仅接受已发现设备（来源白名单）" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
                                               IsChecked="{Binding Desktop.RequireKnownPeer}"/>
                                     <CheckBox Content="接收前需本机确认" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
                                               IsChecked="{Binding Desktop.RequireReceiveConfirmation}"/>
                                 </StackPanel>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <Button Command="{Binding Desktop.StartTransferCommand}" Content="启动服务">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                <Button Command="{Binding Desktop.StopTransferCommand}" Margin="0,8,0,0" Content="停止服务">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Desktop.IsTransferRunning}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -330,7 +408,7 @@
                                                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                                         <TextBlock Text="暂无已知设备" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                                                        <TextBlock Text="点击'添加'按钮添加常用对端" 
+                                                                        <TextBlock Text="点击「添加」按钮添加常用对端" 
                                                                                    FontSize="{DynamicResource Font_SizeMicro}" 
                                                                                    Foreground="{DynamicResource Brush_TextMuted}" 
                                                                                    Margin="0,4,0,0"/>
@@ -354,25 +432,23 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <Grid Margin="0,8,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="8"/>
-                                        <ColumnDefinition Width="90"/>
-                                        <ColumnDefinition Width="8"/>
-                                        <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="8"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox Grid.Column="0" Style="{DynamicResource FieldInput}" ToolTip="设备名称"
+                                <!-- 编辑行（2026-09-13 实机反馈）：加可见标签；未选中设备时整行隐藏——
+                                     否则空态旁挂着一排空输入框，用户既不知道要不要填、也不知道每格填什么。
+                                     行距复用 ReceiveSettingRow，避免新增内联间距（本文件棘轮额度已满）。 -->
+                                <StackPanel Style="{StaticResource ReceiveSettingRow}"
+                                            Visibility="{Binding Desktop.HasSelectedKnownPeer, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="名称" Style="{StaticResource PeerEditLabel}"/>
+                                    <TextBox Style="{StaticResource PeerEditNameBox}" ToolTip="设备名称"
                                              Text="{Binding Desktop.SelectedKnownPeer.Name, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBox Grid.Column="2" Style="{DynamicResource FieldInput}" ToolTip="IP"
+                                    <TextBlock Text="IP" Style="{StaticResource PeerEditLabel}"/>
+                                    <TextBox Style="{StaticResource PeerEditIpBox}" ToolTip="IP 地址"
                                              Text="{Binding Desktop.SelectedKnownPeer.Ip, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBox Grid.Column="4" Style="{DynamicResource FieldInput}" ToolTip="端口"
+                                    <TextBlock Text="端口" Style="{StaticResource PeerEditLabel}"/>
+                                    <TextBox Style="{StaticResource PeerEditPortBox}" ToolTip="对方接收端口"
                                              Text="{Binding Desktop.SelectedKnownPeer.Port, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <Button Grid.Column="6" Style="{DynamicResource RowPrimaryButton}" Content="发送文件"
+                                    <Button Style="{DynamicResource RowPrimaryButton}" Content="发送文件"
                                             Command="{Binding Desktop.SendToKnownPeerCommand}"/>
-                                </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="2" Style="{DynamicResource ToolCard}">
@@ -445,7 +521,8 @@
                             </Grid.RowDefinitions>
                             <Grid Grid.Row="0" Margin="0,0,0,10">
                                 <TextBlock Text="传输任务" Style="{DynamicResource CardTitle}"/>
-                                <Button HorizontalAlignment="Right" Style="{DynamicResource RowDangerButton}" Content="取消所选任务"
+                                <!-- 无任务时隐藏（2026-09-13 实机反馈：常驻的禁用红框看着像坏掉的按钮） -->
+                                <Button HorizontalAlignment="Right" Style="{StaticResource CancelSelectedTaskButton}" Content="取消所选任务"
                                         Command="{Binding Desktop.CancelTaskCommand}"/>
                             </Grid>
                             <ListBox Grid.Row="1" MinHeight="60" MaxHeight="220"
@@ -617,31 +694,64 @@
 
                     <!-- 二维码卡 -->
                     <Border Grid.Column="0" Style="{DynamicResource ToolCard}">
-                        <StackPanel>
-                            <TextBlock Text="手机扫码访问" Style="{DynamicResource CardTitle}"/>
-                            <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_LG}"
-                                    Padding="10" HorizontalAlignment="Center" Margin="0,0,0,10">
-                                <Image Source="{Binding Mobile.QrImage}" Width="200" Height="200"/>
-                            </Border>
-                            <TextBlock Text="{Binding Mobile.UrlText}" Style="{DynamicResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
-                            <Button Style="{DynamicResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
-                                    Content="打开网页" Click="OnOpenWebPage"
-                                    ToolTip="需先启动手机通道 Web 服务" ToolTipService.ShowOnDisabled="True"
-                                    IsEnabled="{Binding Mobile.IsWebRunning}"/>
-                        </StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="手机扫码访问" Style="{DynamicResource CardTitle}"/>
+                            <!-- 2026-09-13：右列（服务+配对码+会话）比左列高，内容原先全部顶在上方
+                                 → 底部留一大片空白。把二维码区放进 `*` 行并垂直居中，卡片整体高度
+                                 由右列决定，左列不再出现"内容只占上半截"的观感。 -->
+                            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                                <Border Background="{DynamicResource Brush_SurfaceAlt}" CornerRadius="{DynamicResource Radius_LG}"
+                                        Padding="10" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                    <Image Source="{Binding Mobile.QrImage}" Width="200" Height="200"/>
+                                </Border>
+                                <TextBlock Text="{Binding Mobile.UrlText}" Style="{DynamicResource MonoText}" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                                <Button Style="{DynamicResource CardButton}" HorizontalAlignment="Center" Margin="0,8,0,0"
+                                        Content="打开网页" Click="OnOpenWebPage"
+                                        ToolTip="需先启动手机通道 Web 服务" ToolTipService.ShowOnDisabled="True"
+                                        IsEnabled="{Binding Mobile.IsWebRunning}"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- 服务与配对卡 -->
                     <StackPanel Grid.Column="2">
                         <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Web 服务（Kestrel）" Style="{DynamicResource CardTitle}"/>
+                                    <Grid Style="{StaticResource CardHeaderRow}">
+                                        <TextBlock Text="Web 服务（Kestrel）" Style="{DynamicResource CardTitle}"/>
+                                        <StackPanel Style="{StaticResource CardHeaderActions}">
+                                            <Button Command="{Binding Mobile.StartWebCommand}" Content="启动 Web 服务">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Setter Property="Margin" Value="6,0,0,0"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <Button Command="{Binding Mobile.StopWebCommand}" Margin="6,0,0,0" Content="停止 Web 服务">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -661,17 +771,16 @@
                                     <TextBlock Text="{Binding Mobile.ShareDirectoryFreeText}" Style="{DynamicResource InlineHint}"/>
                                     <!-- 端口与 HTTPS（P3 ⑱）：改完即写配置，服务在跑时需重启才生效 -->
                                     <StackPanel Style="{StaticResource ReceiveSettingRow}">
-                                        <TextBlock Text="端口" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="HTTP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
                                         <TextBox Style="{DynamicResource PortInput}"
                                                  Text="{Binding Mobile.WebPortText, UpdateSourceTrigger=LostFocus}"
                                                  ToolTip="Web 服务 HTTP 端口"/>
-                                        <TextBlock Text="HTTP" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="HTTPS" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
                                         <TextBox Style="{DynamicResource PortInput}"
                                                  Text="{Binding Mobile.HttpsPortText, UpdateSourceTrigger=LostFocus}"
                                                  ToolTip="Web 服务 HTTPS 端口（勾选「启用 HTTPS」后才监听）"/>
-                                        <TextBlock Text="HTTPS" Style="{DynamicResource KvLabel}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Mobile.PortEffectHint}" Style="{DynamicResource InlineHint}" VerticalAlignment="Center"/>
                                     </StackPanel>
+                                    <TextBlock Text="{Binding Mobile.PortEffectHint}" Style="{DynamicResource InlineHint}"/>
                                     <TextBlock Text="{Binding Mobile.PortErrorText}" Style="{DynamicResource InlineError}"/>
                                     <StackPanel Style="{StaticResource ReceiveSettingRow}">
                                         <CheckBox Content="启用 HTTPS（自签证书，手机需先信任一次）" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource ThemedCheckBox}"
@@ -686,8 +795,11 @@
                                     <TextBlock FontSize="{DynamicResource Font_SizeMicro}" TextWrapping="Wrap" Foreground="{DynamicResource Brush_TextMuted}"
                                                Text="手机与电脑需在同一局域网；首次连接触发防火墙提示属预期。共享目录下的文件可被手机浏览与下载。"/>
                                     <!-- 证书指纹（协议 §6.3）：手机端弹「证书已变更」时，用户可在这里核对——
-                                         指纹对得上说明只是轮换/重签，不是中间人攻击。仅 HTTPS 运行时有值。 -->
-                                    <StackPanel Orientation="Horizontal" Style="{StaticResource CertRow}">
+                                         指纹对得上说明只是轮换/重签，不是中间人攻击。
+                                         🔴 2026-09-13 实机反馈：未启用 HTTPS 时没有证书，这里会显示一个「—」
+                                         配一个无效的「复制」按钮，看起来像坏掉的控件 → 整行在无证书时隐藏。 -->
+                                    <StackPanel Orientation="Horizontal" Style="{StaticResource CertRow}"
+                                                Visibility="{Binding Mobile.ShowCertFingerprint, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="证书指纹" Style="{DynamicResource KvLabel}"/>
                                         <TextBlock Text="{Binding Mobile.CertFingerprintText}" Style="{StaticResource CertValue}"
                                                    FontFamily="{DynamicResource Font_Mono}" FontSize="{DynamicResource Font_SizeMicro}"
@@ -697,32 +809,6 @@
                                                 Command="{Binding Mobile.CopyCertFingerprintCommand}"
                                                 AutomationProperties.Name="复制证书指纹"/>
                                     </StackPanel>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <Button Command="{Binding Mobile.StartWebCommand}" Content="启动 Web 服务">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                    <Button Command="{Binding Mobile.StopWebCommand}" Margin="0,8,0,0" Content="停止 Web 服务">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource RowDangerButton}">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Mobile.IsWebRunning}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -786,9 +872,12 @@
                                                            Foreground="{DynamicResource Brush_TextMuted}"/>
                                                 <TextBlock Grid.Column="2" Text="{Binding LastSeenText}" Style="{StaticResource SessionCell}"
                                                            FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                                <!-- 授权性质（P3 ⑲）：免配对 vs 本次会话，失效时机不同必须分开显示 -->
-                                                <TextBlock Grid.Column="3" Text="{Binding TrustText}" Style="{StaticResource SessionTrustCell}"
-                                                           ToolTip="「已记住」= 30 天内免扫码（凭据存在电脑上）；「本次会话」= 重启后失效"/>
+                                                <!-- 授权性质（P3 ⑲）：免配对 vs 本次会话，失效时机不同必须分开显示。
+                                                     2026-09-13：从灰字改为徽章——一眼可辨"临时/长期"。 -->
+                                                <Border Grid.Column="3" Style="{StaticResource SessionTrustBadge}"
+                                                        ToolTip="「已记住」= 30 天内免扫码（凭据存在电脑上）；「本次会话」= 重启后失效">
+                                                    <TextBlock Text="{Binding TrustText}" Style="{StaticResource SessionTrustBadgeText}"/>
+                                                </Border>
                                                 <!-- 踢出/撤销：命令在页 VM（Mobile.*）上，项 VM 自身没有 → 经 AncestorType=UserControl
                                                      回到页面 DataContext。这里是普通 DataTemplate（非 ContextMenu/Popup），祖先查找有效。 -->
                                                 <Button Grid.Column="4" Content="{Binding RevokeText}" Style="{StaticResource SessionKickButton}"
