@@ -47,6 +47,15 @@ public interface IFileWebServer : IAsyncDisposable
     event EventHandler? SessionsChanged;
 
     /// <summary>
+    /// 浏览器（手机端）经 <c>POST /api/text</c> 发来文本时触发（W2）。
+    /// <para>
+    /// 服务端只做「转达」：<b>不写剪贴板、不弹窗、不落文件</b>——这三件事都属于订阅方的决策。
+    /// 订阅方抛出的异常会被吞掉并留痕，不会让已返回 200 的请求变成 500。
+    /// </para>
+    /// </summary>
+    event EventHandler<WebTextReceivedEventArgs>? TextReceived;
+
+    /// <summary>
     /// 撤销指定会话（"踢出"）。返回是否真的撤销了——令牌随之**立即失效**，
     /// 该设备需要重新扫码配对。
     /// </summary>
@@ -93,4 +102,22 @@ public interface IFileWebServer : IAsyncDisposable
     /// 添加文件到共享目录（供 Web 端上传写入）。
     /// </summary>
     Task WriteUploadedFileAsync(string fileName, Stream content, CancellationToken ct = default);
+
+    /// <summary>
+    /// 推一条文本给**所有已连接的浏览器**（电脑 → 手机，W2）；WS 消息类型 <c>chatMessage</c>。
+    /// <para>
+    /// 🔴 与 <c>FileTransferService.SendTextAsync</c> 同一校验口径：空文本与超过
+    /// <see cref="TransferText.MaxBytes"/> 的文本一律**抛 <see cref="ArgumentException"/>**，
+    /// 绝不静默截断后回一个假的送达数（截断会把一条长链接变成失效链接，而界面却显示"已送达"）。
+    /// </para>
+    /// <para>
+    /// <b>为什么是广播而不是"发给指定会话"</b>：WS 连接与 HTTP 会话之间没有服务端侧的绑定
+    /// （一次配对可以在同一台手机上开多个标签页），指定会话在服务端无从落地。
+    /// 局域网内已配对的浏览器是个位数，广播的代价比"伪造一个精确的假象"低得多。
+    /// </para>
+    /// </summary>
+    /// <param name="text">待推送文本（需先通过 <see cref="TransferText.Validate"/>）。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <returns>实际送达的连接数（0 = 无人在线；**不代表对方已读**，只代表帧已写出）。</returns>
+    Task<int> BroadcastTextAsync(string text, CancellationToken ct = default);
 }

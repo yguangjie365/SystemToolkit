@@ -59,6 +59,20 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// </summary>
     private const long UploadLimitBytes = 10L * 1024 * 1024 * 1024;
 
+    /// <summary>
+    /// <c>POST /api/text</c> 的**请求正文**上限（1 MB），与 WatsonTcp 文本通道抬后的报文头预算同值。
+    /// <para>
+    /// 它不等于文本上限（<see cref="TransferText.MaxBytes"/> = 256 KB）：正文是 JSON，
+    /// 最坏形态下 JSON 转义会把体积放大到 3×（emoji 12 B/码元 vs 原始 4 B），
+    /// 256 KB × 3 ≈ 768 KB，再留包装与边界余量取 1 MB。
+    /// </para>
+    /// <para>
+    /// 🔴 这一道**必须先用 Content-Length 挡**：少了它，一个 1 GB 的 body 会被完整读进内存
+    /// 才轮到长度校验——校验本身没错，错在它来得太晚。
+    /// </para>
+    /// </summary>
+    private const long MaxTextBodyBytes = 1024L * 1024L;
+
     private readonly IDeviceDiscoveryService? _discovery;
     private readonly SystemToolkit.Core.Contracts.ILogger _logger;
     private readonly PairingService _pairing;
@@ -239,6 +253,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
 
     /// <inheritdoc/>
     public event EventHandler? SessionsChanged;
+
+    /// <inheritdoc/>
+    public event EventHandler<WebTextReceivedEventArgs>? TextReceived;
 
     /// <inheritdoc/>
     public bool RevokeSession(string sessionId)
@@ -1031,6 +1048,122 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             return Results.Ok(new { forgotten = removed });
         });
 
+        // ── 手机 → 电脑：发文本（W2） ──
+        // 与分块上传同走鉴权中间件（不在 IsPublicAsset 白名单内）：发文本与传文件是同级能力，
+        // 没有理由把鉴权降一级。
+        app.MapPost("/api/text", async (HttpContext ctx, CancellationToken reqCt) =>
+        {
+            // 先用 Content-Length 挡一道（详见 MaxTextBodyBytes 注释）：校验必须发生在读 body 之前。
+            long declared = ctx.Request.ContentLength ?? 0;
+            if (declared <= 0)
+            {
+                return Results.BadRequest(new { error = "请求正文为空。" });
+            }
+
+            if (declared > MaxTextBodyBytes)
+            {
+                return Results.Json(
+                    new { error = "请求正文过大。", reasonCode = TransferReasonCodes.TextTooLong },
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
+            string body;
+            using (var reader = new StreamReader(ctx.Request.Body, Encoding.UTF8))
+            {
+                body = await reader.ReadToEndAsync(reqCt);
+            }
+
+            string text;
+            string? clientId = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return Results.BadRequest(new { error = "请求正文必须是 JSON 对象。" });
+                }
+
+                // 🔴 先验 ValueKind 再取值：JsonElement.TryGetXxx 对「类型不符」是**抛异常**
+                // （只有键不存在才返 false），直接 GetString() 会把 400 变成 500。
+                if (!doc.RootElement.TryGetProperty("text", out JsonElement textEl)
+                    || textEl.ValueKind != JsonValueKind.String)
+                {
+                    return Results.BadRequest(new { error = "缺少 text 字段（须为字符串）。" });
+                }
+
+                text = textEl.GetString() ?? string.Empty;
+                if (doc.RootElement.TryGetProperty("clientId", out JsonElement idEl)
+                    && idEl.ValueKind == JsonValueKind.String)
+                {
+                    clientId = idEl.GetString();
+                }
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { error = "请求正文不是合法 JSON。" });
+            }
+
+            // 判据与电脑↔电脑文本通道同一份（TransferText）：上限按 UTF-8 字节、拒绝而非静默截断。
+            TextValidation validation = TransferText.Validate(text);
+            if (validation.Kind == TextValidationKind.Empty)
+            {
+                return Results.BadRequest(new { error = validation.ErrorText });
+            }
+
+            if (validation.Kind == TextValidationKind.TooLong)
+            {
+                return Results.Json(
+                    new { error = validation.ErrorText, reasonCode = TransferReasonCodes.TextTooLong },
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
+            string fromIp = ctx.Connection.RemoteIpAddress?.ToString() ?? "未知地址";
+            var args = new WebTextReceivedEventArgs
+            {
+                Text = text,
+                FromIp = fromIp,
+                ReceivedAt = DateTimeOffset.UtcNow,
+                CharCount = validation.CharCount,
+                ByteCount = validation.ByteCount,
+            };
+
+            // 回声给**其它**标签页：发送方自己在 200 之后本地上屏，再推一份就是两条重复气泡。
+            // clientId 认不出（伪造 / 连接已断 / 老客户端）时退化为广播给所有人——
+            // 宁可让发送方那边多出一条重复的，也不能让"别人发了消息我这没显示"。
+            Guid? exclude = null;
+            if (clientId is not null
+                && Guid.TryParse(clientId, out Guid parsedClient)
+                && _wsClients.ContainsKey(parsedClient))
+            {
+                exclude = parsedClient;
+            }
+
+            await BroadcastChatMessageAsync(text, fromIp, origin: "phone", excludeId: exclude);
+
+            // 🔴 200 的语义是「电脑已收下」，**不是「已写进剪贴板」**：是否弹确认窗、是否
+            //    写剪贴板由订阅方（模块层）决定，与电脑↔电脑的确认门口径保持一致。
+            //    订阅方抛异常一律吞掉并留痕——此刻响应码已定，再回 500 是状态自相矛盾。
+            try
+            {
+                TextReceived?.Invoke(this, args);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"[Web] 文本接收订阅方处理失败（不影响已收下这一事实）：{ex.Message}", ex);
+            }
+
+            _logger.Info(
+                $"[Web] 收到手机端文本：{validation.CharCount} 字（UTF-8 {validation.ByteCount} 字节），来自 {fromIp}。");
+
+            return Results.Ok(new
+            {
+                ok = true,
+                charCount = validation.CharCount,
+                byteCount = validation.ByteCount,
+                receivedAtUtcMs = args.ReceivedAt.ToUnixTimeMilliseconds(),
+            });
+        });
+
         app.MapGet("/api/devices", () => Results.Ok(SnapshotDevices()));
 
         // ── 证书信息（免令牌，见 IsPublicAsset）：手机端拿指纹与"上次记忆的指纹"比对，
@@ -1115,6 +1248,23 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             });
         }
         return entries;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> BroadcastTextAsync(string text, CancellationToken ct = default)
+    {
+        // 与 FileTransferService.SendTextAsync 同一判据、同一拒绝方式：不合规就抛，
+        // 不静默截断、也不造一个"送达 0 人"的假成功（调用方会把 0 当成"没人在线"）。
+        TextValidation validation = TransferText.Validate(text);
+        if (!validation.IsValid)
+        {
+            _logger.Warn($"[Web] 拒绝向浏览器推送文本：{validation.ErrorText}");
+            throw new ArgumentException(validation.ErrorText, nameof(text));
+        }
+
+        int delivered = await BroadcastChatMessageAsync(text, from: "电脑", origin: "desktop", excludeId: null);
+        _logger.Info($"[Web] 已向 {delivered} 个浏览器推送文本（{validation.CharCount} 字 / UTF-8 {validation.ByteCount} 字节）。");
+        return delivered;
     }
 
     /// <inheritdoc/>

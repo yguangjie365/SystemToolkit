@@ -1281,4 +1281,395 @@ public class FileWebServerTests
             DeleteTempDir(dir);
         }
     }
+
+    // ==================================================================
+    // W2a：文本通道（POST /api/text + WS chatMessage）
+    // ==================================================================
+
+    /// <summary>发一条文本到 <c>/api/text</c>，返回原始响应（调用方自行断言状态码）。</summary>
+    private static async Task<HttpResponseMessage> PostTextAsync(
+        HttpClient http, int port, string token, string text, string? clientId = null)
+    {
+        string url = $"http://localhost:{port}/api/text?t={token}";
+        string json = clientId is null
+            ? JsonSerializer.Serialize(new { text })
+            : JsonSerializer.Serialize(new { text, clientId });
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        return await http.PostAsync(url, content);
+    }
+
+    /// <summary>
+    /// 连上 <c>/ws</c> 并额外解析出 <c>serverInfo</c> 里的 <c>clientId</c>（W2 的排除回声用）。
+    /// </summary>
+    /// <summary>
+    /// 取 WS 帧里 <c>payload.text</c> 的原文。
+    /// <para>
+    /// 为什么不直接 <c>Assert.Contains(中文, frame)</c>：WS 序列化用的默认编码器会把非 ASCII
+    /// 转义成 <c>\uXXXX</c>（对 <c>JSON.parse</c> 无影响，但字符串匹配会扑空）。解析后再断言，
+    /// 顺带把"帧结构是对的"也钉住了。
+    /// </para>
+    /// </summary>
+    private static string PayloadText(string frame)
+    {
+        using var doc = JsonDocument.Parse(frame);
+        return doc.RootElement.GetProperty("payload").GetProperty("text").GetString()!;
+    }
+
+    private static async Task<string> ConnectWsWithIdAsync(
+        int port, string token, System.Net.WebSockets.ClientWebSocket ws)
+    {
+        await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?t={token}"), CancellationToken.None);
+        string first = await ReceiveTextAsync(ws);
+        string second = await ReceiveTextAsync(ws);
+        string third = await ReceiveTextAsync(ws);
+        Assert.Contains("\"type\":\"serverInfo\"", third);
+        using var doc = JsonDocument.Parse(third);
+        return doc.RootElement.GetProperty("payload").GetProperty("clientId").GetString()!;
+    }
+
+    /// <summary>
+    /// W2：手机发文本 → 服务端触发 <c>TextReceived</c>（电脑上屏），并**回声给其它标签页**。
+    /// <para>
+    /// 反向验证：删掉端点里的 <c>TextReceived?.Invoke</c> → 事件断言红；
+    /// 把 <c>excludeId</c> 恒传 <c>null</c> → 「发送方自己不该收到」的次序断言红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task PostText_WithClientId_RaisesEventAndEchoesToOtherTabsOnly()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            var received = new List<WebTextReceivedEventArgs>();
+            server.TextReceived += (_, e) => received.Add(e);
+
+            using var http = new HttpClient();
+            using var a = new System.Net.WebSockets.ClientWebSocket();
+            string aId = await ConnectWsWithIdAsync(port, server.Token, a);
+            using System.Net.WebSockets.ClientWebSocket b = await ConnectWsAsync(port, server.Token);
+
+            // B 加入会给 A 推一次 browserList 增量——先吃掉，否则 A 的接收队列不干净，
+            // 「A 不该收到回声」的断言会误判成收到。
+            string joinNotice = await ReceiveTextAsync(a);
+            Assert.Contains("\"type\":\"browserList\"", joinNotice);
+
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, "你好，世界", aId);
+            Assert.True(resp.IsSuccessStatusCode, await resp.Content.ReadAsStringAsync());
+
+            // ① 电脑上屏：事件如实转达全文与字节数（5 个汉字 = UTF-8 15 字节）
+            Assert.Single(received);
+            Assert.Equal("你好，世界", received[0].Text);
+            Assert.Equal(5, received[0].CharCount);
+            Assert.Equal(15, received[0].ByteCount);
+
+            // ② 其它标签页收到回声
+            string echo = await ReceiveTextAsync(b);
+            Assert.Contains("\"type\":\"chatMessage\"", echo);
+            Assert.Contains("\"origin\":\"phone\"", echo);
+            Assert.Equal("你好，世界", PayloadText(echo));
+
+            // ③ 发送方自己**不该**再收到一份（本地已上屏，再来一条就是重复气泡）。
+            //    用 ping/pong 次序断言（同 W1a）：中间若插过任何帧，pong 就不是下一帧。
+            await a.SendAsync(
+                Encoding.UTF8.GetBytes("{\"type\":\"ping\"}"),
+                System.Net.WebSockets.WebSocketMessageType.Text,
+                endOfMessage: true,
+                CancellationToken.None);
+            string next = await ReceiveTextAsync(a);
+            Assert.Contains("\"type\":\"pong\"", next);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：<c>clientId</c> 认不出（老客户端 / 连接已断）时**退化为广播给所有人**——
+    /// 宁可让发送方多一条重复的，也不让"别人发了消息我这没显示"。
+    /// </summary>
+    [Fact]
+    public async Task PostText_WithoutClientId_EchoesToEveryoneIncludingSender()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, "hello");
+            Assert.True(resp.IsSuccessStatusCode);
+
+            string echo = await ReceiveTextAsync(ws);
+            Assert.Contains("\"type\":\"chatMessage\"", echo);
+            Assert.Contains("hello", echo);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>W2：空白文本 400（发一条空白没有任何意义，且会让对端剪贴板被空格覆盖）。</summary>
+    [Fact]
+    public async Task PostText_Blank_ReturnsBadRequest()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, "   ");
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：超出 256 KB（按 UTF-8 字节）→ 413 + <c>TEXT_TOO_LONG</c>，且**不触发** <c>TextReceived</c>。
+    /// 拒绝而非静默截断：截断会把一条长链接变成失效链接，而发送方看到的却是"发送成功"。
+    /// </summary>
+    [Fact]
+    public async Task PostText_TooLong_Returns413AndDoesNotRaiseEvent()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            int raised = 0;
+            server.TextReceived += (_, _) => raised++;
+
+            using var http = new HttpClient();
+            string tooLong = new string('a', (256 * 1024) + 1);
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, tooLong);
+
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, resp.StatusCode);
+            Assert.Contains(TransferReasonCodes.TextTooLong, await resp.Content.ReadAsStringAsync());
+            Assert.Equal(0, raised);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：正文超过 1 MB 直接 413——**在读 body 之前**就用 Content-Length 挡掉。
+    /// 少了这一道，1 GB 的 body 会被完整读进内存才轮到长度校验。
+    /// </summary>
+    [Fact]
+    public async Task PostText_BodyOverLimit_Returns413()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            string huge = new string('x', 2 * 1024 * 1024);
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, huge);
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, resp.StatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>W2：发文本与传文件同级，鉴权不得降级。</summary>
+    [Fact]
+    public async Task PostText_WithoutToken_ReturnsUnauthorized()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            using var content = new StringContent("{\"text\":\"hi\"}", Encoding.UTF8, "application/json");
+            HttpResponseMessage resp = await http.PostAsync($"http://localhost:{port}/api/text", content);
+            Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>W2：正文不是合法 JSON → 400（而不是 500）。</summary>
+    [Fact]
+    public async Task PostText_NotJson_ReturnsBadRequest()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            using var content = new StringContent("这不是 JSON", Encoding.UTF8, "application/json");
+            HttpResponseMessage resp = await http.PostAsync(
+                $"http://localhost:{port}/api/text?t={server.Token}", content);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：<c>text</c> 字段类型不符（给了数字）→ 400。
+    /// 🔴 这条钉的是「先验 <c>ValueKind</c> 再取值」——<c>JsonElement.TryGetXxx</c>
+    /// 对类型不符是**抛异常**（只有键不存在才返 false），直接 <c>GetString()</c> 会把它变成 500。
+    /// </summary>
+    [Fact]
+    public async Task PostText_TextFieldNotString_ReturnsBadRequest()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            using var content = new StringContent("{\"text\":123}", Encoding.UTF8, "application/json");
+            HttpResponseMessage resp = await http.PostAsync(
+                $"http://localhost:{port}/api/text?t={server.Token}", content);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：订阅方（电脑上屏逻辑）抛异常时**仍返回 200**——
+    /// 服务端已经收下文本，此时再回 500 是状态自相矛盾（发送方会以为没发出去而重发）。
+    /// </summary>
+    [Fact]
+    public async Task PostText_SubscriberThrows_StillReturnsOk()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            server.TextReceived += (_, _) => throw new InvalidOperationException("模拟订阅方崩了");
+
+            using var http = new HttpClient();
+            HttpResponseMessage resp = await PostTextAsync(http, port, server.Token, "hi");
+            Assert.True(resp.IsSuccessStatusCode);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：电脑 → 手机推文本（<c>BroadcastTextAsync</c>）→ 所有浏览器收到 <c>chatMessage</c>，
+    /// 返回**真实送达数**。
+    /// </summary>
+    [Fact]
+    public async Task BroadcastTextAsync_WithBrowsers_DeliversChatMessage()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using System.Net.WebSockets.ClientWebSocket first = await ConnectWsAsync(port, server.Token);
+            using System.Net.WebSockets.ClientWebSocket second = await ConnectWsAsync(port, server.Token);
+            // first 会因 second 加入收到一次 browserList 增量——先吃掉再断言业务帧
+            Assert.Contains("\"type\":\"browserList\"", await ReceiveTextAsync(first));
+
+            int delivered = await server.BroadcastTextAsync("来自电脑的一段话");
+            Assert.Equal(2, delivered);
+
+            string a = await ReceiveTextAsync(first);
+            Assert.Contains("\"type\":\"chatMessage\"", a);
+            Assert.Contains("\"origin\":\"desktop\"", a);
+            Assert.Equal("来自电脑的一段话", PayloadText(a));
+            Assert.Contains("\"type\":\"chatMessage\"", await ReceiveTextAsync(second));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：无人在线 → 送达 0（**不是**抛异常，也不是假报成功）。
+    /// 调用方据此告诉用户"当前没有已连接的手机"。
+    /// </summary>
+    [Fact]
+    public async Task BroadcastTextAsync_NoBrowser_ReturnsZero()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            int delivered = await server.BroadcastTextAsync("没人在线");
+            Assert.Equal(0, delivered);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// W2：<c>BroadcastTextAsync</c> 与 <c>FileTransferService.SendTextAsync</c> 同判据——
+    /// 空文本与超长文本一律抛，绝不静默截断后回一个假的送达数。
+    /// </summary>
+    [Fact]
+    public async Task BroadcastTextAsync_Invalid_Throws()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            await Assert.ThrowsAsync<ArgumentException>(() => server.BroadcastTextAsync("   "));
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => server.BroadcastTextAsync(new string('a', (256 * 1024) + 1)));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
 }

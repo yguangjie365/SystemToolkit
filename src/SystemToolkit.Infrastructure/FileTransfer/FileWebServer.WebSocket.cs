@@ -190,6 +190,64 @@ public sealed partial class FileWebServer
         }
     }
 
+    /// <summary>
+    /// 推送一条「会话消息」（<c>chatMessage</c>），返回**实际送达的连接数**（W2）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>origin</c> 为什么必须有</b>：手机端要判断气泡贴左还是贴右。只看来源 IP 不行——
+    /// 同一台手机开两个标签页时 IP 相同，但它们互为"对面"还是"自己"取决于消息是谁发的，
+    /// 而不是从哪个 IP 来的。故由服务端在产生消息的那一刻就打上 <c>desktop</c> / <c>phone</c>。
+    /// </para>
+    /// <para>
+    /// <b><c>excludeId</c> 的用途</b>：手机自己发出的文本，服务端回声给**其它**标签页即可；
+    /// 发送方自己在 HTTP 200 之后本地上屏，再推一份给它就是两条重复气泡。
+    /// </para>
+    /// <para>
+    /// 失败不回传调用方（与 <see cref="BroadcastTransferUpdateAsync"/> 同口径）：一条消息的
+    /// 推送失败不该把"收下文本"这件已经完成的事变成失败。
+    /// </para>
+    /// </remarks>
+    /// <param name="text">消息全文。</param>
+    /// <param name="from">来源展示名（电脑侧为 <c>电脑</c>，手机侧为来源 IP）。</param>
+    /// <param name="origin">消息产生方：<c>desktop</c> 或 <c>phone</c>。</param>
+    /// <param name="excludeId">要排除的 WS 连接（通常为发送者自己）；可空。</param>
+    /// <returns>送达的连接数。</returns>
+    private async Task<int> BroadcastChatMessageAsync(
+        string text, string from, string origin, Guid? excludeId)
+    {
+        try
+        {
+            string json = BuildEnvelope("chatMessage", new
+            {
+                Text = text,
+                From = from,
+                Origin = origin,
+                Id = Guid.NewGuid(),
+                At = DateTimeOffset.UtcNow,
+            });
+
+            var sends = new List<Task<bool>>();
+            foreach ((Guid id, WsClient client) in _wsClients)
+            {
+                if (excludeId == id)
+                {
+                    continue;
+                }
+
+                sends.Add(client.TrySendJsonAsync(json));
+            }
+
+            bool[] results = await Task.WhenAll(sends);
+            return results.Count(static ok => ok);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[FileWebServer] 会话消息推送失败：{ex.Message}");
+            return 0;
+        }
+    }
+
     /// <summary>设备上下线/更新 → 广播给所有已连接浏览器（单个连接失败不影响其余）。</summary>
     private async Task BroadcastDeviceChangeAsync(DeviceChangeEventArgs e)
     {
@@ -352,17 +410,23 @@ public sealed partial class FileWebServer
         }
 
         /// <summary>广播用发送：任一连接异常只丢弃该连接，不打断整轮广播。</summary>
-        public async Task TrySendJsonAsync(string json)
+        /// <returns>
+        /// 是否**真的写出**（W2 起带返回值：统计送达数用）。
+        /// <c>false</c> = 连接已不可用（对端已断 / 半关 / 发送超时）；其读循环会自行收尾移除。
+        /// </returns>
+        public async Task<bool> TrySendJsonAsync(string json)
         {
             try
             {
                 // 🔴-1：必须有超时——无界等待会让一个半开连接卡死整轮顺序广播
                 using var cts = new CancellationTokenSource(IoTimeout);
                 await SendJsonAsync(json, cts.Token).ConfigureAwait(false);
+                // SendJsonAsync 在连接非 Open 时静默返回（没写出任何字节）——那不是送达
+                return socket.State == WebSocketState.Open;
             }
             catch (Exception)
             {
-                // 该连接已不可用（对端已断/半关/发送超时）；其读循环会自行收尾移除
+                return false;
             }
         }
 
