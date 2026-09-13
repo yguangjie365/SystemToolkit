@@ -1672,4 +1672,42 @@ public class FileWebServerTests
             DeleteTempDir(dir);
         }
     }
+
+    // ==================================================================
+    // W2b：外壳资源不缓存
+    // ==================================================================
+
+    /// <summary>
+    /// W2b：静态外壳（index / app.js / style.css）必须显式带禁止缓存头。
+    /// <para>
+    /// 为什么值得一条锁：三个文件合计 &lt;200 KB，而"手机上加载到旧 app.js"会让整轮改动
+    /// 看起来像"没做"（W1b → W2b 之间就因此多了一轮往返）。这不是性能问题，是**可信度**问题。
+    /// </para>
+    /// <para>反向验证：删掉 <c>ServeEmbedded</c> 里的 <c>CacheControl</c> 赋值 → 本用例变红。</para>
+    /// </summary>
+    [Fact]
+    public async Task StaticShell_IsServedWithNoCacheHeaders()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            foreach (string asset in new[] { "/index.html", "/app.js", "/style.css" })
+            {
+                HttpResponseMessage resp = await http.GetAsync($"http://localhost:{port}{asset}");
+                Assert.True(resp.IsSuccessStatusCode, asset + " 应可访问");
+                string? cacheControl = resp.Headers.CacheControl?.ToString();
+                Assert.False(string.IsNullOrEmpty(cacheControl), asset + " 缺少 Cache-Control 头");
+                Assert.Contains("no-store", cacheControl!);
+            }
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
 }

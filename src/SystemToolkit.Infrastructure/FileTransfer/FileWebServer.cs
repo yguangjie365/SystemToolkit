@@ -615,10 +615,10 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         });
 
         // ── 静态前端资源（从嵌入资源提供）──
-        app.MapGet("/", () => ServeEmbedded("index.html", "text/html; charset=utf-8"));
-        app.MapGet("/index.html", () => ServeEmbedded("index.html", "text/html; charset=utf-8"));
-        app.MapGet("/app.js", () => ServeEmbedded("app.js", "application/javascript; charset=utf-8"));
-        app.MapGet("/style.css", () => ServeEmbedded("style.css", "text/css; charset=utf-8"));
+        app.MapGet("/", (HttpContext ctx) => ServeEmbedded(ctx, "index.html", "text/html; charset=utf-8"));
+        app.MapGet("/index.html", (HttpContext ctx) => ServeEmbedded(ctx, "index.html", "text/html; charset=utf-8"));
+        app.MapGet("/app.js", (HttpContext ctx) => ServeEmbedded(ctx, "app.js", "application/javascript; charset=utf-8"));
+        app.MapGet("/style.css", (HttpContext ctx) => ServeEmbedded(ctx, "style.css", "text/css; charset=utf-8"));
 
         // ── 实时推送（🟡-5）：设备上下线推给已连接浏览器（协议见 FileWebServer.WebSocket.cs）──
         app.MapGet("/ws", HandleWebSocketAsync);
@@ -2069,8 +2069,13 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <summary>
     /// 从程序集嵌入资源提供静态前端文件。
     /// </summary>
-    private static IResult ServeEmbedded(string resourceName, string contentType)
+    private static IResult ServeEmbedded(HttpContext ctx, string resourceName, string contentType)
     {
+        // 🔴 外壳资源一律**不缓存**（2026-09-14 加）：原先没有任何缓存头，浏览器可自行启发式缓存。
+        // 三个文件合计 <200 KB，局域网重新拉取的代价可忽略；而"手机上看到旧页面"会让整轮改动
+        // 被误判成"没做"（W1b → W2b 之间就因此多了一轮往返），代价高得多。
+        ctx.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         // 嵌入资源命名：SystemToolkit.Infrastructure.FileTransfer.wwwroot.{文件名}
         string full = $"SystemToolkit.Infrastructure.FileTransfer.wwwroot.{resourceName}";
