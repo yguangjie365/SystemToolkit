@@ -84,6 +84,10 @@
         toast: $("toast"),
         tabs: Array.from(document.querySelectorAll(".tab-bar__item")),
         panels: Array.from(document.querySelectorAll(".tab-panel")),
+        // W1b：对话页底部的「+」与它展开的动作单
+        chatAddBtn: $("chatAddBtn"),
+        chatActionSheet: $("chatActionSheet"),
+        chatSheetCancel: $("chatSheetCancel"),
     };
 
     /* ============ 应用状态 ============ */
@@ -114,7 +118,8 @@
         // 设备刷新定时器
         deviceTimer: null,
         // 当前激活的标签
-        activeTab: "browse",
+        // W1b：默认落在「对话」页（会话式窗口是本页的主入口）
+        activeTab: "chat",
         // 正在上传（持有并发槽）的任务数
         uploadActive: 0,
         // 排队等待的任务（FIFO）
@@ -860,6 +865,9 @@
                 const resp = await fetch(buildUrl(UPLOAD_STATUS_ENDPOINT, meta));
                 if (resp.ok) {
                     const st = await resp.json();
+                    // W1b：记下服务端算出的上传指纹 —— transferUpdate 推送按它匹配本机气泡。
+                    // 不记的话只能拿文件名去猜，而目录上传里同名文件分处不同目录会串台。
+                    if (st.uploadId && taskEl) { taskEl.dataset.uploadId = st.uploadId; }
                     offset = Math.min(st.received || 0, file.size);
                     lastOffset = offset;
                     persist(offset);
@@ -1014,7 +1022,7 @@
             + '  <div class="upload-task__status">等待中</div>'
             + '</div>'
             + '<div class="progress"><div class="progress__bar"></div></div>'
-            + '<div style="font-size:var(--fs-caption);color:var(--text-muted);margin-top:4px;">'
+            + '<div class="upload-task__meta">'
             + formatFileSize(file.size) + '</div>';
         return el;
     }
@@ -1041,12 +1049,17 @@
         const done = tasks.filter((el) => el.querySelector(".upload-task__status.is-done")).length;
         const failed = tasks.filter((el) => el.querySelector(".upload-task__status.is-fail")).length;
         const queued = tasks.filter((el) => el.querySelector(".upload-task__status.is-queued")).length;
-        const running = tasks.length - done - failed - queued;
+        // 【W1b 顺带修既有缺陷】跳过态此前没有单列，被下面的减法算式当成"进行中"。
+        // 而"跳过"的语义是**本次流程已结束、但目标目录里没有新增文件**——
+        // 它既不是失败也不是进行中，汇总里必须有自己的计数（与"跳过不得报完成"同一条红线）。
+        const skipped = tasks.filter((el) => el.querySelector(".upload-task__status.is-skipped")).length;
+        const running = tasks.length - done - failed - queued - skipped;
 
         const parts = ["共 " + tasks.length + " 项"];
         if (running > 0) parts.push(running + " 进行中");
         if (queued > 0) parts.push(queued + " 排队");
         if (done > 0) parts.push(done + " 已完成");
+        if (skipped > 0) parts.push(skipped + " 已跳过");
         if (failed > 0) parts.push(failed + " 失败");
 
         dom.uploadSummary.hidden = false;
@@ -1081,6 +1094,25 @@
         dom.pickBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             dom.fileInput.click();
+            closeChatSheet();
+        });
+
+        // 「+」动作单（W1b）：点 + 展开/收起，选中动作或点空白处自动收起。
+        // 刻意不用长按——长按在移动端没有可发现性。
+        if (dom.chatAddBtn) {
+            dom.chatAddBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                toggleChatSheet();
+            });
+        }
+        if (dom.chatSheetCancel) {
+            dom.chatSheetCancel.addEventListener("click", () => closeChatSheet());
+        }
+        document.addEventListener("click", (e) => {
+            if (!dom.chatActionSheet || dom.chatActionSheet.hidden) return;
+            if (e.target === dom.chatAddBtn) return;
+            if (dom.chatActionSheet.contains(e.target)) return;
+            closeChatSheet();
         });
         dom.uploadZone.addEventListener("click", () => {
             dom.fileInput.click();
@@ -1372,6 +1404,77 @@
      * 处理 WebSocket 推送消息
      * 约定消息体：{ type, payload }
      */
+    /**
+     * 上传状态推送的处理（W1a 推 / W1b 消费）。
+     * 🔴 与本地进度的分工：**进度**仍由本地 xhr.upload 驱动（无往返延迟、更平滑）；
+     *    这里只认服务端的**权威终态** —— 连接若在定稿响应途中断掉，本机会误判失败，
+     *    而文件其实已经落盘，这条推送是纠正该误判的唯一途径。
+     * 匹配键：服务端上传指纹（runUploadJob 查到已传偏移时写进 dataset.uploadId）。
+     */
+    function applyTransferUpdate(t) {
+        if (!t || !t.status) return;
+        const bubble = findTaskElement(t.transferId);
+        if (!bubble) {
+            // 不是本机发起的（局域网里别的浏览器在传）→ 落一条系统提示，让它可见
+            if (t.status === "Completed" && t.fileName) {
+                addChatNotice("其它设备上传完成：" + t.fileName, "info");
+            }
+            return;
+        }
+
+        if (t.status === "Completed") {
+            setTaskStatus(bubble, "完成", "is-done");
+        } else if (t.status === "Skipped") {
+            // 如实说"跳过"：目标目录里没有新增文件，报"完成"就是状态欺骗
+            setTaskStatus(bubble, "已跳过（电脑上已有同名文件）", "is-skipped");
+        } else if (t.status === "Failed") {
+            setTaskStatus(bubble, "失败" + (t.errorMessage ? "：" + t.errorMessage : ""), "is-fail");
+        }
+        // Transferring：不动 —— 本地进度更平滑（见上方分工说明）
+        refreshUploadSummary();
+    }
+
+    function findTaskElement(uploadId) {
+        if (!uploadId || !dom.uploadList) return null;
+        return dom.uploadList.querySelector('.upload-task[data-upload-id="' + uploadId + '"]');
+    }
+
+    function setTaskStatus(bubble, text, cls) {
+        const statusEl = bubble.querySelector(".upload-task__status");
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.className = "upload-task__status " + cls;
+    }
+
+    /** 往会话流里加一条**系统提示**（居中弱化，刻意不是气泡——避免与"谁说了什么"混淆）。 */
+    function addChatNotice(text, kind) {
+        if (!dom.uploadList) return;
+        const el = document.createElement("div");
+        el.className = "chat-notice" + (kind ? " is-" + kind : "");
+        el.textContent = text;
+        dom.uploadList.appendChild(el);
+        scrollChatToBottom();
+    }
+
+    /** 滚到会话流末尾；block:"nearest" 只滚必要距离，不把用户正在看的内容顶走。 */
+    function scrollChatToBottom() {
+        const last = dom.uploadList && dom.uploadList.lastElementChild;
+        if (last && last.scrollIntoView) last.scrollIntoView({ block: "nearest" });
+    }
+
+    function toggleChatSheet() {
+        if (!dom.chatActionSheet) return;
+        const willOpen = dom.chatActionSheet.hidden;
+        dom.chatActionSheet.hidden = !willOpen;
+        if (dom.chatAddBtn) dom.chatAddBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    }
+
+    function closeChatSheet() {
+        if (!dom.chatActionSheet || dom.chatActionSheet.hidden) return;
+        dom.chatActionSheet.hidden = true;
+        if (dom.chatAddBtn) dom.chatAddBtn.setAttribute("aria-expanded", "false");
+    }
+
     function handleWsMessage(msg) {
         if (!msg || typeof msg !== "object") return;
         switch (msg.type) {
@@ -1414,12 +1517,8 @@
                 break;
             }
             case "transferUpdate": {
-                // 传输状态更新（可选展示）
-                // 当前 UI 不直接展示传输任务，仅 toast 提示
-                const t = msg.payload;
-                if (t && t.status === "Completed" && t.fileName) {
-                    showToast("接收完成：" + t.fileName, "success");
-                }
+                // 上传状态（OL-B11 / W1a 起服务端真的会推；W1b 起前端真的消费）
+                applyTransferUpdate(msg.payload);
                 break;
             }
             case "serverInfo": {
@@ -1480,7 +1579,11 @@
             if (document.hidden) {
                 stopDeviceRefresh();
             } else {
-                if (state.activeTab === "devices" || state.activeTab === "browse") {
+                // 「对话」也需要恢复：锁屏期间 WS 往往已被系统杀掉，重连后
+                // 设备列表与文件列表都该重新对一次——此前条件只覆盖 browse/devices，
+                // 默认页换成 chat 后会把这条路径漏在外面。
+                if (state.activeTab === "devices" || state.activeTab === "browse"
+                    || state.activeTab === "chat") {
                     startDeviceRefresh();
                     fetchFiles(state.currentPath);
                 }

@@ -1236,3 +1236,183 @@ a {
     border: none;
     border-radius: var(--r-md);
 }
+
+
+/* ============================================================
+   OL-B11 / W1b：手机端网页「对话式窗口」
+   会话流 + 文件气泡 + 底部输入区 + 「+」动作单。
+   色值一律取自本文件顶部令牌（与桌面端 Tokens.xaml 同源），不新造。
+   ============================================================ */
+
+/* 会话流：系统提示与文件气泡共用一个容器，加入顺序即时间顺序 */
+.chat-stream {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-md);
+    min-height: 96px;
+}
+
+/* 空流占位：`:empty` 只在**没有任何子节点**时命中——首条记录进来即自动消失。
+   这样空状态由 CSS 表达，不需要 JS 再维护一处状态（少一处状态就少一处不同步）。 */
+.chat-stream:empty::after {
+    content: "还没有传输记录。点下方 + 发送文件。";
+    display: block;
+    padding: var(--sp-2xl) var(--sp-lg);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--fs-caption);
+}
+
+/* 系统提示：居中弱化，刻意不用气泡形态——避免与"谁说了什么"混淆 */
+.chat-notice {
+    align-self: center;
+    max-width: 88%;
+    text-align: center;
+    font-size: var(--fs-caption);
+    line-height: 1.5;
+    color: var(--text-muted);
+    background: var(--bg-inset);
+    border-radius: var(--r-full);
+    padding: var(--sp-xs) var(--sp-lg);
+}
+
+.chat-notice.is-warn { color: var(--warning); }
+
+.chat-notice.is-error { color: var(--danger); }
+
+/* 我发出的文件：右对齐气泡。
+   ⚠️ 类名沿用 .upload-task —— app.js 的进度、状态判定与汇总计数全都按它查询
+   （refreshUploadSummary 直接 querySelectorAll(".upload-task") 并读
+   .upload-task__status 的 is-done/is-fail/is-queued），改类名会同时牵动三处逻辑。 */
+.chat-stream .upload-task {
+    align-self: flex-end;
+    width: 84%;
+    max-width: 84%;
+    border: none;
+    background: var(--accent-soft);
+    border-radius: var(--r-lg);
+    border-bottom-right-radius: var(--r-sm);
+}
+
+.chat-stream .upload-task .progress {
+    margin-top: var(--sp-sm);
+}
+
+/* 气泡末行：文件大小。用类名而不再写行内 style（行内样式无法随主题调整） */
+.upload-task__meta {
+    margin-top: var(--sp-xs);
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 拖放区压扁成一条提示：选择按钮已移入「+」动作单，这里只作桌面端拖放目标与入口 */
+.upload-zone--slim {
+    min-height: auto;
+    padding: var(--sp-md) var(--sp-lg);
+    border-width: 1px;
+    border-radius: var(--r-lg);
+    margin-top: var(--sp-lg);
+}
+
+.upload-zone__slim-text {
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 底部输入区 */
+.chat-composer {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-md);
+    margin-top: var(--sp-lg);
+    padding-top: var(--sp-lg);
+    border-top: 1px solid var(--divider);
+}
+
+.chat-composer__add {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch-min);
+    height: var(--touch-min);
+    font-size: 22px;
+    line-height: 1;
+    color: var(--accent);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-full);
+    transition: background var(--dur-fast) var(--ease-out);
+}
+
+.chat-composer__add:hover { background: var(--bg-surface-2); }
+
+.chat-composer__add[aria-expanded="true"] {
+    color: var(--text-on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.chat-composer__hint {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+}
+
+/* 「+」动作单 */
+.chat-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-sm);
+    margin-top: var(--sp-md);
+    padding: var(--sp-md);
+    background: var(--bg-surface-2);
+    border-radius: var(--r-lg);
+}
+
+/* ⚠️ 必须显式声明：上面的 display:flex 会盖掉 [hidden] 的默认 display:none
+   （同 .upload-summary[hidden] / .pending-resume[hidden] 的既有教训） */
+.chat-sheet[hidden] { display: none; }
+
+.chat-sheet__item {
+    min-height: var(--touch-min);
+    padding: var(--sp-sm) var(--sp-lg);
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-on-accent);
+    background: var(--accent);
+    border-radius: var(--r-md);
+    transition: background var(--dur-fast) var(--ease-out);
+}
+
+.chat-sheet__item:hover { background: var(--accent-hover); }
+
+.chat-sheet__cancel {
+    min-height: var(--touch-min);
+    padding: var(--sp-sm) var(--sp-lg);
+    text-align: center;
+    color: var(--text-secondary);
+    background: transparent;
+    border-radius: var(--r-md);
+}
+
+/* 宽屏：对话面板接管原「上传」面板的栅格位置（否则它在多栏布局里无处安放） */
+@media (min-width: 768px) {
+    .tab-panel[data-tab="chat"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .chat-stream .upload-task {
+        width: 72%;
+        max-width: 72%;
+    }
+}
+
+@media (min-width: 1100px) {
+    .tab-panel[data-tab="chat"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}

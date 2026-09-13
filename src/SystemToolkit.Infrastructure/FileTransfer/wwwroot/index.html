@@ -53,11 +53,67 @@
             <button type="button" class="pair-state__forget" id="forgetDevice" hidden>忘记此设备</button>
         </section>
 
-        <!-- ============ 主内容区（三栏面板） ============ -->
+        <!-- ============ 主内容区 ============ -->
         <main class="main" role="main">
 
+            <!-- ===== 对话（OL-B11 / W1b：会话式窗口，默认页）=====
+                 「我发出的文件」气泡复用既有的 uploadList 容器与 .upload-task 元素
+                 （app.js 的进度/状态/汇总机制原封不动），系统提示由 addChatNotice()
+                 追加到同一容器，天然按时间顺序排列。 -->
+            <section class="tab-panel is-active" data-tab="chat" id="panelChat"
+                     aria-label="对话">
+                <!-- 会话流容器：id 沿用 uploadList，避免改名引发连锁改动 -->
+                <div class="upload-list chat-stream" id="uploadList" aria-live="polite"></div>
+
+                <!-- 拖放目标（桌面浏览器拖入即可发送）；点击它同样打开文件选择。
+                     选择按钮已移入下方「+」动作单，这里只留一条轻提示。 -->
+                <div class="upload-zone upload-zone--slim" id="uploadZone" role="button"
+                     tabindex="0" aria-label="点击或拖入文件上传">
+                    <div class="upload-zone__slim-text">拖入文件即可发送，或点下方 +</div>
+                </div>
+
+                <!-- 待续传（2026-09-13）：下拉刷新/重载后列出未完成任务；空则整块隐藏。
+                     续传必须由用户重选文件——浏览器不允许页面自行恢复 File 句柄。 -->
+                <div class="pending-resume" id="pendingResume" hidden>
+                    <div class="pending-resume__head">
+                        <span class="pending-resume__title" id="pendingResumeTitle"></span>
+                        <button type="button" class="toolbar-btn" id="pendingClearAllBtn">全部清除</button>
+                    </div>
+                    <div class="pending-resume__list" id="pendingResumeList"></div>
+                    <p class="pending-resume__hint">续传需同名 + 同大小 + 同修改时间；不匹配时直接点下方「+」即按新文件上传。</p>
+                </div>
+                <input type="file" id="resumeInput" style="display:none" aria-hidden="true" />
+
+                <!-- 上传记录汇总 + 清除（2026-09-11 主人反馈：记录只增不减，需要能清掉） -->
+                <div class="upload-summary" id="uploadSummary" hidden>
+                    <span class="upload-summary__text" id="uploadSummaryText"></span>
+                    <button type="button" class="toolbar-btn" id="clearUploadsBtn">清除记录</button>
+                </div>
+
+                <!-- 底部输入区：+ 发文件。文本发送随下一批上线——**刻意不放假输入框**：
+                     一个点了没反应的输入框比看得见的"未上线"更糟。 -->
+                <div class="chat-composer">
+                    <button type="button" class="chat-composer__add" id="chatAddBtn"
+                            aria-expanded="false" aria-controls="chatActionSheet"
+                            aria-label="添加文件">+</button>
+                    <div class="chat-composer__hint">文本发送随下一批上线</div>
+                </div>
+
+                <!-- 「+」动作单（默认收起，点 + 展开） -->
+                <div class="chat-sheet" id="chatActionSheet" hidden>
+                    <button type="button" class="chat-sheet__item" id="pickBtn">选择文件</button>
+                    <button type="button" class="chat-sheet__item" id="pickDirBtn">选择文件夹</button>
+                    <button type="button" class="chat-sheet__cancel" id="chatSheetCancel">取消</button>
+                </div>
+
+                <input type="file" id="fileInput" multiple
+                       style="display:none" aria-hidden="true" />
+                <input type="file" id="dirInput" multiple webkitdirectory directory
+                       style="display:none" aria-hidden="true" />
+            </section>
+
             <!-- ===== 文件浏览 ===== -->
-            <section class="tab-panel is-active" data-tab="browse" id="panelBrowse"
+            <section class="tab-panel" data-tab="browse" id="panelBrowse"
                      aria-label="文件浏览">
                 <!-- 面包屑导航 + 多选入口 -->
                 <div class="browse-toolbar">
@@ -74,60 +130,6 @@
                     <button type="button" class="toolbar-btn" id="multiZipBtn" disabled>打包下载</button>
                     <button type="button" class="toolbar-btn" id="multiExitBtn">取消</button>
                 </div>
-            </section>
-
-            <!-- ===== 上传 ===== -->
-            <section class="tab-panel" data-tab="upload" id="panelUpload"
-                     aria-label="文件上传">
-                <!-- 拖放区域 + 选择按钮 -->
-                <div class="upload-zone" id="uploadZone" role="button"
-                     tabindex="0" aria-label="点击或拖入文件上传">
-                    <div class="upload-zone__icon">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="1.5"
-                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M12 16V4M12 4l-5 5M12 4l5 5" />
-                            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                        </svg>
-                    </div>
-                    <div>点击选择文件或拖入此区域</div>
-                    <div class="upload-zone__hint">支持多文件；若浏览器的选择器只能选一个，可多次选择，任务会累加</div>
-                    <div class="upload-zone__hint">中断后重新选择同一文件即可续传</div>
-                    <div class="upload-zone__hint">大文件传输时请保持手机屏幕常亮</div>
-                    <div class="upload-zone__actions">
-                        <button type="button" class="upload-zone__btn" id="pickBtn">
-                            选择文件
-                        </button>
-                        <button type="button" class="upload-zone__btn" id="pickDirBtn">
-                            选择文件夹
-                        </button>
-                    </div>
-                    <input type="file" id="fileInput" multiple
-                           style="display:none" aria-hidden="true" />
-                    <input type="file" id="dirInput" multiple webkitdirectory directory
-                           style="display:none" aria-hidden="true" />
-                </div>
-
-                <!-- 待续传（2026-09-13）：下拉刷新/重载后列出未完成任务；空则整块隐藏。
-                     续传必须由用户重选文件——浏览器不允许页面自行恢复 File 句柄。 -->
-                <div class="pending-resume" id="pendingResume" hidden>
-                    <div class="pending-resume__head">
-                        <span class="pending-resume__title" id="pendingResumeTitle"></span>
-                        <button type="button" class="toolbar-btn" id="pendingClearAllBtn">全部清除</button>
-                    </div>
-                    <div class="pending-resume__list" id="pendingResumeList"></div>
-                    <p class="pending-resume__hint">续传需同名 + 同大小 + 同修改时间；不匹配时直接点上方「选择文件」即按新文件上传。</p>
-                </div>
-                <input type="file" id="resumeInput" style="display:none" aria-hidden="true" />
-
-                <!-- 上传记录汇总 + 清除（2026-09-11 主人反馈：记录只增不减，需要能清掉） -->
-                <div class="upload-summary" id="uploadSummary" hidden>
-                    <span class="upload-summary__text" id="uploadSummaryText"></span>
-                    <button type="button" class="toolbar-btn" id="clearUploadsBtn">清除记录</button>
-                </div>
-
-                <!-- 上传任务列表 -->
-                <div class="upload-list" id="uploadList" aria-live="polite"></div>
             </section>
 
             <!-- ===== 设备列表 ===== -->
@@ -147,7 +149,19 @@
         <!-- ============ 底部 Tab Bar（iOS 风格） ============ -->
         <nav class="tab-bar" role="tablist" aria-label="主导航">
             <button class="tab-bar__item is-active" role="tab"
-                    aria-selected="true" aria-controls="panelBrowse"
+                    aria-selected="true" aria-controls="panelChat"
+                    data-tab="chat" id="tabChat">
+                <span class="tab-bar__icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 15.5a2.5 2.5 0 01-2.5 2.5H8l-4 3.5V6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v9z" />
+                    </svg>
+                </span>
+                <span class="tab-bar__label">对话</span>
+            </button>
+            <button class="tab-bar__item" role="tab"
+                    aria-selected="false" aria-controls="panelBrowse"
                     data-tab="browse" id="tabBrowse">
                 <span class="tab-bar__icon" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
@@ -157,20 +171,6 @@
                     </svg>
                 </span>
                 <span class="tab-bar__label">文件</span>
-            </button>
-            <button class="tab-bar__item" role="tab"
-                    aria-selected="false" aria-controls="panelUpload"
-                    data-tab="upload" id="tabUpload">
-                <span class="tab-bar__icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="1.8"
-                         stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 15.5V4" />
-                        <path d="M7.8 8.2L12 4l4.2 4.2" />
-                        <path d="M4 15v3.5A2.5 2.5 0 006.5 21h11a2.5 2.5 0 002.5-2.5V15" />
-                    </svg>
-                </span>
-                <span class="tab-bar__label">上传</span>
             </button>
             <button class="tab-bar__item" role="tab"
                     aria-selected="false" aria-controls="panelDevices"
