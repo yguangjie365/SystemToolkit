@@ -39,6 +39,12 @@ public sealed class BackupRule
     /// <summary>该规则保留的快照上限（0 = 沿用全局默认），备份后超出即清理最旧快照。</summary>
     public int MaxSnapshots { get; set; } = 7;
 
+    /// <summary>
+    /// GFS（日 / 周 / 月）保留配额；**null（默认）= 沿用 <see cref="MaxSnapshots"/> 的固定条数策略**。
+    /// 旧 rules.json 没有这个字段，读进来即 null → 行为与升级前完全一致。
+    /// </summary>
+    public GfsRetention? Gfs { get; set; }
+
     /// <summary>规则创建时间（本地时间 ISO 文本，导入时缺省补写）。</summary>
     public string CreatedAt { get; set; } = "";
 

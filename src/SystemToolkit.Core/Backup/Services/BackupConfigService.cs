@@ -2,6 +2,7 @@ using System.Text.Json;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Utilities;
+using SystemToolkit.Core.Backup.Models;
 
 namespace SystemToolkit.Core.Backup.Services;
 
@@ -13,6 +14,9 @@ public sealed class BackupAppSettings
 
     /// <summary>默认快照保留数（规则可覆盖）。</summary>
     public int MaxSnapshots { get; set; } = 7;
+
+    /// <summary>全局 GFS（日 / 周 / 月）保留配额；null = 用固定条数策略（与旧配置一致）。</summary>
+    public GfsRetention? Gfs { get; set; }
 
     /// <summary>并行复制工作线程数（钳 1..8）。</summary>
     public int MaxWorkers { get; set; } = 4;
@@ -223,6 +227,8 @@ public sealed class BackupConfigService
     private static BackupAppSettings Sanitize(BackupAppSettings s)
     {
         s.MaxSnapshots = Math.Clamp(s.MaxSnapshots, 1, 100);
+        // 重建一遍 = 把越界配额钳制回合法区间（record 的构造里有钳制）
+        s.Gfs = s.Gfs is { } gfs ? new GfsRetention(gfs.Daily, gfs.Weekly, gfs.Monthly) : null;
         s.MaxWorkers = Math.Clamp(s.MaxWorkers, 1, 8);
         s.DefaultConflictPolicy = (s.DefaultConflictPolicy ?? "").Trim().ToLowerInvariant() switch
         {

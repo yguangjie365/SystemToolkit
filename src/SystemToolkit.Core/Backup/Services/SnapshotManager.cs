@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using SystemToolkit.Core.Backup.Models;
 using SystemToolkit.Core.Contracts;
@@ -319,6 +320,142 @@ public sealed class SnapshotManager
             }
             dirs.RemoveAt(dirs.Count - 1);
         }
+        return removed;
+    }
+
+    /// <summary>
+    /// 从快照目录名解析创建时间（前 15 位 <c>yyyyMMdd_HHmmss</c>，其后允许随机后缀与序号）。
+    /// 解析不出返回 false —— 调用方**必须**把这类目录当作「不参与删除」处理。
+    /// </summary>
+    /// <param name="snapDir">快照目录（完整路径或目录名均可）。</param>
+    /// <param name="time">解析出的本地时间。</param>
+    internal static bool TryParseSnapshotTime(string snapDir, out DateTime time)
+    {
+        time = default;
+        string name = Path.GetFileName(
+            snapDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (name.Length < 15 || name[8] != '_')
+        {
+            return false;
+        }
+
+        return DateTime.TryParseExact(
+            name[..15],
+            "yyyyMMdd_HHmmss",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out time);
+    }
+
+    /// <summary>
+    /// GFS 判据：给定**按时间新 → 旧**排好的快照序列，算出应删除哪些目录。
+    /// 纯函数、无 IO，便于离线断言与反向验证。
+    /// </summary>
+    /// <remarks>
+    /// 保留集 = 「最近 <c>Daily</c> 个不同日期的各一份最新」
+    /// ∪「最近 <c>Weekly</c> 个 ISO 周的各一份最新」∪「最近 <c>Monthly</c> 个月份的各一份最新」。
+    /// 🔴 **最新一份永远不在删除列表里**——即使三项配额全为 0（那时退化为"只留最新一份"，
+    /// 而不是"删光"）。
+    /// </remarks>
+    /// <param name="orderedNewestFirst">按时间**新 → 旧**排序的快照序列。</param>
+    /// <param name="policy">GFS 配额。</param>
+    internal static IReadOnlyList<string> SelectGfsDeletion(
+        IReadOnlyList<(string Dir, DateTime Time)> orderedNewestFirst,
+        GfsRetention policy)
+    {
+        if (orderedNewestFirst.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // 最新一份无条件保留（兜底，避免任何配置把"刚做的备份"删掉）
+        var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { orderedNewestFirst[0].Dir };
+        var days = new HashSet<DateOnly>();
+        var weeks = new HashSet<(int Year, int Week)>();
+        var months = new HashSet<(int Year, int Month)>();
+
+        foreach ((string dir, DateTime time) in orderedNewestFirst)
+        {
+            bool keepThis = false;
+
+            // Add 的副作用是必须的：即使这一份因为配额已满而不保留，也要记住
+            //「这个日/周/月已经见过」，否则同周期的后续份会被当成新周期而误留
+            if (days.Add(DateOnly.FromDateTime(time)) && days.Count <= policy.Daily)
+            {
+                keepThis = true;
+            }
+
+            if (weeks.Add((ISOWeek.GetYear(time), ISOWeek.GetWeekOfYear(time))) && weeks.Count <= policy.Weekly)
+            {
+                keepThis = true;
+            }
+
+            if (months.Add((time.Year, time.Month)) && months.Count <= policy.Monthly)
+            {
+                keepThis = true;
+            }
+
+            if (keepThis)
+            {
+                keep.Add(dir);
+            }
+        }
+
+        var doomed = new List<string>(orderedNewestFirst.Count);
+        foreach ((string dir, _) in orderedNewestFirst)
+        {
+            if (!keep.Contains(dir))
+            {
+                doomed.Add(dir);
+            }
+        }
+
+        return doomed;
+    }
+
+    /// <summary>
+    /// 按 GFS（日 / 周 / 月）时间纵深清理旧快照，返回被删除的目录列表。
+    /// </summary>
+    /// <remarks>
+    /// 与 <see cref="EnforceLimit"/> 的差别：删的不再是"最旧的 N-1 份"，而是"超出时间纵深的那些"。
+    /// 🔴 目录名解析不出时间的**不删**；删除失败立即停止（不继续错删）。
+    /// </remarks>
+    /// <param name="policy">GFS 配额。</param>
+    public List<string> EnforceGfsLimit(GfsRetention policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+
+        List<string> dirs = AllSnapshotDirs(); // 已按新 → 旧
+        var entries = new List<(string Dir, DateTime Time)>(dirs.Count);
+        foreach (string dir in dirs)
+        {
+            if (TryParseSnapshotTime(dir, out DateTime time))
+            {
+                entries.Add((dir, time));
+            }
+            else
+            {
+                // 名字不符合快照命名：宁可留着，也不按猜出来的时间删
+                _logger.Warn($"快照目录名无法解析时间，已跳过 GFS 清理：{dir}");
+            }
+        }
+
+        IReadOnlyList<string> doomed = SelectGfsDeletion(entries, policy);
+        var removed = new List<string>();
+        foreach (string dir in doomed)
+        {
+            try
+            {
+                DeleteSnapshot(dir);
+                removed.Add(dir);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"GFS 清理旧快照失败：{ex.Message}");
+                break;
+            }
+        }
+
         return removed;
     }
 

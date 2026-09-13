@@ -228,10 +228,21 @@ public sealed class BackupService : IBackupService
                 };
             }
 
-            // 上限清理：规则级 MaxSnapshots 钳制到合理范围，防止被设为极大值导致无限累积
-            int rawLimit = rule.MaxSnapshots > 0 ? rule.MaxSnapshots : _config.Settings.MaxSnapshots;
-            int limit = Math.Clamp(rawLimit, 1, BackupRule.MaxSnapshotsCap);
-            List<string> removed = snapMgr.EnforceLimit(limit);
+            // 保留策略：规则显式配了 GFS 就走时间纵深，否则维持固定条数。
+            // 旧配置读进来 Gfs 为 null → 行为与升级前完全一致（计划要求的"回退读法"）。
+            GfsRetention? gfsPolicy = rule.Gfs ?? _config.Settings.Gfs;
+            List<string> removed;
+            if (gfsPolicy is { } gfs)
+            {
+                removed = snapMgr.EnforceGfsLimit(gfs);
+            }
+            else
+            {
+                // 上限清理：规则级 MaxSnapshots 钳制到合理范围，防止被设为极大值导致无限累积
+                int rawLimit = rule.MaxSnapshots > 0 ? rule.MaxSnapshots : _config.Settings.MaxSnapshots;
+                int limit = Math.Clamp(rawLimit, 1, BackupRule.MaxSnapshotsCap);
+                removed = snapMgr.EnforceLimit(limit);
+            }
             foreach (string r in removed)
                 log?.Invoke($"已自动清理最旧快照：{Path.GetFileName(r)}");
 
