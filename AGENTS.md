@@ -92,6 +92,12 @@ UI.Common（共享控件与设计令牌）
 
 🔴 **遇不熟悉的 API/格式，先查官方文档或参考实现，再写第一行代码**。"主动学习"是硬要求，不是可选项。
 
+🔴 **新代码禁止手写 Win32 互操作——一律走 CsWin32 生成**（2026-09-13 落地计划 B2，源报告 P0-3「CsWin32 强制令」）。
+- **依据**：NET-6 局域网扫描两次实踩（`GetIpNetTable2` 多塞参数恒得 87、`SendARP` 的 `SrcIP` 传值恒得 1168）根因都是"文档/记忆 vs 真实签名"。CsWin32 从**官方 Win32 metadata** 在编译期生成签名/结构体/常量，这类错误在源头消失；布局一致性已由一次性 spike 逐字节验证并固化为回归锁 `tests/SystemToolkit.Tests/Network/LanNeighborLayoutLockTests.cs`。
+- **存量 12 处**手写 `[DllImport]` **有测试锁、不强制迁移**（迁移无收益却要重验签名）。⚠️ 计数曾两次被低估（报告说 6、首轮检索得 9，守卫实扫才出真值 12——漏的是 `LanNeighborInterop.cs` 的 3 处），**清单类数字一律以守卫实扫为准**。白名单、依据与"白名单腐化"自检见 `tests/SystemToolkit.Tests/Architecture/NativeInteropGuardTests.cs`。
+- **新增互操作**：目标工程引 `Microsoft.Windows.CsWin32`（`PrivateAssets=all`）+ 该工程 `NativeMethods.txt` 列出所需符号；**首次引入产品工程**时按 [ADR-002](Docs/50-决策/ADR-002-驱动中心技术来源与第三方代码引入规范.md) §5.2 五步登记（§5.3 依赖清单 + NOTICE）。测试工程专用引用不计入产品依赖面。
+- **机器约束**：`NativeInteropGuardTests` 扫 `src/**`，白名单之外出现 `[DllImport]`/`[LibraryImport]` 即测试变红。
+
 ## 三、安全与操作纪律
 
 🔴 **特权操作**：一律经 `ElevatedHelper` 进程按需提权。UAC 被拒绝时流程安全终止，**无副作用**，并记录日志。
