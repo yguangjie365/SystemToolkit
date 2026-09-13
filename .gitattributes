@@ -1,0 +1,10 @@
+# 行尾策略（2026-09-13 新增，落地计划 B3-①）
+#
+# 背景：本机与多数 Windows 客户端 core.autocrlf=true，检出时会把 LF 转成 CRLF。
+# 对源码无碍，但对**记了 SHA-256 的数据文件**是致命的——哈希会对不上，
+# 而"可复现"正是那个哈希存在的理由。
+#
+# 因此只对内置数据文件钉死行尾：仓库内与工作区一律 LF，任何平台检出的字节都一致。
+# 刻意不写全局 `* text=auto`：那会对全仓做一次归一化，属与本议题无关的大范围改动。
+
+src/SystemToolkit.Core/Network/LanScan/Data/oui-ieee.csv text eol=lf
