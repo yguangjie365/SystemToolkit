@@ -104,6 +104,46 @@ public class LanScanTests
     public void Oui_VerifiedUserLanEntries_AreLocked(string mac, string expected) =>
         Assert.Equal(expected, OuiTable.Lookup(mac));
 
+    /// <summary>
+    /// 两层优先级：精选层必须**压过**官方层。<c>08:00:27</c> 两边都有
+    /// （精选 "VirtualBox" vs 官方 "PCS Systemtechnik GmbH"），取精选——
+    /// 锁的是"UI 短名/中文名不被官方长名顶掉"。删掉精选层即红。
+    /// </summary>
+    [Fact]
+    public void Oui_CuratedLayer_OutranksIeeeLayer()
+    {
+        Assert.Equal("VirtualBox", OuiTable.Lookup("08:00:27:11:22:33"));
+        Assert.Equal("VMware", OuiTable.Lookup("00:0C:29:11:22:33"));
+    }
+
+    /// <summary>
+    /// 官方层兜底：精选层没有的前缀改由 IEEE 表回答（2026-09-13 之前一律 null）。
+    /// </summary>
+    [Theory]
+    [InlineData("00:1B:21:AA:BB:CC", "Intel Corporate")]
+    [InlineData("00:00:00:AA:BB:CC", "XEROX CORPORATION")]
+    public void Oui_IeeeLayer_AnswersPrefixesMissingFromCurated(string mac, string expected) =>
+        Assert.Equal(expected, OuiTable.Lookup(mac));
+
+    /// <summary>
+    /// 🔴 打包回归锁：官方表是**嵌入资源**，没打进去就只剩精选 24 条。
+    /// 断言条目数即证明"资源确实在程序集里且能解析"——不依赖运行期静默降级被发现。
+    /// </summary>
+    [Fact]
+    public void Oui_IeeeLayer_IsEmbeddedAndLoaded() =>
+        Assert.True(OuiTable.IeeeEntryCount >= 40_000, $"官方层条目数异常：{OuiTable.IeeeEntryCount}");
+
+    /// <summary>
+    /// IEEE 表内有 2 个前缀重复（<c>080030</c>×3、<c>0001C8</c>×2），解析取**首条**。
+    /// 这条不是断言"首条才对"，而是把选择**固定下来**：否则行为会随生成器的排序方式漂移
+    /// （首版生成器按"前缀+厂商名"排序，就把这里变成了 CERN / CONRAD CORP.，已改回只按前缀稳定排序）。
+    /// </summary>
+    [Theory]
+    [InlineData("08:00:30:AA:BB:CC", "NETWORK RESEARCH CORPORATION")]
+    [InlineData("00:01:C8:AA:BB:CC", "THOMAS CONRAD CORP.")]
+    public void Oui_IeeeLayer_DuplicatePrefixes_TakeFirstOccurrence(string mac, string expected) =>
+        Assert.Equal(expected, OuiTable.Lookup(mac));
+
     // ═══════════════ 邻居表行解析（官方布局回归锁） ═══════════════
 
     [Fact]

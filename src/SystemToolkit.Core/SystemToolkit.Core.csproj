@@ -22,5 +22,12 @@
     <PackageReference Include="WatsonTcp" />
     <PackageReference Include="System.Management" />
   </ItemGroup>
+  <!-- 网络域内置数据（落地计划 B3-①）：IEEE 官方 OUI 注册表的紧凑形态（每行 `前缀|厂商名`）。
+       由 Tools/oui-gen/generate_oui.py 生成；来源 URL / 抓取日期 / 体积 / SHA-256 / 许可判断见该目录 README。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Network\LanScan\Data\oui-ieee.csv">
+      <LogicalName>oui-ieee.csv</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>
