@@ -29,13 +29,15 @@ public partial class AppManagerView : UserControl
         vm.InfoRequest = (title, message)
             => System.Windows.MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
         // 导入/导出路径回调（审查 O6：对话框一律 View 注入）
+        // 2026-09-13（B4-④）：清单格式已切为 winget 官方格式 → 标题与默认文件名同步如实说明，
+        // 不能让用户以为导出的还是"全量清单"（该格式只含 winget 包 Id）
         vm.PickSavePath = () =>
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                Title = "导出软件清单",
-                Filter = "JSON 清单 (*.json)|*.json",
-                FileName = $"systemtoolkit_list_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+                Title = "导出软件清单（winget 格式）",
+                Filter = "winget 清单 (*.json)|*.json",
+                FileName = $"winget-packages_{DateTime.Now:yyyyMMdd_HHmmss}.json",
             };
             return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
         };

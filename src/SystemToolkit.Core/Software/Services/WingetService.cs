@@ -179,6 +179,24 @@ public sealed partial class WingetService : IWingetClient
         return RunAsync(new[] { "source", "update", "--disable-interactivity" }, ct);
     }
 
+    /// <summary>把本机已安装的包导出为 winget 官方清单（winget export -o）。</summary>
+    public Task<WingetRunResult> ExportAsync(string path, CancellationToken ct = default(CancellationToken))
+    {
+        return RunAsync(BuildManifestArgs("export", path), ct);
+    }
+
+    /// <summary>
+    /// 构造 winget export 的文件参数（抽出以便单元测试直接断言参数形态）。
+    /// 路径经 <see cref="EnsureSafeWingetValue"/> 校验：以 <c>-</c> 开头的路径会被 winget
+    /// 当成选项解析（与包 Id 同一类风险）。值本身由 <c>ArgumentList</c> 传递，框架负责转义。
+    /// </summary>
+    internal static List<string> BuildManifestArgs(string verb, string path)
+    {
+        EnsureSafeWingetValue(path, "path", "非法的清单文件路径");
+        // export 支持 --accept-source-agreements，不支持 --accept-package-agreements（winget v1.29.290 实测）
+        return new List<string> { verb, "--output", path, "--accept-source-agreements", "--disable-interactivity" };
+    }
+
     /// <summary>构造 <c>winget source add</c> 参数（抽出以便单元测试直接断言参数形态）。</summary>
     internal static List<string> BuildSourceAddArgs(string name, string url)
     {

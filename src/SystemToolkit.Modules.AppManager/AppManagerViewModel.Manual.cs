@@ -331,7 +331,17 @@ public partial class AppManagerViewModel
 
     // ==================================================================
     // 导入 / 导出
+    // 落地计划 B4-④（2026-09-13）：清单格式**直接切换**为 winget 官方格式（schema 2.0），
+    // 旧自研 EnvCatalog 格式降级为**只读导入**（已裁定：不长期养两套解析判据）。
     // ==================================================================
+
+    /// <summary>
+    /// 导出当前 winget 清单为 **winget 官方格式**（可与 <c>winget import</c> 互通）。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 该格式**只有包 Id**：名称/分类/图标/描述、以及手工软件与驱动工具清单均无对应字段 →
+    /// 导出后必须**如实说明范围**，不能让用户以为这是全量备份（本批的行为红线）。
+    /// </remarks>
     [RelayCommand]
     private void ExportList()
     {
@@ -343,8 +353,10 @@ public partial class AppManagerViewModel
 
         try
         {
-            _env.ExportCatalog(exportPath);
-            AddLog("已导出清单：" + exportPath);
+            int count = _env.ExportWingetManifest(exportPath);
+            AddLog($"已导出清单（winget 官方格式，{count} 个包）：{exportPath}");
+            AddLog("范围说明：该格式只含包 Id（不含名称/分类/图标），手工软件与驱动工具清单不在其中；"
+                + "该文件可直接交由 winget import 使用。");
         }
         catch (Exception ex)
         {
@@ -353,6 +365,52 @@ public partial class AppManagerViewModel
         }
     }
 
+    /// <summary>
+    /// 把**本机已安装**的软件导出为 winget 官方清单（走 <c>winget export</c> 自己导，
+    /// 故源地址等字段是本机真实值）。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 未在界面挂入口（页头工具条属页骨架，改动影响面大）——Core 能力与测试已就位，
+    /// 入口随 B4 剩余 UI 一并落。此处先留实现，避免"有命令无按钮"的假可点。
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanOperate))]
+    private async Task ExportInstalledAsync()
+    {
+        string? exportPath = PickSavePath?.Invoke();
+        if (string.IsNullOrEmpty(exportPath))
+        {
+            return;
+        }
+
+        await AcquireOperationAsync();
+        try
+        {
+            AddLog("正在导出本机已安装软件（winget export）…");
+            WingetRunResult result = await _winget.ExportAsync(exportPath);
+            if (!result.Success)
+            {
+                AddLog($"导出失败（退出码 {result.ExitCode}）{WingetExitHint(result.ExitCode, isMsStore: false)}");
+                return;
+            }
+
+            AddLog($"已导出本机已安装软件：{exportPath}");
+            AddLog("范围说明：只包含 winget 源可识别的软件；不在任何源中的已安装软件不会出现（需手动记录）。");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导出本机已安装软件失败：" + exportPath, ex);
+            AddLog("导出失败：" + ex.Message);
+        }
+        finally
+        {
+            ExitOperation();
+        }
+    }
+
+    /// <summary>
+    /// 导入清单：**自动判别格式**。winget 官方格式 → 只替换商店/第三方应用清单
+    /// （该格式没有手工与驱动条目，清空它们等于用文件没说的东西删数据）；旧格式 → 替换全部三类。
+    /// </summary>
     [RelayCommand]
     private void ImportList()
     {
@@ -364,7 +422,10 @@ public partial class AppManagerViewModel
 
         int current = StorePackages.Count + ThirdPartyPackages.Count + ManualSoftwares.Count;
         if (ConfirmRequest?.Invoke("导入清单",
-                $"导入将用所选文件替换当前全部清单（共 {current} 条）。\n覆盖前会自动备份当前清单。\n\n确定继续吗？") != true)
+                $"导入将用所选文件替换当前清单（当前共 {current} 条）。\n" +
+                "· winget 官方格式：只替换商店/第三方应用清单，手工与驱动清单**保留**\n" +
+                "· 本工具旧格式：替换全部三类清单\n" +
+                "覆盖前会自动备份当前清单。\n\n确定继续吗？") != true)
         {
             return;
         }
@@ -374,13 +435,14 @@ public partial class AppManagerViewModel
             // 备份在 try 内（审查 M5）：备份 IO 异常必须走导入失败路径留痕，
             // 而不是冒泡到全局兜底被吞、导入静默中止
             string? backupPath = _env.BackupCatalog();
-            EnvCatalog? catalog = _env.ImportCatalog(importPath);
-            if (catalog is null)
+            EnvManifestImport import = _env.ImportManifest(importPath);
+            if (!import.Success)
             {
-                AddLog("导入失败：文件格式不正确或为空（当前清单未改动）");
+                AddLog("导入失败：文件格式不正确或内容未通过校验（当前清单未改动）");
                 return;
             }
 
+            EnvCatalog catalog = import.Catalog;
             StorePackages.Clear();
             ThirdPartyPackages.Clear();
             foreach (WingetPackage item in catalog.Winget)
@@ -400,20 +462,34 @@ public partial class AppManagerViewModel
             // 审查 2026-09-04（P2）：导入重灌集合后残留的勾选计数必须清零
             RecountSelection(); // 审查 O2：统一走重算（导入后全部未勾选，结果同为 0）
 
-            ManualSoftwares.Clear();
-            foreach (ManualSoftware item in catalog.Manual)
+            // winget 官方格式**没有**手工/驱动清单字段 → 只有旧格式才替换这两类
+            if (import.Format == EnvManifestFormat.LegacyCatalog)
             {
-                ManualSoftwares.Add(item);
-            }
+                ManualSoftwares.Clear();
+                foreach (ManualSoftware item in catalog.Manual)
+                {
+                    ManualSoftwares.Add(item);
+                }
 
-            _driverSoftwares.Clear();
-            _driverSoftwares.AddRange(catalog.Driver);
+                _driverSoftwares.Clear();
+                _driverSoftwares.AddRange(catalog.Driver);
+            }
 
             PersistAll();
             RebuildViews();
             RebuildArchives();
-            AddLog($"已导入清单：{catalog.Winget.Count} 个商店/第三方应用，{catalog.Manual.Count} 个手动条目，{catalog.Driver.Count} 个驱动条目"
+            AddLog($"已导入清单（{(import.Format == EnvManifestFormat.WingetExport ? "winget 官方格式" : "本工具旧格式")}）："
+                + $"{catalog.Winget.Count} 个商店/第三方应用"
+                + (import.Format == EnvManifestFormat.LegacyCatalog
+                    ? $"，{catalog.Manual.Count} 个手动条目，{catalog.Driver.Count} 个驱动条目"
+                    : "（手工/驱动清单未改动）")
                 + (backupPath is not null ? $"（原清单已备份：{backupPath}）" : "（备份失败，原清单可能无法恢复）"));
+
+            if (import.Format == EnvManifestFormat.WingetExport)
+            {
+                AddLog("范围说明：winget 格式只含包 Id，导入后的名称为 Id 原文，分类为默认值。");
+            }
+
             _ = RefreshStatesSafeAsync(); // v5 B2（🟡-2）：fire-and-forget 必须带兜底
         }
         catch (Exception ex)

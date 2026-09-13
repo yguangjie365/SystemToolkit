@@ -48,4 +48,17 @@ public interface IWingetClient
 
     /// <summary>搜索 winget 源，返回原始输出（JSON 或表格文本）。</summary>
     Task<string> SearchAsync(string query, CancellationToken ct = default);
+
+    /// <summary>
+    /// 把本机已安装的包导出为 winget 官方清单文件（<c>winget export -o</c>，schema 2.0）。
+    /// <para>
+    /// 🔴 **有损**（2026-09-13 本机 v1.29.290 实测）：只输出"能从某个源获得"的包，
+    /// 不在任何源中的已安装软件会被丢弃（本机实测 3 条），且输出的 <c>SourceDetails</c>
+    /// 是本机**实际源地址**（可能是镜像）。调用方必须如实说明范围。
+    /// </para>
+    /// 注：**刻意不提供 <c>winget import</c> 的封装** —— 那会成为绕过本仓确认门、
+    /// 聚合报告与取消令牌的第二条安装执行路径；本工具的安装一律走自有引擎
+    /// （导入文件 → 清单 → 逐项安装）。用户需要命令行导入时可直接自行调用 winget。
+    /// </summary>
+    Task<WingetRunResult> ExportAsync(string path, CancellationToken ct = default);
 }

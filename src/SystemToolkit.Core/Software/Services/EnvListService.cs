@@ -242,6 +242,145 @@ public sealed partial class EnvListService
         return LoadJson(text, () => new List<WingetPackage>());
     }
 
+    // ==================================================================
+    // winget 官方格式（schema 2.0）导入导出 —— 落地计划 B4-④
+    // ==================================================================
+
+    /// <summary>
+    /// 把当前 winget 清单导出为 **winget 官方格式**（可与 <c>winget import</c> 互通的 schema 2.0 文件）。
+    /// </summary>
+    /// <returns>导出的包数。</returns>
+    /// <remarks>
+    /// 🔴 该格式**只有包 Id**：名称/分类/图标/描述、以及手工软件与驱动工具清单都**不在其中**
+    /// （winget schema 无对应字段）。调用方必须如实说明导出范围。
+    /// 写盘失败上抛（与 <see cref="SaveWinget"/> 同口径：调用方须显式提示）。
+    /// </remarks>
+    public int ExportWingetManifest(string path)
+    {
+        var manifest = WingetExportManifest.FromPackages(LoadWingetOnly());
+        // schema 硬约束：Packages 至少 1 条、SourceDetails.Identifier 必填（winget v1.29.290 实测）
+        manifest.PruneForWrite();
+        if (!SaveJson(path, manifest))
+        {
+            throw new IOException($"导出 winget 格式清单失败：{path}");
+        }
+
+        return manifest.PackageCount();
+    }
+
+    /// <summary>
+    /// 读取外部清单文件并**自动判别格式**：winget 官方导出清单 → 只回传 winget 条目
+    /// （手工/驱动清单不在该格式内，调用方不得因此清空它们）；旧自研整体清单 → 回传三类。
+    /// 失败不抛，返回 <see cref="EnvManifestImport.Success"/> = false（原因已记日志）。
+    /// </summary>
+    public EnvManifestImport ImportManifest(string path)
+    {
+        string json;
+        try
+        {
+            json = File.ReadAllText(path);
+        }
+        catch (Exception ex)
+        {
+            _log("读取清单文件失败：" + ex.Message);
+            return EnvManifestImport.Failed(new List<string> { ex.Message });
+        }
+
+        if (WingetExportManifest.LooksLikeWingetManifest(json))
+        {
+            if (!WingetExportManifest.TryParse(json, out WingetExportManifest? manifest, out List<string> parseErrors))
+            {
+                LogImportErrors("导入 winget 清单被拒绝", parseErrors);
+                return EnvManifestImport.Failed(parseErrors);
+            }
+
+            List<WingetPackage> packages = manifest!.ToPackages();
+            // 外部 JSON 的 Id 会流入 winget 参数构造 —— 复用与旧格式导入同一份判据
+            List<string> errors = EnvCatalogValidator.ValidateWingetPackages(packages);
+            if (errors.Count > 0)
+            {
+                LogImportErrors("导入 winget 清单被拒绝", errors);
+                return EnvManifestImport.Failed(errors);
+            }
+
+            return EnvManifestImport.Ok(
+                EnvManifestFormat.WingetExport,
+                new EnvCatalog { Winget = packages });
+        }
+
+        // 旧自研格式（只读导入保留，已裁定）：走既有路径，含整体校验与损坏备份
+        if (!LooksLikeLegacyCatalog(json))
+        {
+            _log("导入失败：既不是 winget 导出清单（无 Sources），也不是本工具的清单文件（无 winget/manual/driver 字段）");
+            return EnvManifestImport.Failed(new List<string> { "文件既不是 winget 导出清单，也不是本工具旧清单" });
+        }
+
+        EnvCatalog? catalog = ImportCatalog(path);
+        if (catalog is null)
+        {
+            return EnvManifestImport.Failed(new List<string> { "文件既不是 winget 导出清单，也不是本工具旧清单" });
+        }
+
+        return EnvManifestImport.Ok(EnvManifestFormat.LegacyCatalog, catalog);
+    }
+
+    /// <summary>
+    /// 判别是否为本工具旧自研清单：JSON 对象且**至少含** <c>winget</c> / <c>manual</c> / <c>driver</c> 之一。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 这个判别是防**静默清空**的：<see cref="EnvCatalog"/> 的三个属性都有默认空值，
+    /// 任意 JSON 对象（如 <c>{"hello":"world"}</c>）都能被反序列化成"空清单"而**不报错**，
+    /// 导入路径据此清空全部清单后一条也没加 —— 用户得到一个被清空的软件清单却没有任何错误提示。
+    /// 旧格式由 <c>SnakeCaseLower</c> 写出，键名为 <c>winget</c> / <c>manual</c> / <c>driver</c>（大小写不敏感比对）。
+    /// </remarks>
+    internal static bool LooksLikeLegacyCatalog(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            foreach (JsonProperty prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Name.Equals("winget", StringComparison.OrdinalIgnoreCase)
+                    || prop.Name.Equals("manual", StringComparison.OrdinalIgnoreCase)
+                    || prop.Name.Equals("driver", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>把导入校验错误写进日志（与 <see cref="ImportCatalog"/> 同款限流输出）。</summary>
+    private void LogImportErrors(string title, List<string> errors)
+    {
+        _log($"{title}：{errors.Count} 条数据未通过校验（疑似损坏或被篡改）：");
+        foreach (string e in errors.Take(10))
+        {
+            _log("  - " + e);
+        }
+
+        if (errors.Count > 10)
+        {
+            _log($"  …以及另外 {errors.Count - 10} 条");
+        }
+    }
+
     // 旧默认清单的 winget Id → 商店 Id 映射（2026-08-29 卡片全面切 msstore 源）。
     // 仅映射经实测确认有商店上架的应用；PowerShell 7 / Chrome / Firefox / Sublime Text
     // 商店未上架，不在映射内，保持 winget 源。

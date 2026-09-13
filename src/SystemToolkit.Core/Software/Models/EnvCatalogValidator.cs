@@ -45,31 +45,7 @@ public static class EnvCatalogValidator
     public static List<string> Validate(EnvCatalog catalog)
     {
         var errors = new List<string>();
-        foreach (WingetPackage p in catalog.Winget)
-        {
-            if (p is null)
-            {
-                errors.Add("[商店应用] 存在 null 条目");
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(p.Id))
-                errors.Add($"[商店应用] 「{Safe(p.Name)}」缺少 Id");
-            else if (p.Id.Length > MaxIdLength)
-                errors.Add($"[商店应用] Id 超长（>{MaxIdLength}）：{Truncate(p.Id)}");
-            else if (!PackageIdPattern.IsMatch(p.Id))
-                errors.Add($"[商店应用] Id 含非法字符或以 - 开头：{Truncate(p.Id)}");
-
-            if (!string.IsNullOrWhiteSpace(p.Source) && !PackageIdPattern.IsMatch(p.Source))
-                errors.Add($"[商店应用] 「{Safe(p.Name)}」Source 含非法字符：{Truncate(p.Source)}");
-
-            if (string.IsNullOrWhiteSpace(p.Name))
-                errors.Add($"[商店应用] 条目 {Truncate(p.Id)} 缺少名称");
-
-            if ((p.Description?.Length ?? 0) > MaxDescriptionLength)
-                errors.Add($"[商店应用] 「{Safe(p.Name)}」描述超长（>{MaxDescriptionLength}）");
-            if ((p.Category?.Length ?? 0) > MaxShortTextLength || (p.Icon?.Length ?? 0) > MaxShortTextLength)
-                errors.Add($"[商店应用] 「{Safe(p.Name)}」分类或图标字段超长（>{MaxShortTextLength}）");
-        }
+        ValidateWingetInto(catalog.Winget, errors);
 
         foreach (ManualSoftware m in catalog.Manual.Concat(catalog.Driver))
         {
@@ -94,6 +70,48 @@ public static class EnvCatalogValidator
         }
 
         return errors;
+    }
+
+    /// <summary>
+    /// 单独校验一组 winget 条目（供 winget 导出清单导入路径复用——那条路径没有 <see cref="EnvCatalog"/>）。
+    /// 判据与 <see cref="Validate"/> 内的 winget 部分是**同一份代码**（<see cref="ValidateWingetInto"/>），
+    /// 不做两处各写一遍——本仓有过"同一判据两处各写、改一处漏一处"的实证。
+    /// </summary>
+    public static List<string> ValidateWingetPackages(IEnumerable<WingetPackage> packages)
+    {
+        var errors = new List<string>();
+        ValidateWingetInto(packages, errors);
+        return errors;
+    }
+
+    /// <summary>winget 条目的校验主体（唯一判据所在）。</summary>
+    private static void ValidateWingetInto(IEnumerable<WingetPackage> packages, List<string> errors)
+    {
+        foreach (WingetPackage p in packages)
+        {
+            if (p is null)
+            {
+                errors.Add("[商店应用] 存在 null 条目");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(p.Id))
+                errors.Add($"[商店应用] 「{Safe(p.Name)}」缺少 Id");
+            else if (p.Id.Length > MaxIdLength)
+                errors.Add($"[商店应用] Id 超长（>{MaxIdLength}）：{Truncate(p.Id)}");
+            else if (!PackageIdPattern.IsMatch(p.Id))
+                errors.Add($"[商店应用] Id 含非法字符或以 - 开头：{Truncate(p.Id)}");
+
+            if (!string.IsNullOrWhiteSpace(p.Source) && !PackageIdPattern.IsMatch(p.Source))
+                errors.Add($"[商店应用] 「{Safe(p.Name)}」Source 含非法字符：{Truncate(p.Source)}");
+
+            if (string.IsNullOrWhiteSpace(p.Name))
+                errors.Add($"[商店应用] 条目 {Truncate(p.Id)} 缺少名称");
+
+            if ((p.Description?.Length ?? 0) > MaxDescriptionLength)
+                errors.Add($"[商店应用] 「{Safe(p.Name)}」描述超长（>{MaxDescriptionLength}）");
+            if ((p.Category?.Length ?? 0) > MaxShortTextLength || (p.Icon?.Length ?? 0) > MaxShortTextLength)
+                errors.Add($"[商店应用] 「{Safe(p.Name)}」分类或图标字段超长（>{MaxShortTextLength}）");
+        }
     }
 
     private static string Safe(string? s) => Truncate(s);
