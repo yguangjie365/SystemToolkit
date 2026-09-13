@@ -2,6 +2,7 @@ using Hardware.Info;
 using Microsoft.Extensions.DependencyInjection;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Network.Connections;
 using SystemToolkit.Core.Overview.Services;
 
 namespace SystemToolkit.Modules.Overview;
@@ -40,6 +41,8 @@ public sealed class OverviewModule : ModuleBase
         services.AddSingleton<LiveUsageSampler>();
         services.AddSingleton<QuickPulseSampler>();
         services.AddSingleton<TopProcessSampler>();
+        // B7b：TCP 端点表（GetExtendedTcpTable，免提权；互操作由 CsWin32 生成）
+        services.AddSingleton<TcpConnectionTable>();
         // 磁盘快照缓存（复用旧工程实现提取至 Core）：启动秒显，慢变量持久化
         services.AddSingleton(sp => new OverviewSnapshotCache(sp.GetRequiredKeyedService<ILogger>("overview")));
         services.AddSingleton(sp => new OverviewViewModel(
@@ -48,7 +51,8 @@ public sealed class OverviewModule : ModuleBase
             sp.GetRequiredService<QuickPulseSampler>(),
             sp.GetRequiredService<OverviewSnapshotCache>(),
             sp.GetRequiredKeyedService<ILogger>("overview"),
-            sp.GetRequiredService<TopProcessSampler>()));
+            sp.GetRequiredService<TopProcessSampler>(),
+            sp.GetRequiredService<TcpConnectionTable>()));
         services.AddSingleton<OverviewView>();
     }
 }

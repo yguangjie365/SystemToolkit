@@ -15,4 +15,10 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
+  <!-- 健康面板的判据（文案 / 固定行数）放宽为 internal 以便直测；
+       与 Core / GameManager 同款做法（判据 private + 测试里复制规则 = 假测试） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
+  </ItemGroup>
+
 </Project>

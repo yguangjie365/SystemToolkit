@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
+using SystemToolkit.Core.Network.Connections;
 using SystemToolkit.Core.Overview.Models;
 using SystemToolkit.Core.Overview.Services;
 namespace SystemToolkit.Modules.Overview;
@@ -18,6 +19,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     private readonly LiveUsageSampler _liveSampler;
     private readonly QuickPulseSampler _quickSampler;
     private readonly TopProcessSampler? _topSampler;
+    private readonly TcpConnectionTable? _tcpTable;
     private readonly OverviewSnapshotCache? _snapshotCache;
     private readonly ILogger _logger;
 
@@ -63,6 +65,18 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     /// </summary>
     private const string TopProcessNoBaselineNote = "首次采样中…";
 
+    /// <summary>「网络与存储健康」卡每个面板的行数。</summary>
+    private const int HealthRowCount = 5;
+
+    /// <summary>网络面板：一个端点都没有时的说明（写清"没拿到"，不留空）。</summary>
+    private const string NetworkEmptyNote = "未获取到 TCP 端点";
+
+    /// <summary>磁盘面板：一块盘都没识别到——非提权时必然如此（LHM 内核驱动不加载）。</summary>
+    private const string StorageUnavailableNote = "未检测到存储设备（需管理员权限）";
+
+    /// <summary>磁盘面板：有盘但都没有 SMART 属性时的说明（没有 SMART ≠ 健康）。</summary>
+    private const string StorageNoSmartNote = "仅温度（本机未提供 SMART 属性）";
+
     /// <summary>顶部实时资源卡（4 张，参考图布局）。</summary>
     public ObservableCollection<StatCardVm> StatCards { get; } = new();
 
@@ -74,6 +88,9 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
 
     /// <summary>「实时占用进程」卡的两个榜单（[0] = CPU 榜，[1] = 内存榜）。</summary>
     public ObservableCollection<ProcessPanelVm> TopProcessPanels { get; } = new();
+
+    /// <summary>「网络与存储健康」卡的两个面板（[0] = 网络连接，[1] = 磁盘健康）。</summary>
+    public ObservableCollection<HealthPanelVm> HealthPanels { get; } = new();
 
     /// <summary>已安装软件（表格数据源，受搜索过滤）。</summary>
     public ObservableCollection<InstalledProgram> InstalledPrograms { get; } = new();
@@ -101,7 +118,8 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         QuickPulseSampler quickSampler,
         OverviewSnapshotCache? snapshotCache = null,
         ILogger? logger = null,
-        TopProcessSampler? topSampler = null)
+        TopProcessSampler? topSampler = null,
+        TcpConnectionTable? tcpTable = null)
     {
         _overviewService = overviewService;
         _liveSampler = liveSampler;
@@ -112,6 +130,9 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         _topSampler = topSampler;
         TopProcessPanels.Add(new ProcessPanelVm("\uE950", "CPU 占用最高", "CPU"));
         TopProcessPanels.Add(new ProcessPanelVm("\uE964", "内存占用最高", "内存"));
+        _tcpTable = tcpTable;
+        HealthPanels.Add(new HealthPanelVm("\uE968", "网络连接（本机）"));
+        HealthPanels.Add(new HealthPanelVm("\uE958", "磁盘健康"));
         ExportReportCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ExportReport);
         // 审查 🟠-2：采集中禁用全量刷新（CommunityToolkit RelayCommand 经 CommandManager 自动重询）
         RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync(), () => !_busy);
@@ -185,6 +206,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
                     RebuildFromData(snapshot.Data);
                     HeaderSubtitle = BuildHeaderSubtitle();
                     UpdateLiveMetrics();
+                    RefreshStoragePanel(snapshot.Data); // 快照里也带传感器读数：先显示，再等全量替换
                     _logger.Info($"已从磁盘快照秒显（采集于 {snapshot.CollectedAt.LocalDateTime:yyyy-MM-dd HH:mm}），后台全量采集中");
                     _ = RefreshFullAsync(); // 后台补采：完成后自动替换并更新快照
                 }
@@ -245,6 +267,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             HeaderSubtitle = BuildHeaderSubtitle();
             UpdateLiveMetrics();
             await RefreshTopProcessAsync().ConfigureAwait(true); // 先建立 CPU 基线，2s 后第一拍就有真实占用
+            RefreshStoragePanel(data); // 磁盘健康是慢变量：只随全量采集更新，不进 2s 节拍
             _snapshotCache?.Save(data); // 全量采集成功即刷新快照（失败仅留痕，不影响主流程）
         }
         catch (Exception ex)
@@ -278,12 +301,17 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             Task<TopProcessSnapshot?> topTask = _topSampler is null
                 ? Task.FromResult<TopProcessSnapshot?>(null)
                 : _topSampler.SampleAsync();
-            await Task.WhenAll(new Task[] { liveTask, quickTask, topTask }).ConfigureAwait(true);
+            // 网络端点表读取 + PID→进程名解析都是 IO：放后台线程，别卡 UI
+            Task<NetworkPanelData?> networkTask = _tcpTable is null
+                ? Task.FromResult<NetworkPanelData?>(null)
+                : Task.Run(() => (NetworkPanelData?)CollectNetworkPanelData());
+            await Task.WhenAll(new Task[] { liveTask, quickTask, topTask, networkTask }).ConfigureAwait(true);
             // After WhenAll, both tasks are already completed: the double await is a synchronous continuation (AsyncGuard forbids reading the Result property)
             UsageSample? live = await liveTask.ConfigureAwait(true);
             // 审查 2026-09-04（P2）：磁盘活动率不展示（用户实测反馈），免掉每 2s 一条的 WMI 查询
             QuickSample? quick = await quickTask.ConfigureAwait(true);
             ApplyTopProcess(await topTask.ConfigureAwait(true));
+            ApplyNetworkPanel(await networkTask.ConfigureAwait(true));
 
             SetStat("处理器", live?.CpuPercent);
             SetStat("显卡", live?.GpuPercent);
@@ -493,6 +521,115 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         memoryPanel.Note = TopProcessLiveNote;
         FillTopRows(memoryPanel, snapshot.MemoryTop, static row => FormatBytes(row.WorkingSetBytes));
     }
+
+    /// <summary>
+    /// 刷新「磁盘健康」面板。磁盘是**慢变量**：只随全量采集 / 快照加载更新，不参与 2 秒节拍。
+    /// </summary>
+    private void RefreshStoragePanel(OverviewData data)
+    {
+        if (HealthPanels.Count < 2)
+        {
+            return;
+        }
+
+        HealthPanelVm panel = HealthPanels[1];
+        StorageHealthSnapshot snapshot = StorageHealthBuilder.Build(data.Sensors?.Sensors);
+        panel.Note = StorageNote(snapshot);
+        FillHealthRows(panel, BuildStorageRows(snapshot));
+    }
+
+    /// <summary>
+    /// 磁盘面板的右上角说明。
+    /// 🔴 没有数据时**必须写明原因**（非提权时 LHM 拿不到任何存储传感器）：
+    /// 空面板被读成"一切正常"就是状态欺骗。
+    /// </summary>
+    /// <param name="snapshot">存储健康摘要。</param>
+    internal static string StorageNote(StorageHealthSnapshot snapshot)
+    {
+        if (snapshot.Devices.Count == 0)
+        {
+            return StorageUnavailableNote;
+        }
+
+        return snapshot.HasAnyAttributes
+            ? $"{snapshot.Devices.Count} 块盘"
+            : $"{snapshot.Devices.Count} 块盘 · {StorageNoSmartNote}";
+    }
+
+    /// <summary>后台线程采集网络面板数据（读表 + PID→进程名解析都是 IO）。</summary>
+    private NetworkPanelData CollectNetworkPanelData()
+    {
+        IReadOnlyList<TcpConnectionRow> rows = _tcpTable!.Read();
+        return new NetworkPanelData(rows.Count, ProcessConnectionSummaryBuilder.Build(rows, HealthRowCount));
+    }
+
+    /// <summary>把网络面板数据贴到面板上；null（采样器缺席的装配）保持原样。</summary>
+    private void ApplyNetworkPanel(NetworkPanelData? data)
+    {
+        if (data is null || HealthPanels.Count < 2)
+        {
+            return;
+        }
+
+        HealthPanelVm panel = HealthPanels[0];
+        panel.Note = NetworkNote(data);
+        FillHealthRows(panel, BuildNetworkRows(data.Top));
+    }
+
+    /// <summary>网络面板的右上角说明（一个端点都没有时写清"没拿到"，不留空）。</summary>
+    /// <param name="data">一次采集的结果。</param>
+    internal static string NetworkNote(NetworkPanelData data) =>
+        data.TotalEndpoints == 0 ? NetworkEmptyNote : $"{data.TotalEndpoints} 个端点 · 每 2 秒刷新";
+
+    internal static IReadOnlyList<HealthRowVm> BuildNetworkRows(IReadOnlyList<ProcessConnectionSummary> summaries)
+    {
+        var rows = new List<HealthRowVm>(summaries.Count);
+        for (int i = 0; i < summaries.Count; i++)
+        {
+            ProcessConnectionSummary summary = summaries[i];
+            string ports = summary.Listening == 0
+                ? string.Empty
+                : $" · 监听 {string.Join('/', summary.ListenPorts.Take(2))}{(summary.ListenPorts.Count > 2 ? "…" : string.Empty)}";
+            rows.Add(new HealthRowVm(
+                (i + 1).ToString(CultureInfo.InvariantCulture),
+                summary.ProcessName,
+                $"{summary.Total} 端点{ports}"));
+        }
+
+        return rows;
+    }
+
+    internal static IReadOnlyList<HealthRowVm> BuildStorageRows(StorageHealthSnapshot snapshot)
+    {
+        var rows = new List<HealthRowVm>(snapshot.Devices.Count);
+        for (int i = 0; i < snapshot.Devices.Count; i++)
+        {
+            StorageDeviceHealth device = snapshot.Devices[i];
+            string temp = device.TemperatureC is { } celsius
+                ? celsius.ToString("0.#", CultureInfo.InvariantCulture) + "°C"
+                : "温度未知";
+            string attrs = device.HasAttributes ? $"{device.Attributes.Count} 项" : "无 SMART";
+            rows.Add(new HealthRowVm(
+                (i + 1).ToString(CultureInfo.InvariantCulture),
+                device.DeviceName,
+                $"{temp} · {attrs}"));
+        }
+
+        return rows;
+    }
+
+    /// <summary>填健康面板：固定 <see cref="HealthRowCount"/> 行，不足补空行（面板高度恒定）。</summary>
+    internal static void FillHealthRows(HealthPanelVm panel, IReadOnlyList<HealthRowVm> rows)
+    {
+        panel.Rows.Clear();
+        for (int i = 0; i < HealthRowCount; i++)
+        {
+            panel.Rows.Add(i < rows.Count ? rows[i] : HealthRowVm.Empty);
+        }
+    }
+
+    /// <summary>网络面板一次采集的结果（后台线程产出、UI 线程消费）。</summary>
+    internal sealed record NetworkPanelData(int TotalEndpoints, IReadOnlyList<ProcessConnectionSummary> Top);
 
     /// <summary>填榜单：固定 <see cref="TopRowCount"/> 行，不足补空行（卡片高度恒定）。</summary>
     private static void FillTopRows(ProcessPanelVm panel, IReadOnlyList<ProcessUsageRow> rows, Func<ProcessUsageRow, string> formatValue)
