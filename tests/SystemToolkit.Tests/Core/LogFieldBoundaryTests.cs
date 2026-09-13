@@ -19,6 +19,27 @@ public class LogFieldBoundaryTests : IDisposable
 
     public void Dispose() => AppLog.Reset();
 
+    /// <summary>
+    /// 轮询等待指定 <c>Action</c> 的日志都出现（最多 3 秒）。
+    /// <para>超时也继续往下走 —— 让真正的断言给出可读的失败信息，而不是在这里抛一个无关的异常，
+    /// 那样会把"日志没写出来"伪装成"测试基建坏了"。</para>
+    /// </summary>
+    private static async Task WaitForLogActionsAsync(BusCapture capture, params string[] actions)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 3000)
+        {
+            // Action 是 string?（可空）：空值归一成空串，避免把可空性漏到 Hashset 的泛型实参上
+            var seen = new HashSet<string>(capture.Entries.Select(e => e.Action ?? string.Empty));
+            if (actions.All(seen.Contains))
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+    }
+
     private sealed class FakeRunner : ICommandRunner
     {
         public int ExitCode { get; set; }
@@ -196,6 +217,11 @@ public class LogFieldBoundaryTests : IDisposable
             await sender.SendFileAsync(sourcePath, "127.0.0.1", recvPort);
             Assert.Equal(TransferStatus.Completed, (await sendDone.Task.WaitAsync(TimeSpan.FromSeconds(30))).Status);
             Assert.Equal(TransferStatus.Completed, (await recvDone.Task.WaitAsync(TimeSpan.FromSeconds(30))).Status);
+
+            // 🔴 等两条终态日志都落定再断言：日志由**传输回调线程**写入，
+            //    「任务完成」信号可能早于最后一条日志到达 —— 直接断言会踩到
+            //    "Collection was modified" 或"一条都没有"这类**假失败**（2026-09-14 全量实测踩中一次）。
+            await WaitForLogActionsAsync(capture, "SendFile", "ReceiveFile");
 
             LogEntry send = Assert.Single(capture.Entries, e => e.Action == "SendFile");
             LogEntry recv = Assert.Single(capture.Entries, e => e.Action == "ReceiveFile");

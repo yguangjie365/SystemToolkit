@@ -9,9 +9,48 @@ namespace SystemToolkit.Tests;
 /// </summary>
 internal sealed class BusCapture : ILogSink
 {
-    public List<LogEntry> Entries { get; } = new();
+    private readonly object _gate = new();
 
-    public void Emit(LogEntry entry) => Entries.Add(entry);
+    private readonly List<LogEntry> _entries = new();
+
+    /// <summary>已捕获记录的**只读快照**。</summary>
+    /// <remarks>
+    /// 🔴 必须是快照，不能是裸 <see cref="List{T}"/>：<see cref="Emit"/> 会在传输回调线程上被调用,
+    /// 而用例往往在"任务完成"信号一到就立刻枚举 —— 那一刻可能还有收尾日志在写，
+    /// 裸 List 会抛 <c>InvalidOperationException: Collection was modified</c>
+    /// （2026-09-14 全量实测踩中一次；此前一直是靠时序侥幸通过）。
+    /// 快照把"遍历期间集合不变"变成结构保证。
+    /// </remarks>
+    public List<LogEntry> Entries
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return new List<LogEntry>(_entries);
+            }
+        }
+    }
+
+    /// <summary>已捕获条数（供轮询"日志是否还在增长"使用，不复制集合）。</summary>
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Count;
+            }
+        }
+    }
+
+    public void Emit(LogEntry entry)
+    {
+        lock (_gate)
+        {
+            _entries.Add(entry);
+        }
+    }
 
     /// <summary>复位总线→装捕获→跑 body→复位收口，返回捕获到的全部记录。</summary>
     public static async Task<List<LogEntry>> RecordAsync(Func<Task> body)
