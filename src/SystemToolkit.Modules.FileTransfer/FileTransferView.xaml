@@ -176,8 +176,12 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,6,0,0"/>
         </Style>
+        <!-- 左右各留 10：右边那 10 是给紧邻的 W2c「发到手机」按钮当间距用的。
+             ⚠️ 不能用"给新按钮自己加左距"——CardButton 定义在**主题包**里（运行时切换的字典），
+             而 `BasedOn` 只接受 StaticResource（XAML 限制，实测 XamlParseException），
+             所以新按钮只能 `Style="{DynamicResource CardButton}"` 裸引用、无法再套一层带 Margin 的样式。 -->
         <Style x:Key="TextSendButton" TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
-            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="Margin" Value="10,0,10,0"/>
         </Style>
 
         <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
@@ -608,6 +612,11 @@
                                 <Button Style="{StaticResource TextSendButton}" Content="发送文本"
                                         Command="{Binding Desktop.SendTextCommand}"
                                         ToolTip="发送到所选的局域网设备；未选中时回退到已知设备"/>
+                                <!-- 次要按钮（W2c）：与「发送文本」是两条不同的通道（Web 广播 vs TCP 点对点），
+                                     用次要样式与主按钮区分；间距靠左边那个按钮的右距，自身不带内联 Margin -->
+                                <Button Style="{DynamicResource CardButton}" Content="发到手机"
+                                        Command="{Binding Desktop.SendTextToPhoneCommand}"
+                                        ToolTip="推送给所有已连接的手机浏览器（需先在「手机访问」页开启 Web 服务）；手机端点气泡即可复制"/>
                             </StackPanel>
                             <TextBlock Text="{Binding Desktop.TextSendHintText}" Style="{StaticResource TextSendHint}"/>
                         </StackPanel>

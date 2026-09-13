@@ -173,13 +173,28 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     private readonly ILogger _logger;
     private readonly System.Windows.Threading.Dispatcher? _dispatcher;
 
+    /// <summary>
+    /// Web 通道（可选，W2c）。注入后：① 手机发来的文本能落到本机剪贴板；
+    /// ② 「发到手机」可把文本推给已连接的手机浏览器。
+    /// <para>缺省 null 时功能**降级而非报错**：与模块侧"可选解析共享基础设施"的既有口径一致。</para>
+    /// </summary>
+    private readonly IFileWebServer? _web;
+
+    /// <param name="discovery">设备发现服务。</param>
+    /// <param name="transfer">传输服务（TCP 通道）。</param>
+    /// <param name="history">传输历史。</param>
+    /// <param name="log">日志回调（写进页面日志面板）。</param>
+    /// <param name="logger">结构化日志。</param>
+    /// <param name="dispatcher">UI 线程 Dispatcher（测试传 null 直执行）。</param>
+    /// <param name="web">Web 通道（可选；缺省时手机文本通道不可用）。</param>
     public FileTransferDesktopViewModel(
         IDeviceDiscoveryService discovery,
         FileTransferService transfer,
         TransferHistoryService history,
         Action<string> log,
         ILogger logger,
-        System.Windows.Threading.Dispatcher? dispatcher = null)
+        System.Windows.Threading.Dispatcher? dispatcher = null,
+        IFileWebServer? web = null)
     {
         _discovery = discovery;
         _transfer = transfer;
@@ -187,11 +202,18 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         _log = log;
         _logger = logger;
         _dispatcher = dispatcher;
+        _web = web;
 
         _transfer.TaskUpdated += OnTaskUpdated;
         _transfer.TaskCompleted += OnTaskCompleted;
         _transfer.TransferRequested += OnTransferRequested;
         _discovery.DeviceChanged += OnDeviceChanged;
+
+        // 手机发来的文本（W2c）：与 TCP 通道共用同一扇确认门（见 OnWebTextReceived）
+        if (_web is not null)
+        {
+            _web.TextReceived += OnWebTextReceived;
+        }
 
         // 历史筛选视图（P3 ⑮）：建在构造里、绑到 XAML 的 Desktop.HistoryView，
         // 这样"筛选条件"只有一处真相（VM），XAML 不参与过滤逻辑。
@@ -1051,6 +1073,57 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 把当前文本推送给**所有已连接的手机浏览器**（W2c，走 Web 通道广播）。
+    /// <para>
+    /// 与 <see cref="SendText"/> 的分工：那边是点对点的 TCP 通道（发给选中的设备），
+    /// 这边覆盖"手机扫码进来的浏览器"——它不是 TCP 对端，没有 IP:端口可填。
+    /// 两条通道**共用 <see cref="TransferText"/> 判据**，但交付方式由各自对端决定
+    /// （TCP 侧有回执；Web 侧没有，见 <see cref="OnWebTextReceived"/>）。
+    /// </para>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSendText))]
+    private async Task SendTextToPhone()
+    {
+        TextValidation validation = TransferText.Validate(TextToSend);
+        if (!validation.IsValid)
+        {
+            _log($"[互传] ⚠️ {validation.ErrorText}");
+            return;
+        }
+
+        if (_web is null)
+        {
+            _log("[互传] ⚠️ Web 通道不可用，无法发到手机。");
+            return;
+        }
+
+        if (!_web.IsRunning)
+        {
+            // 明确指向"去哪开"：只报"没有手机在线"会让用户以为手机连不上，其实服务根本没开
+            _log("[互传] ⚠️ Web 服务未启动——先在「手机访问」页开启，手机浏览器才收得到文本。");
+            return;
+        }
+
+        try
+        {
+            int delivered = await _web.BroadcastTextAsync(TextToSend).ConfigureAwait(true);
+            if (delivered == 0)
+            {
+                // 0 = 帧写给了 0 个连接。**不代表对方已读**，只代表此刻没有手机在线。
+                _log("[互传] ⚠️ 当前没有已连接的手机浏览器（文本未送达任何人）。");
+                return;
+            }
+
+            _log($"[互传] 已向 {delivered} 个手机浏览器推送文本（{validation.CharCount} 字）。");
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ⚠️ 发到手机失败：{ex.Message}");
+            _logger.Warn($"[互传] 发到手机失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// 文本发送目标：优先「局域网设备」选中项，否则「已知设备」选中项；都没有则 null。
     /// 与文件发送同一套取值来源，不做第二套选择逻辑。
     /// </summary>
@@ -1338,6 +1411,53 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
 
         return ReceiveTextDecision.Resolve(accepted: true, clipboardWritten: wrote);
+    }
+
+    /// <summary>
+    /// 手机浏览器发来文本（W2c）：**复用与「电脑 ↔ 电脑」完全相同的确认门**。
+    /// <para>
+    /// 🔴 为什么不"收下就直接写剪贴板"：交付即**覆盖用户剪贴板**，与 TCP 通道同一风险
+    /// （用户可能正在复制别的东西）。走一扇门，行为口径才只有一份。
+    /// </para>
+    /// <para>
+    /// 🔴 与 TCP 通道的**唯一**差别：Web 侧**没有回执通道** —— HTTP 200 在"收下"那一刻
+    /// 就返回了（见 W2a 的裁定），所以用户拒绝、或剪贴板写失败时，**手机端永远不会知道**。
+    /// 这一条必须写在代码里，免得日后有人把"手机显示已送达"理解成"电脑已写进剪贴板"。
+    /// </para>
+    /// </summary>
+    private void OnWebTextReceived(object? sender, WebTextReceivedEventArgs e)
+    {
+        RunOnUi(() =>
+        {
+            if (string.IsNullOrEmpty(e.Text))
+            {
+                return;
+            }
+
+            // 伪造一个与 TCP 通道同形的请求事件：确认窗按 Kind=Text 渲染全文与字数，
+            // 与电脑↔电脑弹的是**同一个窗、同一套判据**（这正是复用的意义）。
+            var request = new TransferRequestEventArgs(
+                $"web-{Guid.NewGuid():N}"[..12],
+                TransferText.Preview(e.Text),
+                e.ByteCount,
+                $"手机 {e.FromIp}")
+            {
+                Kind = TransferKind.Text,
+                Text = e.Text,
+                TextLength = e.CharCount,
+            };
+
+            TransferDecision decision = ConfirmIncomingText(request);
+            if (decision.Accept)
+            {
+                _log($"[互传] 已接收手机文本（{e.CharCount} 字，来自 {e.FromIp}）并写入剪贴板。");
+            }
+            else
+            {
+                _log($"[互传] 已拒绝手机文本（{e.CharCount} 字，来自 {e.FromIp}）——"
+                    + "手机端不会收到这个结果（网页通道没有回执）。");
+            }
+        });
     }
 
     // ── 历史 ──

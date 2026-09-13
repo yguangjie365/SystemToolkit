@@ -38,7 +38,8 @@ public partial class FileTransferViewModel : ObservableObject
         System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
-        Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger, dispatcher);
+        // webServer 一并交给桌面 VM（W2c）：手机发来的文本要走它落到剪贴板，「发到手机」也靠它推送
+        Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger, dispatcher, webServer);
         Mobile = new FileTransferMobileViewModel(webServer, pairing, Log, dispatcher);
     }
 
