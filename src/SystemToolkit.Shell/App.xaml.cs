@@ -251,6 +251,12 @@ public partial class App : Application
         services.AddSingleton<SystemToolkit.Infrastructure.Steam.DpapiSteamApiKeyStore>();
         services.AddSingleton<SystemToolkit.Core.GameManager.Online.ISteamApiKeyStore>(
             sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Steam.DpapiSteamApiKeyStore>());
+        // 网络管理 · 局域网告警（B3-③）：Webhook URL 里通常嵌着机器人 access_token，
+        // 拿到就能往用户群里发任意消息 → 按"用户凭据禁明文落盘"同口径做 DPAPI 加密（同门做法见上两条）。
+        // ⚠️ 模块侧只用 GetService **可选**解析（模块不许引用 Infrastructure），
+        // 缺席时告警区退化为"未接入"，扫描功能零影响。
+        services.AddSingleton<SystemToolkit.Core.Network.LanScan.ILanScanAlertStore,
+            SystemToolkit.Infrastructure.Network.DpapiLanScanAlertStore>();
         services.AddSingleton<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>();
         services.AddSingleton<SystemToolkit.Core.Music.Online.IAudioProxyService>(
             sp => sp.GetRequiredService<SystemToolkit.Infrastructure.Music.Online.AudioProxyService>());

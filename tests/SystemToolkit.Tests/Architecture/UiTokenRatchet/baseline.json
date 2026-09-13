@@ -47,6 +47,14 @@
     "border": 2,
     "stroke": 0
   },
+  "src/SystemToolkit.Modules.NetManager/LanScanPanel.xaml": {
+    "margin": 37,
+    "padding": 6,
+    "width": 16,
+    "height": 1,
+    "border": 8,
+    "stroke": 0
+  },
   "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml": {
     "margin": 44,
     "padding": 3,

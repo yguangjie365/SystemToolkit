@@ -49,7 +49,9 @@ public partial class NetManagerViewModel : ObservableObject
         IElevationProvider elevation,
         LanScanService lanScan,
         SplitRouteService splitRoute,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        ILanScanAlertStore? alertStore = null,
+        LanScanAlertNotifier? notifier = null)
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
         void Log(string message) => AddLog(message);
@@ -58,7 +60,7 @@ public partial class NetManagerViewModel : ObservableObject
         Diagnostics = new NetDiagnosticsTabViewModel(diagnosticService, dnsProbe, continuousPing, Log);
         Repair = new NetRepairTabViewModel(repairService, diagnosticService, Log);
         Optimize = new NetOptimizeTabViewModel(tuningService, Log);
-        Lan = new LanScanTabViewModel(infoService, lanScan, Log);
+        Lan = new LanScanTabViewModel(infoService, lanScan, Log, alertStore, notifier);
         Split = new SplitRouteTabViewModel(infoService, splitRoute, Log);
 
         // 跨页联动：一键安全修复成功后自动复诊断（老 UI 行为，用户已习惯）

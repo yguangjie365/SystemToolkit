@@ -97,6 +97,16 @@ public sealed class NetManagerModule : ModuleBase
             sp.GetRequiredService<INetworkSnapshotService>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager")));
 
+        // B3-③ 告警外呼（Core 类型，故在本模块注册）。工厂显式喂键控日志器——
+        // 否则外呼动作 LanAlertSend 在生产拿 NullLogger，八字段不留痕（DI 铁律）。
+        // ⚠️ 配置存储 ILanScanAlertStore 是 **Infrastructure** 实现：模块不许引用 Infrastructure
+        // （DependencyGuard 规则），故由 Shell 的 RegisterSharedInfrastructure 注册，
+        // 这里只用 GetService **可选**解析——缺席时告警区退化为"未接入"，扫描功能零影响。
+        services.AddSingleton(sp => new LanScanAlertNotifier(
+            handler: null,
+            timeout: null,
+            logger: sp.GetRequiredKeyedService<ILogger>("netmanager")));
+
         // VM 组合根 + 视图
         // 工厂注册：接通键控日志器（原 ILogger? 可选参数实际拿 NullLogger——八轮审查沉淀的通用反模式）
         services.AddSingleton(sp => new NetManagerViewModel(
@@ -111,7 +121,9 @@ public sealed class NetManagerModule : ModuleBase
             sp.GetRequiredService<IElevationProvider>(),
             sp.GetRequiredService<LanScanService>(),
             sp.GetRequiredService<SplitRouteService>(),
-            sp.GetRequiredKeyedService<ILogger>("netmanager")));
+            sp.GetRequiredKeyedService<ILogger>("netmanager"),
+            alertStore: sp.GetService<ILanScanAlertStore>(),
+            notifier: sp.GetService<LanScanAlertNotifier>()));
         services.AddSingleton<NetManagerView>();
     }
 }

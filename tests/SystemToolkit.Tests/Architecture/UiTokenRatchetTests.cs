@@ -20,6 +20,10 @@ public class UiTokenRatchetTests
         "src/SystemToolkit.Modules.DriverManager/DriverManagerView.xaml",
         "src/SystemToolkit.Shell/MainWindow.xaml",
         "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml",
+        // 2026-09-13（B3-②③）补入：本面板此前**不在名单里 = 静默不受令牌守卫约束**（存量洞，
+        // 与"新 XAML 忘加白名单就永不被检测"是同一个坑）。纳入时其裸值基线按当前实测写入：
+        // 37/6/16/1/8 —— 含本批告警区新增的约 13 处；FontSize/CornerRadius 零容忍两条已达标。
+        "src/SystemToolkit.Modules.NetManager/LanScanPanel.xaml",
         "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml",
         "src/SystemToolkit.Modules.FileTransfer/ReceiveConfirmWindow.xaml",
         "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml",

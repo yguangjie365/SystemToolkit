@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Network.LanScan;
 using SystemToolkit.Core.Network.Models;
 using SystemToolkit.Core.Network.Services;
+using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Modules.NetManager;
 
@@ -24,15 +26,32 @@ public partial class LanScanTabViewModel : ObservableObject
     private readonly INetworkInfoService _info;
     private readonly LanScanService _scan;
     private readonly Action<string> _log;
+    private readonly ILanScanAlertStore? _alertStore;
+    private readonly LanScanAlertNotifier? _notifier;
     private CancellationTokenSource? _monitorCts;
     private LanScanResult? _lastResult;
     private string _filter = string.Empty;
 
-    public LanScanTabViewModel(INetworkInfoService info, LanScanService scan, Action<string> log)
+    /// <summary>载入告警配置期间抑制落盘——否则"读出来的值"会被 setter 立刻写回去。</summary>
+    private bool _suppressAlertPersist;
+
+    /// <summary>
+    /// 后两个参数**可选**：既有调用方（含 <c>ViewLoadSmokeGuardTests</c>）不传也能编译，
+    /// 此时告警区退化为"未接入"（全关、不落盘、不外呼）；真实宿主经 DI 喂实现。
+    /// </summary>
+    public LanScanTabViewModel(
+        INetworkInfoService info,
+        LanScanService scan,
+        Action<string> log,
+        ILanScanAlertStore? alertStore = null,
+        LanScanAlertNotifier? notifier = null)
     {
         _info = info;
         _scan = scan;
         _log = log;
+        _alertStore = alertStore;
+        _notifier = notifier;
+        LoadAlertConfig();
     }
 
     /// <summary>行定位请求（View 订阅：滚动设备表到冲突 IP）。</summary>
@@ -151,6 +170,285 @@ public partial class LanScanTabViewModel : ObservableObject
     /// 远程 WMI（经 ElevatedHelper，一轮一次 UAC）；关闭/拒绝时保留 TTL 推断值。</summary>
     [ObservableProperty]
     private bool _isPreciseOs;
+
+    // ══════════════ 告警推送配置（B3-③） ══════════════
+    // 🔴 本文件禁止 OnXxxChanged partial 钩子（_wpftmp 通道 CS0759 教训）→ 手工属性 + 赋值点接线。
+    // 无「保存」按钮：改动即落盘（URL 走 LostFocus 触发，不会逐字符写盘）。
+
+    private bool _isAlertEnabled;
+    private string _alertWebhookUrl = string.Empty;
+    private bool _alertOnConflict = true;
+    private bool _alertOnBindingChanged;
+    private bool _alertOnNewDevice;
+    private string _alertStatusText = "尚未推送";
+
+    /// <summary>推送总开关（默认关——外呼能力必须由用户显式开启）。</summary>
+    public bool IsAlertEnabled
+    {
+        get => _isAlertEnabled;
+        set
+        {
+            if (SetProperty(ref _isAlertEnabled, value))
+            {
+                PersistAlertConfig();
+            }
+        }
+    }
+
+    /// <summary>机器人 Webhook 地址（钉钉 / 企业微信），落盘时经 DPAPI 加密。</summary>
+    public string AlertWebhookUrl
+    {
+        get => _alertWebhookUrl;
+        set
+        {
+            if (SetProperty(ref _alertWebhookUrl, value ?? string.Empty))
+            {
+                PersistAlertConfig();
+            }
+        }
+    }
+
+    /// <summary>IP 冲突是否推送（默认勾选——这是立项场景本身）。</summary>
+    public bool AlertOnConflict
+    {
+        get => _alertOnConflict;
+        set
+        {
+            if (SetProperty(ref _alertOnConflict, value))
+            {
+                PersistAlertConfig();
+            }
+        }
+    }
+
+    /// <summary>IP↔MAC 绑定变更是否推送（默认不勾，防"一开就刷屏"）。</summary>
+    public bool AlertOnBindingChanged
+    {
+        get => _alertOnBindingChanged;
+        set
+        {
+            if (SetProperty(ref _alertOnBindingChanged, value))
+            {
+                PersistAlertConfig();
+            }
+        }
+    }
+
+    /// <summary>新设备发现是否推送（默认不勾，同上）。</summary>
+    public bool AlertOnNewDevice
+    {
+        get => _alertOnNewDevice;
+        set
+        {
+            if (SetProperty(ref _alertOnNewDevice, value))
+            {
+                PersistAlertConfig();
+            }
+        }
+    }
+
+    /// <summary>最近一次推送结果（含"未外呼"的原因）。</summary>
+    public string AlertStatusText
+    {
+        get => _alertStatusText;
+        private set => SetProperty(ref _alertStatusText, value);
+    }
+
+    /// <summary>
+    /// 启用了、填了 URL、但格式不合法时就地提示（空串 = 不提示）。
+    /// 配错**不会**外呼，但必须让用户看见——静默吞掉非法输入是本仓的既有痛点。
+    /// </summary>
+    public string AlertUrlError =>
+        _isAlertEnabled && !string.IsNullOrWhiteSpace(_alertWebhookUrl) && !BuildAlertConfig().HasValidUrl
+            ? "URL 需为 http:// 或 https:// 开头的完整地址"
+            : string.Empty;
+
+    /// <summary>
+    /// 错误行的可见性。直出 <see cref="Visibility"/> 而非引转换器——本视图域既有先例
+    /// （<c>TableVis</c>/<c>EmptyVis</c>/<c>FailedVis</c> 同款）。
+    /// </summary>
+    public Visibility AlertUrlErrorVis =>
+        AlertUrlError.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private LanScanAlertConfig BuildAlertConfig() => new(
+        _isAlertEnabled,
+        string.IsNullOrWhiteSpace(_alertWebhookUrl) ? null : _alertWebhookUrl.Trim(),
+        _alertOnConflict,
+        _alertOnBindingChanged,
+        _alertOnNewDevice);
+
+    /// <summary>载入已存配置（缺省/损坏 → 全关）。</summary>
+    private void LoadAlertConfig()
+    {
+        LanScanAlertConfig config = _alertStore?.Load() ?? LanScanAlertConfig.Default;
+        _suppressAlertPersist = true;
+        try
+        {
+            _isAlertEnabled = config.Enabled;
+            _alertWebhookUrl = config.WebhookUrl ?? string.Empty;
+            _alertOnConflict = config.OnConflict;
+            _alertOnBindingChanged = config.OnBindingChanged;
+            _alertOnNewDevice = config.OnNewDevice;
+        }
+        finally
+        {
+            _suppressAlertPersist = false;
+        }
+
+        OnPropertyChanged(nameof(IsAlertEnabled));
+        OnPropertyChanged(nameof(AlertWebhookUrl));
+        OnPropertyChanged(nameof(AlertOnConflict));
+        OnPropertyChanged(nameof(AlertOnBindingChanged));
+        OnPropertyChanged(nameof(AlertOnNewDevice));
+        OnPropertyChanged(nameof(AlertUrlError));
+        OnPropertyChanged(nameof(AlertUrlErrorVis));
+    }
+
+    private void PersistAlertConfig()
+    {
+        OnPropertyChanged(nameof(AlertUrlError));
+        OnPropertyChanged(nameof(AlertUrlErrorVis));
+        if (_suppressAlertPersist)
+        {
+            return;
+        }
+
+        _alertStore?.Save(BuildAlertConfig());
+    }
+
+    /// <summary>
+    /// 手动发送测试：**忽略三个事件类型勾选**（测试要验的是 URL 与网络通不通），
+    /// 但仍受总开关与 URL 闸门约束——否则这个按钮就成了一条绕过闸门的外呼路径。
+    /// </summary>
+    [RelayCommand]
+    private async Task SendTestAlertAsync()
+    {
+        try
+        {
+            if (_notifier is null)
+            {
+                _log("[局域网] ⚠ 告警外呼未接入（无可用外呼组件）");
+                return;
+            }
+
+            LanScanAlertConfig testConfig = BuildAlertConfig() with
+            {
+                OnConflict = true,
+                OnBindingChanged = true,
+                OnNewDevice = true,
+            };
+            var probe = new List<LanEvent>
+            {
+                new(LanEventType.Conflict, "192.168.1.7", "3C:00:00:00:00:1F", "9A:00:00:00:00:04",
+                    "测试消息（由「发送测试」触发，忽略事件类型勾选）", DateTimeOffset.Now),
+            };
+
+            LanAlertSendResult result = await _notifier.SendAsync(testConfig, probe).ConfigureAwait(true);
+            AlertStatusText = $"最近一次：{result.Message} · {DateTime.Now:HH:mm:ss}";
+            _log($"[局域网] 告警测试 → {result.Message}");
+        }
+        catch (Exception ex)
+        {
+            AlertStatusText = $"测试异常：{ex.Message}";
+            _log("[局域网] ❌ 告警测试异常：" + ex.Message);
+        }
+    }
+
+    /// <summary>导出保存对话框回调（View 注入；参数为建议文件名，返回 null = 用户取消）。</summary>
+    public Func<string, string?>? PickExportPath { get; set; }
+
+    /// <summary>
+    /// 导出**全部已持久化事件**（基线环 ≤ <see cref="LanBaselineStore.MaxEvents"/> 条），
+    /// 而不是界面显示的 50 条——取证/上报要的是完整留存（按钮 ToolTip 已写明范围）。
+    /// </summary>
+    [RelayCommand]
+    private void ExportEventsCsv()
+    {
+        try
+        {
+            IReadOnlyList<LanEvent> events = _scan.PeekBaseline()?.Events
+                ?? _lastResult?.Events
+                ?? (IReadOnlyList<LanEvent>)Array.Empty<LanEvent>();
+            if (events.Count == 0)
+            {
+                _log("[局域网] ⚠ 暂无事件可导出（先扫一轮）");
+                return;
+            }
+
+            if (PickExportPath is null)
+            {
+                _log("[局域网] ⚠ 导出不可用（未接入保存对话框）");
+                return;
+            }
+
+            string? path = PickExportPath($"{LanEventCsv.FileNamePrefix}{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+            if (string.IsNullOrEmpty(path))
+            {
+                return; // 用户取消，不是错误
+            }
+
+            // 🔴 带 BOM 的 UTF-8：不加的话 Excel 打开中文列名与详情会变乱码；
+            // 走 AtomicFile 满足"新增文件写入必须走 AtomicFile"的守卫。
+            AtomicFile.WriteAllBytes(
+                path,
+                new UTF8Encoding(true).GetBytes(LanEventCsv.Build(events, BuildDeviceIndex())));
+            _log($"[局域网] ✅ 已导出 {events.Count} 条事件：{path}");
+        }
+        catch (Exception ex)
+        {
+            _log($"[局域网] ❌ 导出失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>事件 → 设备索引（把厂商/主机名补进 CSV）。没有本轮结果就返回 null，不臆造字段。</summary>
+    private IReadOnlyDictionary<string, LanDevice>? BuildDeviceIndex()
+    {
+        if (_lastResult is null || _lastResult.Devices.Count == 0)
+        {
+            return null;
+        }
+
+        var index = new Dictionary<string, LanDevice>(StringComparer.Ordinal);
+        foreach (LanDevice device in _lastResult.Devices)
+        {
+            index[device.Ip] = device;
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// 按配置推送本轮事件。fire-and-forget：外呼**绝不阻塞**扫描主流程；
+    /// 未启用/未配 URL 时连调用都不发起（零外呼路径的第一道闸）。
+    /// </summary>
+    private async Task PushAlertAsync(LanScanResult result)
+    {
+        try
+        {
+            if (_notifier is null)
+            {
+                return;
+            }
+
+            LanScanAlertConfig config = BuildAlertConfig();
+            if (!config.CanSend)
+            {
+                return;
+            }
+
+            LanAlertSendResult outcome = await _notifier.SendAsync(config, result.Events).ConfigureAwait(true);
+            if (outcome.Attempted)
+            {
+                AlertStatusText = $"最近一次：{outcome.Message} · {DateTime.Now:HH:mm:ss}";
+                _log($"[局域网] 告警推送 → {outcome.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // fire-and-forget 的异常无人 await：必须在此吞掉并留痕，否则会变成未观察异常
+            _log("[局域网] ⚠ 告警推送异常（不影响扫描）：" + ex.Message);
+        }
+    }
 
     // ══════════════ 命令 ══════════════
 
@@ -449,6 +747,10 @@ public partial class LanScanTabViewModel : ObservableObject
                 _log($"[局域网] ✅ 扫描完成：在线 {result.Devices.Count} 台，事件 {result.Events.Count} 条，无冲突");
             }
         }
+
+        // 告警外呼（B3-③）：fire-and-forget——外呼绝不阻塞扫描主流程；
+        // 未启用/未配 URL 时 PushAlertAsync 内部直接返回（零外呼路径）。
+        _ = PushAlertAsync(result);
     }
 
     private LanSubnetPlan? BuildPlan(out string error)

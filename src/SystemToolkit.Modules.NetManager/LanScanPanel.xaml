@@ -66,6 +66,7 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- ════════ 工具行：适配器 / 扫描 / 监控 / 搜索（示意图 ① 首行）════════ -->
@@ -333,10 +334,24 @@
         <!-- ════════ 事件流（最近 50 条，可折叠）════════ -->
         <Border Grid.Row="5" Margin="0,10,0,0" BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0">
             <StackPanel>
-                <ToggleButton x:Name="EventsToggle" IsChecked="True" Content="▾ 事件流（最近 50 条）"
-                              FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,6,0,4"
-                              Checked="OnEventsToggleChanged" Unchecked="OnEventsToggleChanged"
-                              Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                <!-- 标题行分左右两列（B3-②）：左=折叠开关，右=导出。
+                     依据已固化纪律：卡片的操作键一律放**标题行右侧**——放右列垂直居中会在一眼看过去
+                     "落进"某一行、与所控制的区块脱节。 -->
+                <Grid Margin="0,6,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton Grid.Column="0" x:Name="EventsToggle" IsChecked="True" Content="▾ 事件流（最近 50 条）"
+                                  FontSize="{DynamicResource Font_SizeBodySm}"
+                                  Checked="OnEventsToggleChanged" Unchecked="OnEventsToggleChanged"
+                                  Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                    <Button Grid.Column="2" Style="{DynamicResource CardButton}" Content="导出 CSV"
+                            VerticalAlignment="Center"
+                            Command="{Binding ExportEventsCsvCommand}"
+                            ToolTip="导出全部已保存事件（最多 200 条），不是上方显示的 50 条"/>
+                </Grid>
                 <Border x:Name="EventsHost" Background="{DynamicResource Brush_SurfaceAlt}"
                         CornerRadius="{DynamicResource Radius_LG}" Padding="10,6" MaxHeight="140">
                     <ListBox ItemsSource="{Binding Events}" BorderThickness="0" Background="Transparent"
@@ -354,6 +369,90 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- ════════ 告警推送（B3-③；默认收起）════════
+             放在事件流下方（与互传「端口配置放互传页自身」先例一致）：告警的对象就是上面那串事件，
+             "看事件 → 配推送"同屏完成；首次配置要反复试（发测试 + 回看事件），跨页会打断。
+             安全约束写死在实现里而非这里：默认关 / DPAPI / 未配 URL 不存在任何外呼路径。 -->
+        <Border Grid.Row="6" Margin="0,10,0,0" BorderBrush="{DynamicResource Brush_Border}" BorderThickness="0,1,0,0">
+            <StackPanel>
+                <ToggleButton x:Name="AlertToggle" IsChecked="False" Content="▸ 告警推送"
+                              FontSize="{DynamicResource Font_SizeBodySm}" Margin="0,6,0,4"
+                              HorizontalAlignment="Left"
+                              Checked="OnAlertToggleChanged" Unchecked="OnAlertToggleChanged"
+                              Foreground="{DynamicResource Brush_TextSecondary}" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                <Border x:Name="AlertHost" Visibility="Collapsed"
+                        Background="{DynamicResource Brush_SurfaceAlt}"
+                        CornerRadius="{DynamicResource Radius_LG}" Padding="10,8">
+                    <StackPanel>
+                        <CheckBox Content="启用推送（默认关）" Style="{DynamicResource ThemedCheckBox}"
+                                  FontSize="{DynamicResource Font_SizeMicro}"
+                                  IsChecked="{Binding IsAlertEnabled}" VerticalAlignment="Center"/>
+
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="机器人 Webhook URL"
+                                       FontSize="{DynamicResource Font_SizeMicro}"
+                                       Foreground="{DynamicResource Brush_TextSecondary}"
+                                       VerticalAlignment="Center"/>
+                            <Grid Grid.Column="2">
+                                <TextBox Style="{DynamicResource FieldInput}"
+                                         Text="{Binding AlertWebhookUrl}"
+                                         ToolTip="钉钉 / 企业微信机器人地址；以 DPAPI 加密后存本机"/>
+                                <TextBlock Text="https://oapi.dingtalk.com/robot/send?access_token=…"
+                                           IsHitTestVisible="False" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeMicro}"
+                                           Foreground="{DynamicResource Brush_TextMuted}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AlertWebhookUrl}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Grid>
+
+                        <TextBlock Text="{Binding AlertUrlError}" Margin="0,4,0,0"
+                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                   Foreground="{DynamicResource Brush_DangerText}"
+                                   Visibility="{Binding AlertUrlErrorVis}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="推送事件" FontSize="{DynamicResource Font_SizeMicro}"
+                                       Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                            <CheckBox Content="IP 冲突" Style="{DynamicResource ThemedCheckBox}" Margin="10,0,0,0"
+                                      FontSize="{DynamicResource Font_SizeMicro}" IsChecked="{Binding AlertOnConflict}"/>
+                            <CheckBox Content="绑定变更" Style="{DynamicResource ThemedCheckBox}" Margin="10,0,0,0"
+                                      FontSize="{DynamicResource Font_SizeMicro}" IsChecked="{Binding AlertOnBindingChanged}"/>
+                            <CheckBox Content="新设备" Style="{DynamicResource ThemedCheckBox}" Margin="10,0,0,0"
+                                      FontSize="{DynamicResource Font_SizeMicro}" IsChecked="{Binding AlertOnNewDevice}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Style="{DynamicResource CardButton}" Content="发送测试"
+                                    Command="{Binding SendTestAlertCommand}"/>
+                            <TextBlock Text="{Binding AlertStatusText}" Margin="10,0,0,0"
+                                       FontSize="{DynamicResource Font_SizeMicro}"
+                                       Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource Font_SizeMicro}"
+                                   Foreground="{DynamicResource Brush_TextMuted}"
+                                   Text="URL 以 DPAPI 加密后存本机；未配置 URL 或未启用时不会外呼。"/>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </Border>
