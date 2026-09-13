@@ -61,6 +61,9 @@ Tools/logs/
 Tools/tmp/
 tools/private/
 tools/LanProbe/
+# CsWin32 布局对齐 spike（2026-09-13）：一次性验证工程，结论落在变更记录里，不入库
+# （与 LanProbe 同口径；其自带 Directory.Build.props/Directory.Packages.props 已隔离 CPM 与严格警告）
+tools/CsWin32Spike/
 
 ########################################
 # 临时工作目录（工具/会话中间产物）
