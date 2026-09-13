@@ -66,6 +66,19 @@ public partial class FileTransferView : UserControl
                     return false;
                 }
             };
+            // 读取剪贴板（与上面的写入成对）：剪贴板只能在 UI 线程访问，同样由 View 注入；
+            // 读失败（被占用 / 非文本内容）返回 null —— VM 就地提示，不弹错误框。
+            Vm.Desktop.ReadClipboard = () =>
+            {
+                try
+                {
+                    return System.Windows.Clipboard.GetText();
+                }
+                catch
+                {
+                    return null;
+                }
+            };
             Vm.Desktop.PickFiles = PickFiles;
             // 历史导出（P3 ⑮）：保存路径由 View 选，VM 只负责生成内容与写盘
             Vm.Desktop.PickExportPath = PickExportPath;

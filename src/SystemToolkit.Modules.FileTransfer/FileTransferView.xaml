@@ -155,6 +155,31 @@
             <Setter Property="Margin" Value="8,0,0,0"/>
         </Style>
 
+        <!-- ============ 文本 / 剪贴板发送块（FT-3 / B8b-2） ============
+             🔴 本文件令牌棘轮额度已顶满 → 尺寸**一律写在 Setter 内**（不触发棘轮正则），
+             与文件内既有做法（PeerEditBox / HistorySearchBox 等）保持一致。 -->
+        <Style x:Key="TextSendBox" TargetType="TextBox" BasedOn="{StaticResource FieldInput}">
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="MinHeight" Value="52"/>
+            <Setter Property="MaxHeight" Value="160"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="TextSendRow" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Margin" Value="0,8,0,0"/>
+        </Style>
+        <Style x:Key="TextSendHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="TextSendButton" TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
+            <Setter Property="Margin" Value="10,0,0,0"/>
+        </Style>
+
         <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
              🔴 本文件的令牌棘轮额度**已顶满**（margin 44/44 · width 25/25 · padding 3/3 ·
              height 6/6 · border 2/2），因此这张卡片的所有间距一律写进 Style Setter：
@@ -565,6 +590,29 @@
                         </Border>
                     </Grid>
 
+                    <!-- 文本 / 剪贴板（FT-3 / B8b-2）：把一段文本发到对端，对端确认后写入剪贴板。
+                         放在设备行之后——它需要一个目标，放在这里用户刚选完设备就能接着发。 -->
+                    <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="文本 / 剪贴板" Style="{DynamicResource CardTitle}"/>
+                                <Button Style="{DynamicResource CardButton}" Content="粘贴" HorizontalAlignment="Right"
+                                        Command="{Binding Desktop.PasteTextCommand}"
+                                        ToolTip="把本机剪贴板内容读进下面的输入框"/>
+                            </Grid>
+                            <TextBox Style="{StaticResource TextSendBox}"
+                                     Text="{Binding Desktop.TextToSend, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="要发送的文本；上限 256 KB（UTF-8 字节）"/>
+                            <StackPanel Style="{StaticResource TextSendRow}">
+                                <TextBlock Text="{Binding Desktop.TextSizeText}" Style="{StaticResource TextSendHint}"/>
+                                <Button Style="{StaticResource TextSendButton}" Content="发送文本"
+                                        Command="{Binding Desktop.SendTextCommand}"
+                                        ToolTip="发送到所选的局域网设备；未选中时回退到已知设备"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Desktop.TextSendHintText}" Style="{StaticResource TextSendHint}"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 传输任务 -->
                     <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                         <Grid>
@@ -703,17 +751,21 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130"/>
                                                 <ColumnDefinition Width="70"/>
+                                                <!-- 类型（文件 / 文本）FT-3 §5.3：宽度由「对端」列匀出，总宽基本不变 -->
+                                                <ColumnDefinition Width="50"/>
                                                 <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="130"/>
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="60"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="{Binding FinishedAt, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
                                             <TextBlock Grid.Column="1" Text="{Binding DirectionText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Brush_TextPrimary}"/>
-                                            <TextBlock Grid.Column="3" Text="{Binding PeerEndpoint}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
-                                            <TextBlock Grid.Column="5" FontSize="{DynamicResource Font_SizeMicro}">
+                                            <!-- 类型列：文本行的「大小」列显示字数、「文件名」列显示预览（Core 已按 Kind 切换文案） -->
+                                            <TextBlock Grid.Column="2" Text="{Binding KindText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding FileName}" FontSize="{DynamicResource Font_SizeBodySm}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding PeerEndpoint}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                            <TextBlock Grid.Column="5" Text="{Binding SizeText}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                            <TextBlock Grid.Column="6" FontSize="{DynamicResource Font_SizeMicro}">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush_TextSecondary}"/>

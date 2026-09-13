@@ -261,6 +261,55 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     /// </summary>
     public Func<string, bool>? WriteClipboard { get; set; }
 
+    /// <summary>
+    /// 读取本机剪贴板文本（View 注入；失败或为空返回 null）。
+    /// <para>
+    /// 与 <see cref="WriteClipboard"/> 同款约定：UI 资源不进 VM，注入后也可被单测替换。
+    /// 读失败（剪贴板被占用 / 内容非文本）是**预期内**路径 —— 就地提示，不弹错误框。
+    /// </para>
+    /// </summary>
+    public Func<string?>? ReadClipboard { get; set; }
+
+    // ── 文本 / 剪贴板发送块（FT-3 / B8b-2） ──
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TextSizeText))]
+    [NotifyPropertyChangedFor(nameof(TextSendHintText))]
+    [NotifyCanExecuteChangedFor(nameof(SendTextCommand))]
+    private string _textToSend = string.Empty;
+
+    /// <summary>当前文本的 UTF-8 体积与上限（如 <c>412 B / 256 KB</c>）。与协议限长同一口径。</summary>
+    public string TextSizeText
+        => $"{TransferText.GetByteCount(TextToSend):N0} B / {TransferText.MaxBytes / 1024} KB";
+
+    /// <summary>
+    /// 发送按钮是否可用：**只看文本本身**（非空且未超上限）。
+    /// <para>
+    /// 刻意不管"有没有选目标"：选中态变化不会触发 CanExecute 重新求值，
+    /// 把目标也纳入条件会让按钮在该亮的时候不亮（既有的发送文件按钮同样只在选择缺失时就地提示）。
+    /// </para>
+    /// </summary>
+    public bool CanSendText => TransferText.Validate(TextToSend).IsValid;
+
+    /// <summary>
+    /// 文本块下方的就地说明。🔴 必须有它：本主题的**禁用态几乎不可见**，
+    /// 只靠按钮变灰用户根本看不出为什么点不动（既有评审结论）。
+    /// </summary>
+    public string TextSendHintText
+    {
+        get
+        {
+            TextValidation validation = TransferText.Validate(TextToSend);
+            if (validation.IsValid)
+            {
+                return string.Empty;
+            }
+            return string.IsNullOrWhiteSpace(TextToSend)
+                ? $"输入或粘贴要发送的文本；上限 {TransferText.MaxBytes / 1024} KB（UTF-8 字节）"
+                : validation.ErrorText;
+        }
+    }
+
     /// <summary>文件选择对话框回调（View 注入；返回 null 表示用户取消）。</summary>
     public Func<IReadOnlyList<string>?>? PickFiles { get; set; }
 
@@ -937,6 +986,89 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
 
         await SendFilesToAsync(SelectedKnownPeer.Ip, SelectedKnownPeer.Port, files).ConfigureAwait(true);
+    }
+
+    /// <summary>把本机剪贴板内容读进输入框（读失败就地提示，不弹错误框）。</summary>
+    [RelayCommand]
+    private void PasteText()
+    {
+        string? text = null;
+        try
+        {
+            text = ReadClipboard?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[互传] 读剪贴板失败：{ex.Message}");
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _log("[互传] ⚠️ 剪贴板里没有文本内容（读失败或为空）");
+            return;
+        }
+
+        TextToSend = text;
+        _log($"[互传] 已从剪贴板读入 {TransferText.GetCharCount(text)} 字");
+    }
+
+    /// <summary>
+    /// 发送一条文本（FT-3）。走与文件**同一套**目标解析与判据（<see cref="TransferText"/>）。
+    /// <para>
+    /// 🔴 成功后**不清空输入框**：一次发送失败（对端拒绝 / 剪贴板写失败）时用户还能直接重发，
+    /// 清空等于让人把长文本再找回来一次。代价是可能重复点发，比重打一遍轻得多。
+    /// </para>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSendText))]
+    private async Task SendText()
+    {
+        (string Ip, int Port)? target = ResolveTextTarget();
+        if (target is null)
+        {
+            _log("[互传] ⚠️ 请先选择目标设备（局域网设备或已知设备）");
+            return;
+        }
+
+        TextValidation validation = TransferText.Validate(TextToSend);
+        if (!validation.IsValid)
+        {
+            _log($"[互传] ⚠️ {validation.ErrorText}");
+            return;
+        }
+
+        try
+        {
+            TransferTask task = await _transfer
+                .SendTextAsync(TextToSend, target.Value.Ip, target.Value.Port)
+                .ConfigureAwait(true);
+            _log($"[互传] 文本已入队发送（{validation.CharCount} 字 → {target.Value.Ip}:{target.Value.Port}，任务 {task.Id}）");
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ⚠️ 文本发送失败：{ex.Message}");
+            _logger.Warn($"[互传] 文本发送失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 文本发送目标：优先「局域网设备」选中项，否则「已知设备」选中项；都没有则 null。
+    /// 与文件发送同一套取值来源，不做第二套选择逻辑。
+    /// </summary>
+    private (string Ip, int Port)? ResolveTextTarget()
+    {
+        if (SelectedDevice is not null)
+        {
+            return (SelectedDevice.Model.IPAddress.ToString(), SelectedDevice.Model.TransferPort);
+        }
+
+        if (SelectedKnownPeer is not null
+            && System.Net.IPAddress.TryParse(SelectedKnownPeer.Ip, out _)
+            && SelectedKnownPeer.Port is >= 1 and <= 65535)
+        {
+            return (SelectedKnownPeer.Ip, SelectedKnownPeer.Port);
+        }
+
+        return null;
     }
 
     // ── 任务 ──
