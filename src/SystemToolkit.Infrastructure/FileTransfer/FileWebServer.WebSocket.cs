@@ -42,6 +42,25 @@ public sealed partial class FileWebServer
     /// <summary>活跃的实时推送连接。键仅用于移除；值为连接包装（内部串行化发送）。</summary>
     private readonly ConcurrentDictionary<Guid, WsClient> _wsClients = new();
 
+    /// <summary>
+    /// 会话内容消息流水（W3 重连补拉）。只记 <c>chatMessage</c> / <c>fileOffered</c>，
+    /// **不记瞬时状态**（设备列表、在线浏览器、传输进度）—— 那些在重连时由首帧三连重新给出，
+    /// 补一条过期进度只会误导用户。理由与边界见 <see cref="WebMessageRecord"/>。
+    /// </summary>
+    private readonly List<WebMessageRecord> _messageLog = new();
+
+    /// <summary>
+    /// 流水上限（超出丢最旧）。手机要补的是"错过的几条消息"，几十条足够；
+    /// 无界增长会让一个长期运行的服务悄悄吃掉内存。
+    /// </summary>
+    private const int MaxMessageLog = 200;
+
+    /// <summary>消息序号（从 1 开始；0 保留给"不入流水"的消息，如首帧快照）。</summary>
+    private long _messageSeq;
+
+    /// <summary>流水与序号的互斥（广播可能在多个请求线程上并发发生）。</summary>
+    private readonly object _messageLogGate = new();
+
     /// <summary>设备变化订阅句柄（停止时退订，避免服务停了仍在收事件）。</summary>
     private EventHandler<DeviceChangeEventArgs>? _deviceChangedHandler;
 
@@ -213,38 +232,127 @@ public sealed partial class FileWebServer
     /// <param name="origin">消息产生方：<c>desktop</c> 或 <c>phone</c>。</param>
     /// <param name="excludeId">要排除的 WS 连接（通常为发送者自己）；可空。</param>
     /// <returns>送达的连接数。</returns>
-    private async Task<int> BroadcastChatMessageAsync(
+    private async Task<(long Seq, int Delivered)> BroadcastChatMessageAsync(
         string text, string from, string origin, Guid? excludeId)
     {
         try
         {
-            string json = BuildEnvelope("chatMessage", new
+            return await PublishAsync("chatMessage", new
             {
                 Text = text,
                 From = from,
                 Origin = origin,
                 Id = Guid.NewGuid(),
                 At = DateTimeOffset.UtcNow,
-            });
-
-            var sends = new List<Task<bool>>();
-            foreach ((Guid id, WsClient client) in _wsClients)
-            {
-                if (excludeId == id)
-                {
-                    continue;
-                }
-
-                sends.Add(client.TrySendJsonAsync(json));
-            }
-
-            bool[] results = await Task.WhenAll(sends);
-            return results.Count(static ok => ok);
+            }, excludeId);
         }
         catch (Exception ex)
         {
             _logger.Warn($"[FileWebServer] 会话消息推送失败：{ex.Message}");
-            return 0;
+            return (0, 0);
+        }
+    }
+
+    /// <summary>
+    /// 推送一条 <c>fileOffered</c>（电脑 → 手机的文件邀请，W3）。
+    /// </summary>
+    private async Task<(long Seq, int Delivered)> BroadcastFileOfferAsync(string relativePath, long size)
+    {
+        try
+        {
+            return await PublishAsync("fileOffered", new
+            {
+                Name = Path.GetFileName(relativePath),
+                Path = relativePath,
+                Size = size,
+                From = "电脑",
+                At = DateTimeOffset.UtcNow,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[FileWebServer] 文件推送失败：{ex.Message}");
+            return (0, 0);
+        }
+    }
+
+    /// <summary>
+    /// 推一条**会话内容**消息给所有浏览器，并记入补拉流水（W3）。
+    /// <para>
+    /// 🔴 为什么把"推送"与"记流水"合在同一个方法里：两者必须同时发生
+    /// —— 只推不记 = 断连的人永远补不到；只记不推 = 在线的人看不到。
+    /// 拆成两步写，迟早有人只改一半（本仓"两处各写同一判据"的老账就是这么来的）。
+    /// </para>
+    /// </summary>
+    /// <param name="type">消息类型（与前端 <c>handleWsMessage</c> 的 case 同名）。</param>
+    /// <param name="payload">负载对象（按 camelCase 序列化）。</param>
+    /// <param name="excludeId">不推给该连接（发送者自己）；**它仍会进流水**（别的标签页需要它）。</param>
+    /// <returns>本条消息的序号与真实送达连接数。</returns>
+    private async Task<(long Seq, int Delivered)> PublishAsync(string type, object payload, Guid? excludeId = null)
+    {
+        string payloadJson = JsonSerializer.Serialize(payload, WsJsonOpts);
+        long seq = AppendMessageLog(type, payloadJson);
+
+        using var doc = JsonDocument.Parse(payloadJson);
+        string json = BuildEnvelope(type, doc.RootElement, seq: seq);
+
+        var sends = new List<Task<bool>>();
+        foreach ((Guid id, WsClient client) in _wsClients)
+        {
+            if (excludeId == id)
+            {
+                continue;
+            }
+
+            sends.Add(client.TrySendJsonAsync(json));
+        }
+
+        bool[] results = await Task.WhenAll(sends);
+        return (seq, results.Count(static ok => ok));
+    }
+
+    /// <summary>把一条消息追加进补拉流水（分配序号），超出上限丢最旧。返回分配到的序号。</summary>
+    private long AppendMessageLog(string type, string payloadJson)
+    {
+        lock (_messageLogGate)
+        {
+            long seq = ++_messageSeq;
+            _messageLog.Add(new WebMessageRecord(seq, type, payloadJson, DateTimeOffset.UtcNow));
+            while (_messageLog.Count > MaxMessageLog)
+            {
+                _messageLog.RemoveAt(0);
+            }
+
+            return seq;
+        }
+    }
+
+    /// <summary>
+    /// 读取序号 &gt; <paramref name="since"/> 的流水（W3 重连补拉）。
+    /// </summary>
+    /// <param name="since">前端已收到的最大序号（0 = 首次拉取）。</param>
+    /// <returns>
+    /// 补拉消息、服务端当前最大序号、以及**是否有缺口**。
+    /// <para>
+    /// <c>Truncated</c> 的两种成因：① 请求的起点已被上限淘汰（中间少了消息）；
+    /// ② 前端记的序号**比服务端还新** —— 那是服务重启过（流水与序号都归零），不是错误。
+    /// 前端据此提示「部分历史已失效」，而不是假装什么都没发生。
+    /// </para>
+    /// </returns>
+    private (List<WebMessageRecord> Messages, long LastSeq, bool Truncated) ReadMessagesSince(long since)
+    {
+        lock (_messageLogGate)
+        {
+            long lastSeq = _messageSeq;
+            if (since >= lastSeq)
+            {
+                return (new List<WebMessageRecord>(), lastSeq, since > lastSeq);
+            }
+
+            long oldest = _messageLog.Count > 0 ? _messageLog[0].Seq : lastSeq + 1;
+            // since=0（首次拉）不算缺口：那时前端本来就没有任何历史
+            bool truncated = since > 0 && oldest > since + 1;
+            return (_messageLog.Where(m => m.Seq > since).ToList(), lastSeq, truncated);
         }
     }
 
@@ -326,7 +434,8 @@ public sealed partial class FileWebServer
     /// <summary>在线浏览器条目（序列化后为 camelCase：<c>id</c> / <c>ipAddress</c> / <c>connectedAt</c>）。</summary>
     private sealed record BrowserInfo(Guid Id, string IpAddress, DateTimeOffset ConnectedAt);
 
-    private static string BuildEnvelope(string type, object? payload, string? changeType = null)
+    private static string BuildEnvelope(
+        string type, object? payload, string? changeType = null, long? seq = null)
     {
         var envelope = new Dictionary<string, object?>
         {
@@ -336,6 +445,13 @@ public sealed partial class FileWebServer
         if (changeType is not null)
         {
             envelope["changeType"] = changeType;
+        }
+
+        // seq 只出现在**会话内容**消息上（chatMessage / fileOffered）：
+        // 前端据此去重——补拉下来的消息若已渲染过（WS 在线时先收到过），跳过即可。
+        if (seq is not null)
+        {
+            envelope["seq"] = seq.Value;
         }
 
         return JsonSerializer.Serialize(envelope, WsJsonOpts);

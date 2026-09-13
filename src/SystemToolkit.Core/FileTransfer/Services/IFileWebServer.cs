@@ -120,4 +120,22 @@ public interface IFileWebServer : IAsyncDisposable
     /// <param name="ct">取消令牌。</param>
     /// <returns>实际送达的连接数（0 = 无人在线；**不代表对方已读**，只代表帧已写出）。</returns>
     Task<int> BroadcastTextAsync(string text, CancellationToken ct = default);
+
+    /// <summary>
+    /// 把一个**共享目录内**的文件推送给所有浏览器（电脑 → 手机，W3）；WS 消息类型 <c>fileOffered</c>。
+    /// <para>
+    /// 推的是"**邀请下载**"而不是文件本身：手机端会看到一个带「下载」按钮的气泡，
+    /// 点击走既有的 <c>GET /api/files/download</c>。理由：手机浏览器无法把"推送的字节"存成文件
+    /// （没有用户手势就触发不了保存），而"推送 → 用户点 → 正常下载"既有进度条也符合浏览器安全模型。
+    /// </para>
+    /// <para>
+    /// 🔴 路径必须落在共享目录内且真实存在，否则**抛 <see cref="ArgumentException"/>**
+    /// （与 <see cref="BroadcastTextAsync"/> 同口径：拒绝而不是静默）。不校验的话，
+    /// 手机端会拿到一个点了必然 404 的气泡——用户以为文件已经在那儿了。
+    /// </para>
+    /// </summary>
+    /// <param name="relativePath">共享目录内的相对路径（如 <c>report.pdf</c> 或 <c>docs/a.txt</c>）。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <returns>实际送达的连接数（0 = 无人在线）。</returns>
+    Task<int> PublishFileOfferAsync(string relativePath, CancellationToken ct = default);
 }

@@ -1224,7 +1224,9 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
                 exclude = parsedClient;
             }
 
-            await BroadcastChatMessageAsync(text, fromIp, origin: "phone", excludeId: exclude);
+            // seq 回给前端：它把本地即时渲染的那条气泡与这个序号绑定，补拉时据此去重
+            // （否则自己发的那条会在补拉里再出现一次——流水里也有它，因为别的标签页需要看到）
+            (long seq, _) = await BroadcastChatMessageAsync(text, fromIp, origin: "phone", excludeId: exclude);
 
             // 🔴 200 的语义是「电脑已收下」，**不是「已写进剪贴板」**：是否弹确认窗、是否
             //    写剪贴板由订阅方（模块层）决定，与电脑↔电脑的确认门口径保持一致。
@@ -1244,9 +1246,34 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             return Results.Ok(new
             {
                 ok = true,
+                seq,
                 charCount = validation.CharCount,
                 byteCount = validation.ByteCount,
                 receivedAtUtcMs = args.ReceivedAt.ToUnixTimeMilliseconds(),
+            });
+        });
+
+        // ── 重连补拉（W3）：`GET /api/messages?since=<序号>` ──
+        // 🔴 为什么必须有它：手机锁屏/切后台时 WebSocket 会被系统回收，断连期间电脑发来的消息
+        // **收不到、重连也不会自动补** —— 不做补拉就是静默丢消息（违反「禁止静默失败」）。
+        // 幂等只读：可重复调用，前端在每次 WS 连上（含重连）后拉一次。
+        app.MapGet("/api/messages", (long? since) =>
+        {
+            long from = since ?? 0;
+            (List<WebMessageRecord> messages, long lastSeq, bool truncated) = ReadMessagesSince(from);
+
+            return Results.Ok(new
+            {
+                lastSeq,
+                truncated,
+                messages = messages.Select(m => new
+                {
+                    seq = m.Seq,
+                    type = m.Type,
+                    // payload 反序列化回对象再下发：与 WS 帧**同形**，前端可以用同一段渲染代码消费
+                    payload = JsonSerializer.Deserialize<JsonElement>(m.PayloadJson, WsJsonOpts),
+                    at = m.At,
+                }),
             });
         });
 
@@ -1348,8 +1375,41 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             throw new ArgumentException(validation.ErrorText, nameof(text));
         }
 
-        int delivered = await BroadcastChatMessageAsync(text, from: "电脑", origin: "desktop", excludeId: null);
+        (_, int delivered) = await BroadcastChatMessageAsync(
+            text, from: "电脑", origin: "desktop", excludeId: null);
         _logger.Info($"[Web] 已向 {delivered} 个浏览器推送文本（{validation.CharCount} 字 / UTF-8 {validation.ByteCount} 字节）。");
+        return delivered;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> PublishFileOfferAsync(string relativePath, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new ArgumentException("文件相对路径为空。", nameof(relativePath));
+        }
+
+        // 与上传/下载同一条净化链路：拒绝目录穿越与非法的相对路径
+        string? rel = SanitizeRelativePath(relativePath);
+        if (rel is null)
+        {
+            throw new ArgumentException("非法的文件路径（必须是共享目录内的相对路径）。", nameof(relativePath));
+        }
+
+        string full = Path.Combine(ShareRoot, rel);
+        if (!File.Exists(full))
+        {
+            // 🔴 提前拒绝而不是推出去：手机端会拿到一个点了必然 404 的气泡，
+            //    而用户看到气泡就以为文件已经在那儿了。宁可现在就失败得更明确。
+            throw new ArgumentException($"共享目录里找不到该文件：{rel}", nameof(relativePath));
+        }
+
+        long size = new FileInfo(full).Length;
+        (long seq, int delivered) = await BroadcastFileOfferAsync(rel, size);
+        _logger.Info(
+            $"[Web] 已将 {rel}（{size:N0} 字节）推给 {delivered} 个浏览器（序号 {seq}）。");
         return delivered;
     }
 
