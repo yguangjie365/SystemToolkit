@@ -1,0 +1,9 @@
+// CsWin32 生成清单（测试工程专用，2026-09-13）
+//
+// 用途：把 NET-6 手解的 Win32 结构体布局钉成**编译器保证**的回归锁 —— 见
+// tests/SystemToolkit.Tests/Network/LanNeighborLayoutLockTests.cs。
+// 只列布局锁需要的那一族符号，CsWin32 会连带生成 MIB_IPNET_TABLE2 等依赖类型。
+GetIpNetTable2
+FreeMibTable
+MIB_IPNET_ROW2
+MIB_IPNET_TABLE2
