@@ -61,6 +61,13 @@ Background="{DynamicResource Brush_Background}">
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
+        <!-- 安装历史行（B4-②）：内边距/分隔线写在 Style Setter 内（令牌棘轮只认令牌与 Setter） -->
+        <Style x:Key="InstallHistoryRow" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Track}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="{DynamicResource Space_XS}"/>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -484,6 +491,8 @@ Background="{DynamicResource Brush_Background}">
                 <!-- 环境档案 Tab 内容（与软件列表互斥） -->
                 <ScrollViewer x:Name="ArchivesPanel" Visibility="Collapsed"
                               VerticalScrollBarVisibility="Auto">
+                    <!-- 档案卡片 + 安装历史合装在一个 StackPanel 内：ScrollViewer 只接受一个子级 -->
+                    <StackPanel>
                     <ItemsControl ItemsSource="{Binding Archives}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -509,6 +518,56 @@ Background="{DynamicResource Brush_Background}">
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- 安装历史（B4-②，落点 A：环境档案内分区——不动 Tab 行骨架）
+                         🔴 独立存储：AppLog 零读取 API 且有保留期 + 10MB 滚动，不能当历史源 -->
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush_TextPrimary}" VerticalAlignment="Center">
+                                <Run Text="安装历史（最近 "/><Run Text="{Binding InstallHistory.Count, Mode=OneWay}"/><Run Text=" 条）"/>
+                            </TextBlock>
+                            <Button Grid.Column="1" Style="{DynamicResource RowActionButton}" Content="导出 CSV"
+                                    Command="{Binding ExportInstallHistoryCommand}"/>
+                        </Grid>
+                        <TextBlock Text="暂无安装/升级/卸载记录（成功、失败、取消、跳过都会各记一条）"
+                                   Visibility="{Binding InstallHistory.Count, Converter={StaticResource ZeroToVis}}"
+                                   Foreground="{DynamicResource Brush_TextMuted}"
+                                   FontSize="{DynamicResource Font_SizeBodySm}"/>
+                        <ItemsControl ItemsSource="{Binding InstallHistory}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource InstallHistoryRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding TimeText}" FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding ActionText}"
+                                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"
+                                                       Margin="{DynamicResource Space_XS}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBodySm}"
+                                                       Foreground="{DynamicResource Brush_TextPrimary}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding OutcomeText}"
+                                                       FontSize="{DynamicResource Font_SizeCaption}"
+                                                       Foreground="{DynamicResource Brush_TextSecondary}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </Grid>

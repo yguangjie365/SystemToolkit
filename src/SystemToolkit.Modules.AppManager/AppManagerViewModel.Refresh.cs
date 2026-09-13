@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Logging;
 using SystemToolkit.Core.Software.Services;
+using SystemToolkit.Core.Software.Models;
 
 namespace SystemToolkit.Modules.AppManager;
 
@@ -198,7 +199,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "安装", "InstallPackage", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, InstallAction.Install, "InstallPackage", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -213,7 +214,7 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "升级", "UpgradePackage", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
+        await RunPackageOperationAsync(pkg, InstallAction.Upgrade, "UpgradePackage", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
 
     [RelayCommand(CanExecute = nameof(CanOperate))]
@@ -237,13 +238,15 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        await RunPackageOperationAsync(pkg, "卸载", "UninstallPackage", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
+        await RunPackageOperationAsync(pkg, InstallAction.Uninstall, "UninstallPackage", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
     }
 
     /// <summary>单包操作公共编排：执行→结果留痕→局部状态更新（避免全量刷新导致状态集体闪变）。</summary>
-    private async Task RunPackageOperationAsync(WingetPackageVm pkg, string action, string actionKey,
+    private async Task RunPackageOperationAsync(WingetPackageVm pkg, InstallAction kind, string actionKey,
         Func<CancellationToken, Task<WingetRunResult>> run, Action markLocal)
     {
+        // 文案由枚举派生（唯一来源）：避免"安装/升级/卸载"在调用点与日志里各写一遍
+        string action = InstallHistoryLabels.ActionText(kind);
         // LOG-2：安装/升级/卸载是破坏性+长耗时操作，Action/Result/Duration 一条落齐
         LogTiming timing = _logger.Time(actionKey);
         pkg.IsBusy = true;
@@ -257,6 +260,12 @@ public partial class AppManagerViewModel
             AddLog(result.Success
                 ? $"✅ {action}完成：" + pkg.Name
                 : $"❌ {action}失败：{pkg.Name}（退出码 {result.ExitCode}）{WingetExitHint(result.ExitCode, pkg.Model.IsMsStore)}");
+            RecordInstall(
+                kind,
+                result.Success ? InstallOutcome.Success : InstallOutcome.Failed,
+                pkg,
+                exitCode: result.ExitCode,
+                detail: result.Success ? "" : WingetExitHint(result.ExitCode, pkg.Model.IsMsStore));
             timing.Complete(
                 result.Success ? LogResult.Success : LogResult.Failed,
                 result.Success ? LogLevel.Info : LogLevel.Warn,
@@ -265,12 +274,14 @@ public partial class AppManagerViewModel
         catch (OperationCanceledException)
         {
             AddLog($"{action}已取消：" + pkg.Name);
+            RecordInstall(kind, InstallOutcome.Cancelled, pkg);
             timing.Complete(LogResult.Cancelled, LogLevel.Info, $"{action}已取消：{pkg.Name}");
         }
         catch (Exception ex)
         {
             timing.Complete(LogResult.Failed, LogLevel.Error, $"{action}异常：{pkg.Name}（{pkg.Id}）", ex);
             AddLog($"{action}异常：{pkg.Name}（{ex.Message}）");
+            RecordInstall(kind, InstallOutcome.Failed, pkg, detail: ex.Message);
         }
         finally
         {

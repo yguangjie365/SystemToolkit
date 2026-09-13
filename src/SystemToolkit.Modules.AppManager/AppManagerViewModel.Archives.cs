@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.Input;
 using SystemToolkit.Core.Software.Services;
+using SystemToolkit.Core.Software.Models;
 
 namespace SystemToolkit.Modules.AppManager;
 
@@ -66,6 +67,7 @@ public partial class AppManagerViewModel
                 {
                     skip++;
                     AddLog($"  ⏭ 已忽略：{pkg.Name}（按忽略清单跳过）");
+                    RecordInstall(InstallAction.Install, InstallOutcome.Skipped, pkg, detail: "按忽略清单跳过");
                     continue;
                 }
 
@@ -78,22 +80,27 @@ public partial class AppManagerViewModel
                         ok++;
                         pkg.MarkInstalled();
                         AddLog($"  ✅ {pkg.Name}");
+                        RecordInstall(InstallAction.Install, InstallOutcome.Success, pkg);
                     }
                     else
                     {
                         fail++;
                         AddLog($"  ❌ {pkg.Name}（退出码 {result.ExitCode}）{WingetExitHint(result.ExitCode, pkg.Model.IsMsStore)}");
+                        RecordInstall(InstallAction.Install, InstallOutcome.Failed, pkg,
+                            exitCode: result.ExitCode, detail: WingetExitHint(result.ExitCode, pkg.Model.IsMsStore));
                     }
                 }
                 catch (OperationCanceledException) when (restoreCts.IsCancellationRequested)
                 {
                     AddLog($"  ⏹ 已取消：{pkg.Name}（剩余项不再执行）");
+                    RecordInstall(InstallAction.Install, InstallOutcome.Cancelled, pkg);
                     break;
                 }
                 catch (Exception ex)
                 {
                     fail++;
                     AddLog($"  ❌ {pkg.Name}（{ex.Message}）");
+                    RecordInstall(InstallAction.Install, InstallOutcome.Failed, pkg, detail: ex.Message);
                 }
                 finally
                 {

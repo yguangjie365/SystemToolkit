@@ -51,6 +51,17 @@ public partial class AppManagerView : UserControl
             };
             return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
         };
+        // 报告导出（安装历史 CSV）——单独对话框文案，避免与"导出软件清单（winget 格式）"混用
+        vm.PickReportPath = () =>
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "导出安装历史",
+                Filter = "CSV 表格 (*.csv)|*.csv",
+                FileName = $"{SystemToolkit.Core.Software.Services.InstallHistoryCsv.FileNamePrefix}{DateTime.Now:yyyyMMdd_HHmmss}.csv",
+            };
+            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        };
         // 列表编辑对话框（用户 2026-09-04：编辑功能必须有）
         vm.SoftwareEditRequest = item => SoftwareEditWindow.Show(Window.GetWindow(this), item);
         Loaded += OnViewLoaded;

@@ -7,6 +7,7 @@ using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Software.Models;
 using SystemToolkit.Core.Software.Services;
 using SystemToolkit.UI.Common;
+using SystemToolkit.Core.Utilities;
 
 namespace SystemToolkit.Modules.AppManager;
 
@@ -30,6 +31,11 @@ public partial class AppManagerViewModel : ObservableObject
     /// <summary>忽略清单（包级"永久忽略"）。🔴 判据只有 <see cref="PackageIgnoreList.IsIgnored"/> 一份。</summary>
     private PackageIgnoreList _ignoreList = new PackageIgnoreList();
 
+    private readonly InstallHistoryStore _historyStore;
+
+    /// <summary>安装历史（最新在前）。🔴 独立存储：`AppLog` 零读取 API 且有保留期 + 10MB 滚动，不能当历史源。</summary>
+    private InstallHistoryLog _history = new InstallHistoryLog();
+
     /// <summary>winget 写操作串行闸（winget 有进程级互斥锁，并发调用互相报错）。</summary>
     private readonly SemaphoreSlim _wingetGate = new(1, 1);
 
@@ -42,12 +48,14 @@ public partial class AppManagerViewModel : ObservableObject
         EnvListService env,
         IWingetClient winget,
         ILogger? logger = null,
-        PackageIgnoreStore? ignoreStore = null)
+        PackageIgnoreStore? ignoreStore = null,
+        InstallHistoryStore? historyStore = null)
     {
         _env = env;
         _winget = winget;
         _logger = logger ?? NullLogger.Instance;
         _ignoreStore = ignoreStore ?? new PackageIgnoreStore(log: AddLog);
+        _historyStore = historyStore ?? new InstallHistoryStore(log: AddLog);
         // winget 输出挂接日志面板；过滤进度刷新行（\r 回车 / \b 退格）
         _winget.OutputSink = line =>
         {
@@ -79,6 +87,9 @@ public partial class AppManagerViewModel : ObservableObject
 
     public ObservableCollection<LogLine> LogLines { get; } = new();
 
+    /// <summary>安装历史行（最新在前；供环境档案页内的「安装历史」分区展示）。</summary>
+    public ObservableCollection<InstallHistoryEntry> InstallHistory { get; } = new();
+
     /// <summary>环境档案卡片（按分类聚合的 MVP 实现）。</summary>
     public ObservableCollection<EnvironmentArchiveVm> Archives { get; } = new();
 
@@ -96,6 +107,9 @@ public partial class AppManagerViewModel : ObservableObject
 
     /// <summary>导入打开路径回调（View 注入；审查 O6）。</summary>
     public Func<string?>? PickOpenPath { get; set; }
+
+    /// <summary>导出报告（CSV）时的路径选择回调（View 注入；与清单导出的对话框文案分开）。</summary>
+    public Func<string?>? PickReportPath { get; set; }
 
     private bool CanOperate => !IsOperating && !IsRefreshing; // 审查 2026-09-04：刷新中发起写操作会撞 winget 进程互斥锁
 
@@ -214,6 +228,19 @@ public partial class AppManagerViewModel : ObservableObject
             _logger.Error("忽略清单加载失败，按空清单继续", ex);
             _ignoreList = new PackageIgnoreList();
         }
+
+        // 安装历史（独立存储）：同样移出 UI 线程；失败按空历史继续
+        try
+        {
+            _history = await Task.Run(() => _historyStore.Load()).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("安装历史加载失败，按空历史继续", ex);
+            _history = new InstallHistoryLog();
+        }
+
+        RefreshInstallHistory();
 
         StorePackages.Clear();
         ThirdPartyPackages.Clear();
@@ -371,6 +398,88 @@ public partial class AppManagerViewModel : ObservableObject
         AddLog(saved
             ? $"已忽略 {targets.Count} 个软件（不再提示其更新）。"
             : $"已忽略 {targets.Count} 个软件（⚠ 未持久化，重启后失效）。");
+    }
+
+    // ==================================================================
+    // 安装历史（B4-②）—— 在"完成点"追加，四个结果都记（成功/失败/取消/跳过）
+    // ==================================================================
+
+    /// <summary>把历史清单同步到界面集合（最新在前）。</summary>
+    private void RefreshInstallHistory()
+    {
+        InstallHistory.Clear();
+        foreach (InstallHistoryEntry entry in _history.Entries)
+        {
+            InstallHistory.Add(entry);
+        }
+    }
+
+    /// <summary>追加一条安装历史（内存 + 落盘）。落盘失败只留痕，不影响主流程（历史是补充信息）。</summary>
+    private void RecordInstall(
+        InstallAction action,
+        InstallOutcome outcome,
+        WingetPackageVm pkg,
+        int exitCode = 0,
+        string detail = "",
+        string toVersion = "")
+    {
+        var entry = new InstallHistoryEntry
+        {
+            Timestamp = DateTimeOffset.Now,
+            Action = action,
+            Outcome = outcome,
+            PackageId = pkg.Id,
+            Name = pkg.Name,
+            ToVersion = toVersion,
+            ExitCode = exitCode,
+            Detail = detail,
+        };
+
+        _history.Append(entry);
+        InstallHistory.Insert(0, entry);
+        while (InstallHistory.Count > InstallHistoryLog.MaxEntries)
+        {
+            InstallHistory.RemoveAt(InstallHistory.Count - 1);
+        }
+
+        try
+        {
+            _historyStore.Save(_history);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("保存安装历史失败", ex);
+        }
+    }
+
+    /// <summary>导出安装历史为 CSV（UTF-8 **带 BOM**：Excel 打开中文不乱码；原子写）。</summary>
+    [RelayCommand]
+    private void ExportInstallHistory()
+    {
+        if (InstallHistory.Count == 0)
+        {
+            AddLog("导出安装历史未执行：暂无记录。");
+            return;
+        }
+
+        string? path = PickReportPath?.Invoke();
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            byte[] bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+                .GetBytes(InstallHistoryCsv.Build(InstallHistory));
+            AtomicFile.WriteAllBytes(path, bytes);
+            AddLog($"已导出安装历史（{InstallHistory.Count} 条）：{path}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导出安装历史失败：" + path, ex);
+            AddLog("导出安装历史失败：" + ex.Message);
+        }
     }
 
     /// <summary>批量栏：恢复所选（取消忽略，一次落盘）。</summary>
