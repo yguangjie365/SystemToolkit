@@ -1124,6 +1124,206 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 把文件推给手机浏览器（W3c）：先确保文件在共享目录里，再发一条 <c>fileOffered</c> 邀请。
+    /// <para>
+    /// 🔴 「不在共享目录就自动复制进去」是主人 2026-09-14 的裁定：贴合"发文件给手机"的直觉，
+    /// 而且文件确实留在电脑上（手机之后还能再下载一次）。
+    /// 代价是电脑上会多一份副本 —— 这是明知的取舍，不是疏漏。
+    /// </para>
+    /// <para>
+    /// 为什么推的是"邀请"而不是字节：移动浏览器**没有用户手势就无法把字节存成文件**；
+    /// 手机端会看到一个带「下载」按钮的气泡，点击走正常的下载路径。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task SendFileToPhone()
+    {
+        // 🔴 方法体**顶层**必须有 catch：AsyncRelayCommand 会把未捕获异常吞掉或直冲 UI 线程
+        // （AsyncCommandCatchGuardTests 强制，且只认深度=1 的 catch —— 内层 foreach 里的
+        //  那个兜底不算数）。守卫是对的：本方法还会调用 View 注入的文件选择器，
+        // 那是外部回调，抛异常完全可能。
+        try
+        {
+            await SendFileToPhoneCoreAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ⚠️ 发文件到手机失败：{ex.Message}");
+            _logger.Warn($"[互传] 发文件到手机失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>「发文件到手机」的实际逻辑。与命令壳分开，只为了让顶层兜底不必重排整段缩进。</summary>
+    private async Task SendFileToPhoneCoreAsync()
+    {
+        if (_web is null)
+        {
+            _log("[互传] ⚠️ Web 通道不可用，无法发文件到手机。");
+            return;
+        }
+
+        if (!_web.IsRunning)
+        {
+            _log("[互传] ⚠️ Web 服务未启动——先在「手机访问」页开启，手机浏览器才收得到文件。");
+            return;
+        }
+
+        string shareDir = ReceiveDirectory?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(shareDir))
+        {
+            _log("[互传] ⚠️ 接收目录未设置，无法确定共享目录位置。");
+            return;
+        }
+
+        IReadOnlyList<string>? files = PickFiles?.Invoke();
+        if (files is not { Count: > 0 })
+        {
+            return;
+        }
+
+        int pushed = 0;
+        int deliveredTotal = 0;
+        foreach (string file in files)
+        {
+            string? rel = await EnsureInSharedDirectoryAsync(file, shareDir).ConfigureAwait(true);
+            if (rel is null)
+            {
+                continue; // 失败原因已在里面留痕
+            }
+
+            try
+            {
+                deliveredTotal += await _web.PublishFileOfferAsync(rel).ConfigureAwait(true);
+                pushed++;
+                _log($"[互传] 已推送文件邀请：{Path.GetFileName(rel)}");
+            }
+            catch (Exception ex)
+            {
+                _log($"[互传] ⚠️ 推送「{Path.GetFileName(rel)}」失败：{ex.Message}");
+                _logger.Warn($"[互传] 推送文件邀请失败（{rel}）：{ex.Message}");
+            }
+        }
+
+        if (pushed == 0)
+        {
+            return;
+        }
+
+        if (deliveredTotal == 0)
+        {
+            // 0 = 帧写给了 0 个连接。不代表对方已读，只代表此刻没有手机在线。
+            _log($"[互传] 已准备 {pushed} 个文件，但当前没有已连接的手机浏览器（未送达任何人）。");
+            return;
+        }
+
+        _log($"[互传] 已向 {deliveredTotal} 个手机浏览器推送 {pushed} 个文件（手机端显示为可下载气泡）。");
+    }
+
+    /// <summary>
+    /// 确保文件位于共享目录内：已在里面就原样返回；否则复制过去。
+    /// </summary>
+    /// <returns>共享目录内的**相对路径**（失败返回 <c>null</c>，原因已写日志）。</returns>
+    private async Task<string?> EnsureInSharedDirectoryAsync(string sourcePath, string shareDir)
+    {
+        try
+        {
+            string full = Path.GetFullPath(sourcePath);
+            string root = Path.GetFullPath(shareDir);
+            if (!Directory.Exists(root))
+            {
+                Directory.CreateDirectory(root);
+            }
+
+            if (!File.Exists(full))
+            {
+                _log($"[互传] ⚠️ 文件不存在：{sourcePath}");
+                return null;
+            }
+
+            // 已在共享目录内（含子目录）→ 不复制，直接用
+            if (IsInsideDirectory(root, full))
+            {
+                return Path.GetRelativePath(root, full);
+            }
+
+            string originalName = Path.GetFileName(full);
+            string target = Path.Combine(root, originalName);
+
+            // 同名冲突：沿用当前策略，但「每次询问」在这里按**改名**降级 ——
+            // 电脑侧自动推送没有"问谁"的对象（与网页端冲突策略降级口径一致）。
+            // 读生成属性而不是 _conflictPolicy 字段：MVVMTK0034 禁止直接碰 [ObservableProperty] 字段
+            TransferConflictPolicy policy = ConflictPolicy == TransferConflictPolicy.Ask
+                ? TransferConflictPolicy.Rename
+                : ConflictPolicy;
+
+            if (File.Exists(target))
+            {
+                if (policy == TransferConflictPolicy.Skip)
+                {
+                    _log($"[互传] ⚠️ 共享目录已有同名文件，按「跳过」策略未推送：{originalName}");
+                    return null;
+                }
+
+                if (policy == TransferConflictPolicy.Overwrite)
+                {
+                    _log($"[互传] 共享目录已有同名文件，按「覆盖」策略将替换：{originalName}");
+                }
+                else
+                {
+                    target = MakeUniqueTargetPath(root, originalName);
+                    _log($"[互传] 共享目录已有同名文件，自动改名为：{Path.GetFileName(target)}");
+                }
+            }
+
+            _log($"[互传] 正在复制到共享目录：{originalName} → {Path.GetFileName(target)}");
+            await using (FileStream src = new(full, FileMode.Open, FileAccess.Read, FileShare.Read,
+                bufferSize: 81920, useAsync: true))
+            await using (FileStream dst = new(target, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize: 81920, useAsync: true))
+            {
+                await src.CopyToAsync(dst).ConfigureAwait(true);
+            }
+
+            return Path.GetRelativePath(root, target);
+        }
+        catch (Exception ex)
+        {
+            _log($"[互传] ⚠️ 复制到共享目录失败：{ex.Message}");
+            _logger.Warn($"[互传] 复制到共享目录失败（{sourcePath}）：{ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 路径是否落在该目录内（含子目录）。
+    /// <para>先 <c>GetFullPath</c> 归一化，<c>..</c> 之类的相对成分在比较前就被消掉，
+    /// 因此不会被"共享目录/../机密.txt"这类路径骗过。</para>
+    /// </summary>
+    private static bool IsInsideDirectory(string root, string path)
+    {
+        string prefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>生成不冲突的目标路径：<c>a.txt</c> → <c>a (2).txt</c>…（与既有的改名口径一致）。</summary>
+    private static string MakeUniqueTargetPath(string dir, string fileName)
+    {
+        string stem = Path.GetFileNameWithoutExtension(fileName);
+        string ext = Path.GetExtension(fileName);
+        for (int i = 2; i < 1000; i++)
+        {
+            string candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return Path.Combine(dir, $"{stem} ({Guid.NewGuid():N}){ext}");
+    }
+
+    /// <summary>
     /// 文本发送目标：优先「局域网设备」选中项，否则「已知设备」选中项；都没有则 null。
     /// 与文件发送同一套取值来源，不做第二套选择逻辑。
     /// </summary>

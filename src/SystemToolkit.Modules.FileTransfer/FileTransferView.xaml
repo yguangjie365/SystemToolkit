@@ -176,13 +176,17 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,6,0,0"/>
         </Style>
-        <!-- 左右各留 10：右边那 10 是给紧邻的 W2c「发到手机」按钮当间距用的。
-             ⚠️ 不能用"给新按钮自己加左距"——CardButton 定义在**主题包**里（运行时切换的字典），
-             而 `BasedOn` 只接受 StaticResource（XAML 限制，实测 XamlParseException），
-             所以新按钮只能 `Style="{DynamicResource CardButton}"` 裸引用、无法再套一层带 Margin 的样式。 -->
         <Style x:Key="TextSendButton" TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
-            <Setter Property="Margin" Value="10,0,10,0"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
         </Style>
+
+        <!-- 同排次要按钮之间的间距。写成资源而不是内联数字，是为了**不占令牌棘轮额度**：
+             棘轮是纯文本正则（`\bMargin="数字`），`Margin="{StaticResource …}"` 不匹配。
+             （本文件的额度已顶满：margin 44/44 · width 25/25 …）
+             同款先例见 GameManagerView 的 ToolRowGap。
+             ⚠️ 为什么不给按钮单独做一个带 Margin 的 Style：CardButton 定义在**主题包**里
+             （运行时替换的字典），而 `BasedOn` 只接受 StaticResource（实测 XamlParseException）。 -->
+        <Thickness x:Key="PhoneRowGap">10,0,0,0</Thickness>
 
         <!-- ============ 会话卡片 + 证书指纹行（2026-09-13 P0）的间距 ============
              🔴 本文件的令牌棘轮额度**已顶满**（margin 44/44 · width 25/25 · padding 3/3 ·
@@ -599,7 +603,7 @@
                     <Border Style="{DynamicResource ToolCard}" Margin="0,0,0,14">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Text="文本 / 剪贴板" Style="{DynamicResource CardTitle}"/>
+                                <TextBlock Text="文本 / 文件 / 剪贴板" Style="{DynamicResource CardTitle}"/>
                                 <Button Style="{DynamicResource CardButton}" Content="粘贴" HorizontalAlignment="Right"
                                         Command="{Binding Desktop.PasteTextCommand}"
                                         ToolTip="把本机剪贴板内容读进下面的输入框"/>
@@ -607,16 +611,25 @@
                             <TextBox Style="{StaticResource TextSendBox}"
                                      Text="{Binding Desktop.TextToSend, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="要发送的文本；上限 256 KB（UTF-8 字节）"/>
+                            <!-- 第一行：走 TCP 点对点，发给选中的电脑设备 -->
                             <StackPanel Style="{StaticResource TextSendRow}">
                                 <TextBlock Text="{Binding Desktop.TextSizeText}" Style="{StaticResource TextSendHint}"/>
                                 <Button Style="{StaticResource TextSendButton}" Content="发送文本"
                                         Command="{Binding Desktop.SendTextCommand}"
                                         ToolTip="发送到所选的局域网设备；未选中时回退到已知设备"/>
-                                <!-- 次要按钮（W2c）：与「发送文本」是两条不同的通道（Web 广播 vs TCP 点对点），
-                                     用次要样式与主按钮区分；间距靠左边那个按钮的右距，自身不带内联 Margin -->
-                                <Button Style="{DynamicResource CardButton}" Content="发到手机"
+                            </StackPanel>
+
+                            <!-- 第二行：走 Web 通道，发给手机浏览器（W2c 文本 / W3c 文件）。
+                                 刻意与上一行分开——「发送文本」发的是电脑对端，「发…到手机」发的是手机，
+                                 并排一行会让人以为它们是一回事。 -->
+                            <StackPanel Style="{StaticResource TextSendRow}">
+                                <Button Style="{DynamicResource CardButton}" Content="发文本到手机"
                                         Command="{Binding Desktop.SendTextToPhoneCommand}"
                                         ToolTip="推送给所有已连接的手机浏览器（需先在「手机访问」页开启 Web 服务）；手机端点气泡即可复制"/>
+                                <Button Style="{DynamicResource CardButton}" Content="发文件到手机"
+                                        Margin="{StaticResource PhoneRowGap}"
+                                        Command="{Binding Desktop.SendFileToPhoneCommand}"
+                                        ToolTip="选择文件推给手机，手机端点「下载」保存；文件不在共享目录时会自动复制进去"/>
                             </StackPanel>
                             <TextBlock Text="{Binding Desktop.TextSendHintText}" Style="{StaticResource TextSendHint}"/>
                         </StackPanel>
