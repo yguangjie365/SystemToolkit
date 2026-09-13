@@ -22,13 +22,14 @@ public class GameManagerInventoryDisplayTests
 {
     private const string FakeCover = @"C:\fake\cover.jpg";
 
-    private static SteamInventoryGame Game(uint appId, string name, bool installed, uint stateFlags = 4) =>
+    private static SteamInventoryGame Game(uint appId, string name, bool installed, uint stateFlags = 4, ulong minutes = 0) =>
         new()
         {
             AppId = appId,
             Name = name,
             Installed = installed,
             StateFlags = stateFlags,
+            PlaytimeMinutes = minutes,
             SizeOnDisk = installed ? 1024UL * 1024 * 1024 : 0,
             InstallDir = installed ? name : string.Empty,
             LibraryPath = installed ? @"D:\SteamLibrary" : string.Empty,
@@ -236,6 +237,32 @@ public class GameManagerInventoryDisplayTests
 
             vm.ShowNotInstalled = true;
             Assert.Equal("2 款游戏 · 0 个库", vm.HeaderSubtitle);
+        });
+    }
+
+    // ==================== meta 行文本（2026-09-13 UI 评审） ====================
+
+    /// <summary>
+    /// 卡片 meta 行改用**紧凑时长**（拉丁单位，与同行的「49.9 GB」风格一致），
+    /// 而详情面板保留可读的长格式——两者必须同时成立：评审只针对卡片那一行。
+    /// </summary>
+    [Theory]
+    [InlineData(0UL, "0h", "从未游玩")]
+    [InlineData(5UL, "5m", "5 分钟")]
+    [InlineData(59UL, "59m", "59 分钟")]
+    [InlineData(60UL, "1h", "1 小时 0 分")]
+    [InlineData(3670UL, "61h10m", "61 小时 10 分")]
+    [InlineData(54710UL, "911h50m", "911 小时 50 分")]
+    public void CardMetaPlaytime_IsCompact_DetailKeepsLongFormat(
+        ulong minutes, string expectedShort, string expectedLong)
+    {
+        RunOnSta(() =>
+        {
+            GameManagerViewModel vm = NewVmWith(Game(1, "任意游戏", installed: true, minutes: minutes));
+            GameCardVm card = vm.Games[0];
+
+            Assert.Equal(expectedShort, card.PlaytimeShortText);
+            Assert.Equal(expectedLong, card.PlaytimeText);
         });
     }
 }

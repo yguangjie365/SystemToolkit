@@ -50,6 +50,27 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- 元数据行分隔圆点（2026-09-13：合并「最近游玩」进同一行后需要第二个圆点）。
+             尺寸写 Setter 内，棘轮只扫内联裸值 → 不占基线。 -->
+        <Style x:Key="MetaDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="3"/>
+            <Setter Property="Height" Value="3"/>
+            <Setter Property="Fill" Value="{DynamicResource Brush_Track}"/>
+            <Setter Property="Margin" Value="7,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- 工具行搜索框外壳（2026-09-13 UI 评审：原先内联固定宽，窄窗时与右侧排序/勾选/
+             「启动 Steam」互相挤压 → 改**弹性**）。Min/Max 前缀不匹配棘轮正则，故上下限写在 Setter 内亦合规。 -->
+        <Style x:Key="SearchBoxChrome" TargetType="Border">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="MaxWidth" Value="420"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="{DynamicResource Brush_Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius_XS}"/>
+        </Style>
 
         <!-- ============ A1 账户选择器（2026-09-13） ============ -->
         <!-- 页头账户区右侧间距（与徽章之间）。用具名 Thickness 而非 Space_*：后者四边都加会顶高整行。 -->
@@ -317,9 +338,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Border Width="320" Height="30" HorizontalAlignment="Left"
-                    Background="{DynamicResource Brush_Surface}"
-                    BorderBrush="{DynamicResource Brush_Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius_XS}">
+            <Border Grid.Column="0" Style="{StaticResource SearchBoxChrome}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
@@ -445,46 +464,18 @@
                                     </EventTrigger>
                                 </Border.Triggers>
                                 <StackPanel>
-                                    <!-- 封面（参考稿：175px 高 + 底部微遮罩 + hover 缩放 + 未安装徽章覆盖；
-                                         缺失用字母占位。header.jpg 横版优先见 SteamService.FindCoverArt 注释） -->
+                                    <!-- 封面（参考稿：175px 高 + 底部微遮罩 + 未安装徽章覆盖；
+                                         缺失用字母占位。header.jpg 横版优先见 SteamService.FindCoverArt 注释）
+                                         🔴 hover 反馈只保留**整卡上浮位移**（2026-09-13 UI 评审：位移 -5px 与封面
+                                         缩放 1.04 同时发生、时长还不一致（0.2s vs 0.35s）→ 观感"跳动"；
+                                         裁定二选一 → 去掉封面缩放，只留位移 + 边框转青）。 -->
                                     <Border Height="175" ClipToBounds="True" Background="{DynamicResource Brush_SurfaceAlt}"
                                             MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"
                                             ToolTip="点击查看详情">
-                                        <Border.Triggers>
-                                            <!-- hover 封面轻微放大（参考稿 scale 1.04，0.35s） -->
-                                            <EventTrigger RoutedEvent="Border.MouseEnter">
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="CoverImage"
-                                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                                                                         To="1.04" Duration="0:0:0.35"/>
-                                                        <DoubleAnimation Storyboard.TargetName="CoverImage"
-                                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                                                                         To="1.04" Duration="0:0:0.35"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                            <EventTrigger RoutedEvent="Border.MouseLeave">
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="CoverImage"
-                                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                                                                         To="1" Duration="0:0:0.35"/>
-                                                        <DoubleAnimation Storyboard.TargetName="CoverImage"
-                                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                                                                         To="1" Duration="0:0:0.35"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                        </Border.Triggers>
                                         <Grid>
                                             <!-- 封面经 CoverImageConverter 限宽解码（480 物理像素）+ OnLoad 释放句柄 -->
-                                            <Image x:Name="CoverImage" Source="{Binding CoverPath, Converter={StaticResource CoverImage}}" Stretch="UniformToFill" HorizontalAlignment="Center"
-                                                   RenderTransformOrigin="0.5,0.5"
+                                            <Image Source="{Binding CoverPath, Converter={StaticResource CoverImage}}" Stretch="UniformToFill" HorizontalAlignment="Center"
                                                    RenderOptions.BitmapScalingMode="HighQuality">
-                                                <Image.RenderTransform>
-                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                </Image.RenderTransform>
                                                 <Image.Style>
                                                     <Style TargetType="Image">
                                                         <Setter Property="Visibility" Value="Visible"/>
@@ -560,14 +551,16 @@
                                                    Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"
                                                    MouseLeftButtonUp="OnCardOpenDetail" Cursor="Hand"/>
 
-                                        <!-- 元数据行（参考稿：占用 · 时长 单行 mono，圆点分隔） -->
+                                        <!-- 元数据行（2026-09-13 UI 评审：占用 · 时长 · 最近游玩**合并为一行**——
+                                             原先「最近游玩」另起一行且与元数据行同为 mono 微字弱色，视觉权重无差、
+                                             白占约 17px 卡片高度。同时时长改用短格式，避免与「GB」中英混排。 -->
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                             <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding SizeOnDiskText}"/>
-                                            <Ellipse Width="3" Height="3" Fill="{DynamicResource Brush_Track}" Margin="7,0" VerticalAlignment="Center"/>
-                                            <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding PlaytimeText}"/>
+                                            <Ellipse Style="{StaticResource MetaDot}"/>
+                                            <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding PlaytimeShortText}"/>
+                                            <Ellipse Style="{StaticResource MetaDot}"/>
+                                            <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding LastPlayedText}"/>
                                         </StackPanel>
-                                        <!-- 最近游玩日期单独一行（参考稿 .card-last-played） -->
-                                        <TextBlock Style="{StaticResource CardMetaText}" Text="{Binding LastPlayedText}" Margin="0,5,0,0"/>
 
                                         <!-- 操作行（参考稿：顶部分隔线 + 两键均分等宽）。
                                              两列在**两种状态下都有键**——未安装：安装（主）+ 商店；已安装：商店 + 启动。

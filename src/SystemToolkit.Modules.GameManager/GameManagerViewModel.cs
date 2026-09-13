@@ -90,6 +90,22 @@ public partial class GameCardVm : ObservableObject
         _ => $"{Model.PlaytimeMinutes / 60:0} 小时 {(int)Model.PlaytimeMinutes % 60} 分",
     };
 
+    /// <summary>
+    /// 卡片 meta 行用的**紧凑时长**（拉丁单位，与同一行的「49.9 GB」风格一致）。
+    /// <para>
+    /// 🔴 单独一个属性而不是改 <see cref="PlaytimeText"/>：详情面板在宽敞的两列布局里显示
+    /// 「86 小时 43 分」更友好；卡片 meta 行是 mono 微字、与「GB」挤在同一行，那里才有
+    /// 「GB 与 小时/分 中英混排」的问题（2026-09-13 UI 评审）。
+    /// </para>
+    /// </summary>
+    public string PlaytimeShortText => Model.PlaytimeMinutes switch
+    {
+        0 => "0h",
+        < 60 => $"{Model.PlaytimeMinutes}m",
+        _ when Model.PlaytimeMinutes % 60 == 0 => $"{Model.PlaytimeMinutes / 60}h",
+        _ => $"{Model.PlaytimeMinutes / 60:0}h{Model.PlaytimeMinutes % 60:00}m",
+    };
+
     /// <summary>最近游玩（unix 秒 → 本地日期；从未玩过为 "—"）。</summary>
     public string LastPlayedText => Model.LastPlayed == 0
         ? "—"
@@ -766,7 +782,7 @@ public partial class GameManagerViewModel : ObservableObject
             // 在线降级不是"加载失败"，但必须让用户看见 → 状态栏转警示色（Level 1）。
             StatusLevel = data.Inventory.Error is null ? 0 : 1;
             StatusText = SteamInstalled
-                ? BuildInventoryStatusText(data.Inventory, data.Libraries.Count, ApiKeyConfigured)
+                ? BuildInventoryStatusText(data.Inventory, ApiKeyConfigured)
                 : "未检测到 Steam 客户端";
             SteamInventoryStats stats = data.Inventory.Stats;
             _logger.Info(
@@ -831,11 +847,9 @@ public partial class GameManagerViewModel : ObservableObject
     /// 同理，在线失败时必须写明"本地缓存"与原因，否则用户会以为看到的是完整库存（批次 4）。
     /// </summary>
     /// <param name="inventory">库存快照（含来源与降级原因）。</param>
-    /// <param name="libraryCount">库目录数。</param>
     /// <param name="apiKeyConfigured">是否已配置 API Key（未配置时给中性提示，不是错误）。</param>
     private static string BuildInventoryStatusText(
         SteamInventorySnapshot inventory,
-        int libraryCount,
         bool apiKeyConfigured)
     {
         SteamInventoryStats stats = inventory.Stats;
@@ -850,7 +864,8 @@ public partial class GameManagerViewModel : ObservableObject
             ? $" · 在线数据不可用：{inventory.Error}"
             : (online || apiKeyConfigured) ? string.Empty : " · 未设置 API Key（仅显示本机数据）";
 
-        return $"{head}{note} · 库 {libraryCount} 个";
+        // 「库 N 个」不在这里出现：页头副标题（HeaderSubtitle）已给，两处重复是 2026-09-13 UI 评审指出的问题
+        return $"{head}{note}";
     }
 
     /// <summary>
