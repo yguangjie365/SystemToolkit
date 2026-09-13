@@ -100,6 +100,8 @@
         chatInput: $("chatInput"),
         chatSendBtn: $("chatSendBtn"),
         chatComposerMeta: $("chatComposerMeta"),
+        // W3b：对话 Tab 上的未读角标
+        tabBadge: $("tabBadge"),
     };
 
     /* ============ 应用状态 ============ */
@@ -140,7 +142,17 @@
         activeKeys: new Set(),
         // 点「重新选择」时挂起的待续传条目（选中文件后回到 handleResumePick 校验）
         resumeTarget: null,
+        // ── W3b：消息序号与未读 ──
+        // 已渲染过的最大消息序号（重连补拉的起点，随请求发给服务端）
+        lastSeq: 0,
+        // 已渲染过的序号集合：补拉与实时推送可能交错，靠它避免同一条渲染两次
+        renderedSeqs: new Set(),
+        // 未读消息数（当前不在对话页 / 页面在后台时累计），切回对话页清零
+        unread: 0,
     };
+
+    /** 已渲染序号集合的上限：超了只留最大的若干个（seq 单调递增，老的不可能再来）。 */
+    const MAX_RENDERED_SEQS = 500;
 
     /* ============================================================
        工具函数
@@ -300,6 +312,11 @@
         dom.panels.forEach((p) => {
             p.classList.toggle("is-active", p.dataset.tab === name);
         });
+
+        // W3b：回到对话页即视为"已读"（页面不能弹系统通知，角标就是唯一的提示位）
+        if (name === "chat") {
+            clearUnread();
+        }
     }
 
     /* ============================================================
@@ -1347,6 +1364,9 @@
                 setConnStatus(true);
                 startHeartbeat();
                 showToast("已连接到服务器", "success");
+                // W3b：每次连上（含重连）都补拉一次断连期间错过的消息。
+                // 手机锁屏/切后台时 WS 会被系统回收，不补拉 = 静默丢消息。
+                fetchMissedMessages();
             });
 
             ws.addEventListener("message", (e) => {
@@ -1742,6 +1762,166 @@
         refreshChatSendState();
     }
 
+    /* ============================================================
+       W3b：电脑发来的文件 + 重连补拉 + 未读角标
+       ============================================================ */
+
+    /** 记下一条消息的序号（供补拉去重），并推进补拉起点。 */
+    function markSeqRendered(seq) {
+        if (typeof seq !== "number" || seq <= 0) return;
+        state.renderedSeqs.add(seq);
+        if (seq > state.lastSeq) {
+            state.lastSeq = seq;
+        }
+
+        // seq 单调递增 → 老序号不可能再来，超上限时只留最大的那些
+        if (state.renderedSeqs.size > MAX_RENDERED_SEQS) {
+            const keep = Array.from(state.renderedSeqs).sort((a, b) => b - a).slice(0, MAX_RENDERED_SEQS / 2);
+            state.renderedSeqs = new Set(keep);
+        }
+    }
+
+    function isSeqRendered(seq) {
+        return typeof seq === "number" && seq > 0 && state.renderedSeqs.has(seq);
+    }
+
+    /**
+     * 渲染一条消息（实时推送与补拉**共用这一个入口**）。
+     * @returns {boolean} 是否真的渲染了（未知类型返回 false，便于补拉统计）
+     */
+    function renderMessage(type, payload, seq) {
+        if (!payload) return false;
+        if (type === "chatMessage") {
+            appendTextBubble(payload, false);
+        } else if (type === "fileOffered") {
+            appendFileOfferBubble(payload);
+        } else {
+            return false;
+        }
+
+        markSeqRendered(seq);
+        return true;
+    }
+
+    /**
+     * 「电脑发来的文件」气泡：文件名 + 大小 + 「下载」按钮。
+     * <p>
+     * 为什么是"邀请下载"而不是把字节推过来：**移动浏览器没有用户手势就无法把字节存成文件**，
+     * 而"推送 → 用户点 → 走正常下载"既有进度条、也符合浏览器的安全模型。
+     * </p>
+     */
+    function appendFileOfferBubble(p) {
+        if (!dom.uploadList || !p || !p.path) return null;
+
+        const el = document.createElement("div");
+        el.className = "chat-bubble is-in chat-file";
+
+        const head = document.createElement("div");
+        head.className = "chat-bubble__head";
+        head.textContent = (p.from || "电脑") + " · " + formatClock(p.at);
+
+        const name = document.createElement("div");
+        name.className = "chat-file__name";
+        // 🔴 textContent：文件名来自电脑，一律不拼进 HTML（天然免疫 XSS）
+        name.textContent = p.name || p.path;
+
+        const size = document.createElement("div");
+        size.className = "chat-bubble__foot";
+        size.textContent = formatFileSize(p.size);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-file__download";
+        btn.textContent = "下载";
+        btn.addEventListener("click", (e) => {
+            // 别再冒泡：文件气泡没有"点一下复制"的语义
+            e.stopPropagation();
+            downloadFile({ name: p.name, relativePath: p.path });
+        });
+
+        el.appendChild(head);
+        el.appendChild(name);
+        el.appendChild(size);
+        el.appendChild(btn);
+        dom.uploadList.appendChild(el);
+        scrollChatToBottom();
+        return el;
+    }
+
+    /**
+     * 补拉断连期间错过的消息（W3）。
+     * <p>
+     * 🔴 **不做这一步就是静默丢消息**：手机锁屏/切后台时 WebSocket 会被系统回收，
+     * 而断连期间电脑发来的文本与文件邀请既收不到、重连也不会自动补
+     * （违反本仓「禁止静默失败」红线）。所以每次连上（含重连）都要拉一次。
+     * </p>
+     * <p>
+     * 幂等只读，可重复调用；用序号去重，已渲染过的不再渲染。
+     * </p>
+     */
+    async function fetchMissedMessages() {
+        if (!TOKEN) return;
+        let data;
+        try {
+            const resp = await fetch(buildUrl("/api/messages", { since: state.lastSeq }), { cache: "no-store" });
+            if (!resp.ok) return;
+            data = await resp.json();
+        } catch (e) {
+            // 补拉失败不阻断任何事（下次重连会再试）。但不静默：留一条弱提示。
+            addChatNotice("未能补收离线消息，重连后会再试", "warn");
+            return;
+        }
+
+        if (data && data.truncated) {
+            // 服务端如实告知有缺口（起点被淘汰、或它重启过）——不能假装没有遗漏
+            addChatNotice("部分历史消息已失效（电脑端只保留最近若干条）", "warn");
+        }
+
+        const list = (data && Array.isArray(data.messages)) ? data.messages : [];
+        let added = 0;
+        list.forEach((m) => {
+            if (isSeqRendered(m.seq)) return;
+            if (renderMessage(m.type, m.payload, m.seq)) {
+                added++;
+            }
+        });
+
+        if (typeof data.lastSeq === "number" && data.lastSeq > state.lastSeq) {
+            state.lastSeq = data.lastSeq;
+        }
+
+        if (added > 0) {
+            showToast("补收了 " + added + " 条离线消息", "info");
+            if (state.activeTab !== "chat" || document.hidden) {
+                bumpUnread(added);
+            }
+        }
+    }
+
+    /** 收到新消息时的未读处理：只有"当前看不到对话页"才计数（否则是在打扰）。 */
+    function maybeBumpUnread() {
+        if (state.activeTab !== "chat" || document.hidden) {
+            bumpUnread(1);
+        }
+    }
+
+    /** 未读数 +1（页面在别的 Tab 或后台时）；对话页可见时不打扰。 */
+    function bumpUnread(count) {
+        state.unread += count;
+        if (dom.tabBadge) {
+            dom.tabBadge.hidden = false;
+            dom.tabBadge.textContent = state.unread > 99 ? "99+" : String(state.unread);
+        }
+    }
+
+    function clearUnread() {
+        state.unread = 0;
+        if (dom.tabBadge) {
+            dom.tabBadge.hidden = true;
+            dom.tabBadge.textContent = "";
+        }
+    }
+
     function handleWsMessage(msg) {
         if (!msg || typeof msg !== "object") return;
         switch (msg.type) {
@@ -1793,10 +1973,24 @@
                 // 自己发的那条通常不会被推回来（服务端按 clientId 排除）；唯独 clientId 尚未
                 // 就绪时服务端认不出发送方、会广播给所有人 —— 那个窗口里要靠 isLocalEcho 去重。
                 const p = msg.payload;
-                if (p && typeof p.text === "string") {
-                    if (!state.clientId && p.origin === "phone" && isLocalEcho(p.text)) break;
-                    appendTextBubble(p, false);
+                if (!p || typeof p.text !== "string") break;
+
+                if (!state.clientId && p.origin === "phone" && isLocalEcho(p.text)) {
+                    // 不渲染，但**必须记下序号**：否则补拉时会按序号把它当成"没收到过"再渲染一遍
+                    markSeqRendered(msg.seq);
+                    break;
                 }
+
+                appendTextBubble(p, false);
+                markSeqRendered(msg.seq);
+                maybeBumpUnread();
+                break;
+            }
+            case "fileOffered": {
+                // 电脑推来的文件（W3）：落成带「下载」按钮的气泡
+                appendFileOfferBubble(msg.payload);
+                markSeqRendered(msg.seq);
+                maybeBumpUnread();
                 break;
             }
             case "serverInfo": {

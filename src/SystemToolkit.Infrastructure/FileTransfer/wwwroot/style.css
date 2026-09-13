@@ -1341,6 +1341,55 @@ a {
     color: var(--text-muted);
 }
 
+/* ============ 电脑发来的文件气泡（W3b） ============
+   与文本气泡同侧（左侧 = 别人发的），但形态不同：文件名 + 大小 + 「下载」按钮。
+   为什么是"邀请下载"而不是"直接推字节"：移动浏览器没有用户手势就无法把字节存成文件。 */
+.chat-file {
+    cursor: default; /* 它没有"点一下复制"的语义，别给用户可点的暗示 */
+}
+
+.chat-file__name {
+    font-size: var(--fs-body);
+    line-height: 1.4;
+    color: var(--text-primary);
+    /* 长文件名换行而不是撑破气泡 */
+    word-break: break-all;
+}
+
+.chat-file__download {
+    align-self: flex-start;
+    margin-top: var(--sp-sm);
+    padding: var(--sp-xs) var(--sp-lg);
+    min-height: 32px;
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    color: var(--text-on-accent);
+    background: var(--accent);
+    border-radius: var(--r-md);
+    transition: background var(--dur-fast) var(--ease-out);
+}
+
+.chat-file__download:hover { background: var(--accent-hover); }
+
+/* 未读角标：对话 Tab 上的小红点（数字） */
+.tab-bar__badge {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(6px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+    color: #FFFFFF;
+    background: var(--danger);
+    border-radius: var(--r-full);
+}
+
+.tab-bar__badge[hidden] { display: none; }
+
 /* 发送中：半透明，让"还没落地"看得见 */
 .chat-bubble.is-pending { opacity: 0.6; }
 

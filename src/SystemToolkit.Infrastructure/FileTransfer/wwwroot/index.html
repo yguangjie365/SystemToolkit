@@ -170,6 +170,9 @@
                     </svg>
                 </span>
                 <span class="tab-bar__label">对话</span>
+                <!-- 未读角标（W3b）：页面不能主动弹系统通知（移动端未授权），
+                     新消息只能在页面内提示——这是「不假装能推送」的落地方式。 -->
+                <span class="tab-bar__badge" id="tabBadge" hidden></span>
             </button>
             <button class="tab-bar__item" role="tab"
                     aria-selected="false" aria-controls="panelBrowse"
