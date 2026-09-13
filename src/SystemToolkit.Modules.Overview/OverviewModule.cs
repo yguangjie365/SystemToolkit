@@ -39,6 +39,7 @@ public sealed class OverviewModule : ModuleBase
             logger: sp.GetRequiredKeyedService<ILogger>("overview")));
         services.AddSingleton<LiveUsageSampler>();
         services.AddSingleton<QuickPulseSampler>();
+        services.AddSingleton<TopProcessSampler>();
         // 磁盘快照缓存（复用旧工程实现提取至 Core）：启动秒显，慢变量持久化
         services.AddSingleton(sp => new OverviewSnapshotCache(sp.GetRequiredKeyedService<ILogger>("overview")));
         services.AddSingleton(sp => new OverviewViewModel(
@@ -46,7 +47,8 @@ public sealed class OverviewModule : ModuleBase
             sp.GetRequiredService<LiveUsageSampler>(),
             sp.GetRequiredService<QuickPulseSampler>(),
             sp.GetRequiredService<OverviewSnapshotCache>(),
-            sp.GetRequiredKeyedService<ILogger>("overview")));
+            sp.GetRequiredKeyedService<ILogger>("overview"),
+            sp.GetRequiredService<TopProcessSampler>()));
         services.AddSingleton<OverviewView>();
     }
 }

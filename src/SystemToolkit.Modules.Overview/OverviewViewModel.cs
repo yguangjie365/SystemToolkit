@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using SystemToolkit.Abstractions;
 using SystemToolkit.Core.Contracts;
 using SystemToolkit.Core.Overview.Models;
@@ -16,6 +17,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     private readonly OverviewService _overviewService;
     private readonly LiveUsageSampler _liveSampler;
     private readonly QuickPulseSampler _quickSampler;
+    private readonly TopProcessSampler? _topSampler;
     private readonly OverviewSnapshotCache? _snapshotCache;
     private readonly ILogger _logger;
 
@@ -49,6 +51,18 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     private static readonly string[] StatNameEn = ["CPU", "GPU", "RAM", "DISK"];
     private static readonly string[] StatUsageLabels = ["使用率", "使用率", "内存使用", "存储已用"];
 
+    /// <summary>「实时占用进程」卡每个榜单的行数（行数恒定 = 卡片高度不随排序跳动）。</summary>
+    private const int TopRowCount = TopProcessSampler.DefaultTopCount;
+
+    /// <summary>榜单已有基线的说明文案。</summary>
+    private const string TopProcessLiveNote = "每 2 秒刷新";
+
+    /// <summary>
+    /// 首拍尚无 CPU 基线时的说明文案。
+    /// 🔴 不得省略、也不得改用 0% 占位——**没有证据就必须说明为什么没有**（状态诚实红线）。
+    /// </summary>
+    private const string TopProcessNoBaselineNote = "首次采样中…";
+
     /// <summary>顶部实时资源卡（4 张，参考图布局）。</summary>
     public ObservableCollection<StatCardVm> StatCards { get; } = new();
 
@@ -57,6 +71,9 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
 
     /// <summary>系统信息面板（操作系统 / 用户与区域）。</summary>
     public ObservableCollection<OverviewItem> SystemPanels { get; } = new();
+
+    /// <summary>「实时占用进程」卡的两个榜单（[0] = CPU 榜，[1] = 内存榜）。</summary>
+    public ObservableCollection<ProcessPanelVm> TopProcessPanels { get; } = new();
 
     /// <summary>已安装软件（表格数据源，受搜索过滤）。</summary>
     public ObservableCollection<InstalledProgram> InstalledPrograms { get; } = new();
@@ -83,13 +100,18 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         LiveUsageSampler liveSampler,
         QuickPulseSampler quickSampler,
         OverviewSnapshotCache? snapshotCache = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        TopProcessSampler? topSampler = null)
     {
         _overviewService = overviewService;
         _liveSampler = liveSampler;
         _quickSampler = quickSampler;
         _snapshotCache = snapshotCache;
         _logger = logger ?? NullLogger.Instance;
+        // 新增参数一律排在末尾并给默认值：既有装配点与测试用位置参数调用，插在中间会静默错位
+        _topSampler = topSampler;
+        TopProcessPanels.Add(new ProcessPanelVm("\uE950", "CPU 占用最高", "CPU"));
+        TopProcessPanels.Add(new ProcessPanelVm("\uE964", "内存占用最高", "内存"));
         ExportReportCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ExportReport);
         // 审查 🟠-2：采集中禁用全量刷新（CommunityToolkit RelayCommand 经 CommandManager 自动重询）
         RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync(), () => !_busy);
@@ -222,6 +244,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             RebuildFromData(data);
             HeaderSubtitle = BuildHeaderSubtitle();
             UpdateLiveMetrics();
+            await RefreshTopProcessAsync().ConfigureAwait(true); // 先建立 CPU 基线，2s 后第一拍就有真实占用
             _snapshotCache?.Save(data); // 全量采集成功即刷新快照（失败仅留痕，不影响主流程）
         }
         catch (Exception ex)
@@ -248,14 +271,19 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         Busy = true;
         try
         {
-            // 性能审查 P1-8：两路采样并行（原串行叠加拖长节拍）
+            // 性能审查 P1-8：多路采样并行（原串行叠加拖长节拍）
             Task<UsageSample?> liveTask = _liveSampler.SampleAsync();
             Task<QuickSample?> quickTask = _quickSampler.SampleAsync(includeDisk: false);
-            await Task.WhenAll(liveTask, quickTask).ConfigureAwait(true);
+            // B7①：Top 进程与其它两路并行；采样器缺席（测试装配 / 降级）时用已完成任务占位
+            Task<TopProcessSnapshot?> topTask = _topSampler is null
+                ? Task.FromResult<TopProcessSnapshot?>(null)
+                : _topSampler.SampleAsync();
+            await Task.WhenAll(new Task[] { liveTask, quickTask, topTask }).ConfigureAwait(true);
             // After WhenAll, both tasks are already completed: the double await is a synchronous continuation (AsyncGuard forbids reading the Result property)
             UsageSample? live = await liveTask.ConfigureAwait(true);
             // 审查 2026-09-04（P2）：磁盘活动率不展示（用户实测反馈），免掉每 2s 一条的 WMI 查询
             QuickSample? quick = await quickTask.ConfigureAwait(true);
+            ApplyTopProcess(await topTask.ConfigureAwait(true));
 
             SetStat("处理器", live?.CpuPercent);
             SetStat("显卡", live?.GpuPercent);
@@ -422,6 +450,72 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             card.Percent = percent;
         }
     }
+
+    /// <summary>
+    /// 补采一次 Top 进程并落面板。目的：进入页面时先建立 CPU 基线，
+    /// 使 2 秒后第一拍就给出真实占用（否则要等两拍才有数字）。
+    /// </summary>
+    private async Task RefreshTopProcessAsync()
+    {
+        if (_topSampler is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ApplyTopProcess(await _topSampler.SampleAsync().ConfigureAwait(true));
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("概览 Top 进程采样失败：" + ex);
+        }
+    }
+
+    /// <summary>
+    /// 把一次 Top 进程采样结果贴到面板上。
+    /// 采样失败（null）时**保留上一拍内容**：2 秒一次的瞬时失败不该把卡片清成"没有进程"。
+    /// </summary>
+    private void ApplyTopProcess(TopProcessSnapshot? snapshot)
+    {
+        if (snapshot is null || TopProcessPanels.Count < 2)
+        {
+            return;
+        }
+
+        ProcessPanelVm cpuPanel = TopProcessPanels[0];
+        ProcessPanelVm memoryPanel = TopProcessPanels[1];
+
+        // 🔴 无基线（首拍）时如实说明 CPU 列为何为空——不拿 0% 冒充测量结果
+        cpuPanel.Note = snapshot.HasCpuBaseline ? TopProcessLiveNote : TopProcessNoBaselineNote;
+        FillTopRows(cpuPanel, snapshot.CpuTop, static row => FormatCpuPercent(row.CpuPercent));
+
+        memoryPanel.Note = TopProcessLiveNote;
+        FillTopRows(memoryPanel, snapshot.MemoryTop, static row => FormatBytes(row.WorkingSetBytes));
+    }
+
+    /// <summary>填榜单：固定 <see cref="TopRowCount"/> 行，不足补空行（卡片高度恒定）。</summary>
+    private static void FillTopRows(ProcessPanelVm panel, IReadOnlyList<ProcessUsageRow> rows, Func<ProcessUsageRow, string> formatValue)
+    {
+        panel.Rows.Clear();
+        for (int i = 0; i < TopRowCount; i++)
+        {
+            panel.Rows.Add(i < rows.Count
+                ? new ProcessRowVm(
+                    (i + 1).ToString(CultureInfo.InvariantCulture),
+                    rows[i].Name,
+                    rows[i].Pid.ToString(CultureInfo.InvariantCulture),
+                    formatValue(rows[i]))
+                : ProcessRowVm.Empty);
+        }
+    }
+
+    /// <summary>CPU 占比文本；null（无基线）显示破折号，绝不显示 0%。</summary>
+    private static string FormatCpuPercent(double? percent) =>
+        percent is { } value ? value.ToString("0.0", CultureInfo.InvariantCulture) + "%" : "—";
+
+    /// <summary>内存容量文本（复用既有字节格式化，口径与硬件卡一致）。</summary>
+    private static string FormatBytes(long bytes) => OverviewFormat.Bytes((ulong)Math.Max(0L, bytes));
 
     /// <summary>
     /// 更新概览卡右上角温度徽章。

@@ -344,6 +344,67 @@
 
             <StackPanel Style="{StaticResource SectionHeader}">
                 <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="实时占用进程" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
+                </StackPanel>
+                <TextBlock Text="TOP PROCESSES" FontSize="{DynamicResource Font_SizeMicro}" Margin="17,1,0,0" Style="{DynamicResource MonoText}"/>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding TopProcessPanels}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{DynamicResource CardBorder}" Padding="16" Margin="0,0,12,14">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_Accent}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Label}" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Note}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="18"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="70"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="1" Text="进程" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"/>
+                                    <TextBlock Grid.Column="2" Text="PID" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" TextAlignment="Right"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding ValueHeader}" FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}" TextAlignment="Right"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1" Padding="0,4">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="18"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="72"/>
+                                                        <ColumnDefinition Width="70"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Rank}" FontSize="{DynamicResource Font_SizeMicro}" Style="{DynamicResource MonoText}" Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" Foreground="{DynamicResource Brush_TextPrimary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Pid}" FontSize="{DynamicResource Font_SizeMicro}" Style="{DynamicResource MonoText}" Foreground="{DynamicResource Brush_TextMuted}" TextAlignment="Right" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="3" Text="{Binding Value}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" Foreground="{DynamicResource Brush_TextPrimary}" TextAlignment="Right" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Style="{StaticResource SectionHeader}">
+                <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="{DynamicResource Font_SizeTiny}" Foreground="{DynamicResource Brush_SuccessText}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <TextBlock Text="已安装软件" FontSize="{DynamicResource Font_SizeTitle}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
                 </StackPanel>

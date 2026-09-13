@@ -1,10 +1,10 @@
 {
   "src/SystemToolkit.Modules.Overview/OverviewView.xaml": {
-    "margin": 29,
-    "padding": 7,
-    "width": 14,
+    "margin": 35,
+    "padding": 9,
+    "width": 20,
     "height": 11,
-    "border": 3,
+    "border": 4,
     "stroke": 0
   },
   "src/SystemToolkit.Modules.AppManager/AppManagerView.xaml": {
