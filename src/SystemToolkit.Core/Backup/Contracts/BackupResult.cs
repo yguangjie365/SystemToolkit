@@ -1,3 +1,5 @@
+using SystemToolkit.Core.Backup.Services;
+
 namespace SystemToolkit.Core.Backup.Contracts;
 
 /// <summary>单条备份规则的执行结果汇总（成功状态、计数、校验状态与失败明细）。</summary>
@@ -26,6 +28,14 @@ public sealed class BackupResult
 
     /// <summary>面向用户展示的结果说明文本（成功/部分成功/失败/取消）。</summary>
     public string Message { get; init; } = "";
+
+    /// <summary>
+    /// 备份完成后的**读回校验**报告（抽样或全量）。B5a。
+    /// 🔴 为什么需要它：复制阶段算的是**源**哈希（见 <c>BackupService.CopyAndVerifyAsync</c> 的
+    /// "写入字节即源字节"注释），**目标盘是否真的写对从未被验证** —— 这份报告是唯一的证据。
+    /// 校验未执行（按设置关闭 / 被取消 / 异常）时为 null，**调用方不得据此认为"已通过"**。
+    /// </summary>
+    public SnapshotVerifyReport? VerifyReport { get; init; }
 
     /// <summary>失败条目明细列表（相对路径 + 失败原因）。</summary>
     public List<string> Failures { get; init; } = new List<string>();

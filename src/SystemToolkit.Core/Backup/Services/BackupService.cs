@@ -173,7 +173,6 @@ public sealed class BackupService : IBackupService
 
             // 部分成功模式：有失败文件时仍写入快照，标记为 failed
             bool isPartial = failures.Count > 0;
-            string checksumStatus = isPartial ? ChecksumStatuses.Failed : ChecksumStatuses.Passed;
 
             // 写快照元数据；失败时保留已复制数据供人工处理（不删目录）
             var info = new SnapshotInfo
@@ -188,10 +187,23 @@ public sealed class BackupService : IBackupService
                 FileCount = entries.Count,
                 TotalSize = totalSize,
                 Status = isPartial ? SnapshotStatuses.Failed : SnapshotStatuses.Success,
-                ChecksumStatus = checksumStatus,
                 Files = entries,
                 EmptyDirs = scan.EmptyDirs,
             };
+
+            // 🔴 B5a：备份完成后的**读回校验**——复制阶段算的是**源**哈希，目标是否真的写对
+            //    从未被验证（见 CopyAndVerifyAsync 的"写入字节即源字节"注释）；
+            //    这里读回目标逐条比对，复用 SnapshotVerifier 同一判据（不另写一份校验实现）。
+            SnapshotVerifyReport? verify = await RunPostBackupVerifyAsync(info, snapDir, maxWorkers, ct, log).ConfigureAwait(false);
+
+            // 状态诚实化：**只有全量通过才写 passed**；抽样通过 / 未校验写 skipped（不谎报）；
+            // 复制有失败或校验未通过一律 failed。
+            string checksumStatus = isPartial || verify is { Success: false }
+                ? ChecksumStatuses.Failed
+                : verify is { Success: true, IsSampled: false }
+                    ? ChecksumStatuses.Passed
+                    : ChecksumStatuses.Skipped;
+            info.ChecksumStatus = checksumStatus;
             try
             {
                 snapMgr.WriteSnapshot(snapDir, info);
@@ -211,6 +223,7 @@ public sealed class BackupService : IBackupService
                     TotalSize = totalSize,
                     ChecksumStatus = checksumStatus,
                     Message = $"备份数据已复制但元数据写入失败（快照已保留待人工处理）：{ex.Message}",
+                    VerifyReport = verify,
                     Failures = [ex.Message],
                 };
             }
@@ -237,6 +250,7 @@ public sealed class BackupService : IBackupService
                     TotalSize = totalSize,
                     ChecksumStatus = checksumStatus,
                     Message = $"备份部分成功：成功 {entries.Count} 个，失败 {failures.Count} 个",
+                    VerifyReport = verify,
                     Failures = failures,
                 };
             }
@@ -250,7 +264,8 @@ public sealed class BackupService : IBackupService
                 SnapshotDir = snapDir,
                 FileCount = entries.Count,
                 TotalSize = totalSize,
-                ChecksumStatus = ChecksumStatuses.Passed,
+                ChecksumStatus = checksumStatus,
+                VerifyReport = verify,
                 Message = $"备份成功：{entries.Count} 个文件",
             };
         }
@@ -297,6 +312,60 @@ public sealed class BackupService : IBackupService
                 Message = $"备份失败：{ex.Message}",
                 Failures = [ex.Message],
             };
+        }
+    }
+
+    /// <summary>
+    /// 备份完成后的读回校验（B5a）。按设置决定抽样 / 全量 / 关闭。
+    /// 🔴 **任何取消与异常都不阻断备份结果**（备份数据已经落盘，不该因为"没能校验"而报失败），
+    /// 但一律**留痕**（日志 + 回传 null = 未校验），绝不静默当"通过"。
+    /// </summary>
+    private async Task<SnapshotVerifyReport?> RunPostBackupVerifyAsync(
+        SnapshotInfo info,
+        string snapDir,
+        int maxWorkers,
+        CancellationToken ct,
+        Action<string>? log)
+    {
+        int sample = _config.Settings.VerifyAfterBackupSampleSize;
+        if (sample < 0)
+        {
+            log?.Invoke("⚠️ 已按设置跳过备份后完整性校验：无法证明目标文件写对，校验状态记为 skipped");
+            return null;
+        }
+
+        try
+        {
+            int files = info.Files?.Count ?? 0;
+            log?.Invoke(sample == 0
+                ? $"开始读回校验全部 {files} 个文件（完整性证据）…"
+                : $"开始读回抽样校验（最多 {sample}/{files} 个文件）…");
+
+            var verifier = new SnapshotVerifier(maxWorkers, _logger);
+            SnapshotVerifyReport report = await verifier
+                .VerifyAsync(info, snapDir, null, ct, sample)
+                .ConfigureAwait(false);
+
+            log?.Invoke(report.Success
+                ? "完整性校验：" + report.Message
+                : "⚠️ 完整性校验未通过：" + report.Message);
+            if (!report.Success)
+            {
+                _logger.Warn($"备份后完整性校验未通过：{info.SnapshotId} {report.Message}");
+            }
+
+            return report;
+        }
+        catch (OperationCanceledException)
+        {
+            log?.Invoke("⚠️ 备份后完整性校验已取消：本次备份未取得完整校验证据（状态记为 skipped）");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"备份后完整性校验未能完成：{ex.Message}");
+            log?.Invoke("⚠️ 备份后完整性校验未能完成（状态记为 skipped）：" + ex.Message);
+            return null;
         }
     }
 

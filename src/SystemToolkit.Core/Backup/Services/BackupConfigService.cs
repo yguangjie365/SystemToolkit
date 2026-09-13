@@ -18,6 +18,14 @@ public sealed class BackupAppSettings
     public int MaxWorkers { get; set; } = 4;
 
     /// <summary>
+    /// 备份完成后自动**读回校验**的抽样条数：<c>0</c> = 全量（最可信，IO 翻倍）、
+    /// <c>-1</c> = 关闭、<c>&gt;0</c> = 抽样（默认 <b>200</b>：成本可控，足以抓"系统性写坏"）。
+    /// 🔴 抽样通过**不等于**完整校验 —— 此时状态写 <c>skipped</c> 并在报告里写明"未做完整校验"，
+    /// 绝不谎报 <c>passed</c>；需要完整结论请用「校验快照」（手动全量）。
+    /// </summary>
+    public int VerifyAfterBackupSampleSize { get; set; } = 200;
+
+    /// <summary>
     /// 恢复时的默认冲突处理策略（2026-09-07 新增，对齐旧版 AppSettings.RestoreConflictPolicy）。
     /// 取值见 <see cref="SystemToolkit.Core.Backup.Contracts.ConflictPolicy"/>：
     /// ask / overwrite / rename / skip；非法值一律钳回 rename。

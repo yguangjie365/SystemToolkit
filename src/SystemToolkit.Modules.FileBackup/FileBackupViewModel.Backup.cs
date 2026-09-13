@@ -135,6 +135,26 @@ public partial class FileBackupViewModel
                 Log("[备份]   ✗ " + failure);
             }
 
+            // B5a：备份后的读回校验报告。🔴 未通过必须**显式告警**，不能只落在日志里
+            if (result.VerifyReport is { } verify)
+            {
+                Log(verify.Success ? $"[备份] 完整性校验：{verify.Message}" : $"[备份] ⚠️ 完整性校验未通过：{verify.Message}");
+                foreach (string failure in verify.Failures.Take(10))
+                {
+                    Log("[备份]   ✗ " + failure);
+                }
+
+                if (!verify.Success)
+                {
+                    _logger.Warn($"备份完整性校验未通过：{rule.RuleName} {verify.Message}");
+                }
+            }
+            else
+            {
+                Log("[备份] ⚠️ 本次未取得完整性校验证据（按设置关闭 / 被取消 / 校验未能完成）——"
+                    + "快照状态为 skipped，如需完整结论请用「校验快照」");
+            }
+
             _logger.Info($"备份完成：{rule.RuleName} success={result.Success} files={result.FileCount}");
             return result.Success;
         }

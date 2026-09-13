@@ -18,13 +18,27 @@ public sealed record SnapshotVerifyReport(
     int Missing,
     IReadOnlyList<string> Failures)
 {
-    /// <summary>全部一致（无缺失、无不一致）为通过。</summary>
+    /// <summary>本次**实际校验**的文件数（抽样时小于 <see cref="Total"/>）。</summary>
+    public int Checked { get; init; }
+
+    /// <summary>是否为抽样校验（只查了部分文件）。</summary>
+    public bool IsSampled => Checked > 0 && Checked < Total;
+
+    /// <summary>
+    /// 本次校验的样本是否全部一致。
+    /// 🔴 **抽样时它只代表"样本通过"**，不代表快照整体完整——文案必须写清（见 <see cref="Message"/>）。
+    /// 把抽样结果当"校验通过"报出去属于**状态欺骗**，本仓明令禁止。
+    /// </summary>
     public bool Success => Failed == 0 && Missing == 0;
 
-    /// <summary>人类可读摘要。</summary>
+    /// <summary>人类可读摘要（抽样必须显式声明"未做完整校验"）。</summary>
     public string Message => Success
-        ? $"校验通过（{Ok}/{Total} 个文件哈希一致）"
-        : $"校验未通过（一致 {Ok}、不一致 {Failed}、缺失 {Missing}，共 {Total}）";
+        ? IsSampled
+            ? $"抽样校验通过（已查 {Checked}/{Total}，未做完整校验）"
+            : $"校验通过（{Ok}/{Total} 个文件哈希一致）"
+        : IsSampled
+            ? $"抽样校验未通过（一致 {Ok}、不一致 {Failed}、缺失 {Missing}，已查 {Checked}/{Total}）"
+            : $"校验未通过（一致 {Ok}、不一致 {Failed}、缺失 {Missing}，共 {Total}）";
 }
 
 /// <summary>
@@ -51,12 +65,18 @@ public sealed class SnapshotVerifier
     /// <summary>
     /// 校验快照：<paramref name="snapshotDir"/> 下 <c>files</c> 子目录内文件与
     /// <paramref name="info"/> 清单逐条比对（哈希 + 存在性）。
+    /// <para>
+    /// <c>sampleSize</c>：抽样条数——<c>0</c> 或 ≥ 清单总数表示**全量**，<c>&gt;0</c> 表示只校验
+    /// <see cref="SelectSample"/> 确定性抽取的子集（抽样结果的语义与文案见
+    /// <see cref="SnapshotVerifyReport.IsSampled"/>：抽样通过**不等于**完整校验）。
+    /// </para>
     /// </summary>
     public async Task<SnapshotVerifyReport> VerifyAsync(
         SnapshotInfo info,
         string snapshotDir,
         IProgressReporter? reporter = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int sampleSize = 0)
     {
         ArgumentNullException.ThrowIfNull(info);
         if (string.IsNullOrWhiteSpace(snapshotDir))
@@ -67,12 +87,14 @@ public sealed class SnapshotVerifier
         string filesDir = Path.Combine(snapshotDir, SnapshotManager.FilesDir);
         List<FileEntry> entries = info.Files ?? new List<FileEntry>();
         int total = entries.Count;
+        List<FileEntry> toCheck = SelectSample(entries, sampleSize);
+        int planned = toCheck.Count;
         int ok = 0, failed = 0, missing = 0;
         var failures = new List<string>();
         int done = 0;
 
         await Parallel.ForEachAsync(
-            entries,
+            toCheck,
             new ParallelOptions { MaxDegreeOfParallelism = _maxWorkers, CancellationToken = ct },
             (entry, token) =>
             {
@@ -125,7 +147,7 @@ public sealed class SnapshotVerifier
                     }
                 }
 
-                if (reporter is not null && (index % ReportEvery == 0 || index == total))
+                if (reporter is not null && (index % ReportEvery == 0 || index == planned))
                 {
                     reporter.OnProgress(index, total, "校验");
                 }
@@ -133,8 +155,30 @@ public sealed class SnapshotVerifier
                 return ValueTask.CompletedTask;
             }).ConfigureAwait(false);
 
-        var report = new SnapshotVerifyReport(total, ok, failed, missing, failures);
+        var report = new SnapshotVerifyReport(total, ok, failed, missing, failures) { Checked = planned };
         _logger.Info($"快照校验：{info.SnapshotId} {report.Message}");
         return report;
+    }
+
+    /// <summary>
+    /// 确定性抽样：按固定步长从清单里取至多 <paramref name="sampleSize"/> 条
+    /// （<paramref name="sampleSize"/> ≤ 0 或 ≥ 总数时返回全量）。
+    /// 刻意**不用随机**：同一份清单每次取到同一批样本——问题可复现、单测可钉实现。
+    /// </summary>
+    internal static List<FileEntry> SelectSample(List<FileEntry> entries, int sampleSize)
+    {
+        if (sampleSize <= 0 || sampleSize >= entries.Count)
+        {
+            return entries;
+        }
+
+        var picked = new List<FileEntry>(sampleSize);
+        double step = (double)entries.Count / sampleSize;
+        for (int i = 0; i < sampleSize; i++)
+        {
+            picked.Add(entries[(int)(i * step)]);
+        }
+
+        return picked;
     }
 }
