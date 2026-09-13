@@ -38,18 +38,31 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="CardActionButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-            <Setter Property="Padding" Value="8,3"/>
+        <!-- ============ 操作行按钮（卡片 + 详情面板共用，唯一维护点） ============
+             2026-09-13 主人二次反馈「三键完全齐整，详情面板也一样」。原先：主键走 `PrimaryButton`
+             （FontSize 12 / Padding 14,7 / 无描边），副键走 `CardActionButton` 或 `DetailActionButton`
+             （FontSize 10 / Padding 8,3 / 1px 描边）——**字号、内边距、高度三项都不同**，并排自然不成套。
+             两套数值现已对齐：
+               FontSize  = Font_SizeBodySm(12) —— 与应用其它按钮一致（PrimaryButton/SecondaryButton 都是 12）
+               FontWeight= Bold（前一轮实机反馈要求）
+               Padding   = 14,7（主副一致）
+               MinHeight = 32；⚠️ **不能写 30**：副键多 1px 描边（上下各 1）→ 内容比主键高 2px，
+                 写 30 会得到「副键 32 / 主键 30」依旧不等；32 ≥ 两者内容高（≈29.5 / ≈31.5）→ 双双抬到 32。
+             ⚠️ **不能直接改 UI.Common 的 PrimaryButton / SecondaryButton** —— 那是全应用共享样式，
+             改它会把所有模块的按钮一起改掉。故此处派生局部样式。 -->
+        <Style x:Key="ActionPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,7"/>
             <Setter Property="MinWidth" Value="0"/>
-            <!-- 2026-09-13 实机反馈：卡片操作行三键（商店页面 / 安装 / 启动）字体统一加粗 -->
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="MinHeight" Value="32"/>
         </Style>
-        <!-- 卡片主键（安装 / 启动）：与上面副键（商店页面）同字重。
-             ⚠️ 不能直接改 UI.Common 的 PrimaryButton —— 那是全应用共享样式，改它会把所有模块的
-             主键一起加粗。故此处派生局部样式，只作用于卡片操作行。 -->
-        <Style x:Key="CardPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+        <Style x:Key="ActionSecondaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodySm}"/>
             <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="32"/>
         </Style>
         <!-- 卡片元数据文本（HTML .meta-item：mono 微字弱色） -->
         <Style x:Key="CardMetaText" TargetType="TextBlock">
@@ -195,13 +208,8 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
-        <!-- 操作键：与卡片操作键同一观感（micro 字号 + 紧凑内边距）；危险键复用 Brush_Danger* 语义色 -->
-        <Style x:Key="DetailActionButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-            <Setter Property="Padding" Value="8,3"/>
-            <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="MinHeight" Value="30"/>
-        </Style>
+        <!-- 详情面板操作键原为独立样式 `DetailActionButton`（micro + 紧凑内边距）——2026-09-13 与卡片
+             操作键合并为上面的 `ActionSecondaryButton` / `ActionPrimaryButton`，删掉本地的重复定义。 -->
         <!-- ============ B2 未安装显示（2026-09-13） ============
              尺寸一律走 Style Setter / 具名 Thickness：本文件 Width / BorderThickness / StrokeThickness
              裸值已顶满 UiTokenRatchet 基线，内联数字字面量会直接变红。
@@ -572,20 +580,20 @@
                                                         Command="{Binding DataContext.OpenStoreCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}">
                                                     <Button.Style>
-                                                        <Style TargetType="Button" BasedOn="{StaticResource CardActionButton}">
+                                                        <Style TargetType="Button" BasedOn="{StaticResource ActionSecondaryButton}">
                                                             <Setter Property="Margin" Value="0,0,4,0"/>
                                                         </Style>
                                                     </Button.Style>
                                                 </Button>
                                                 <!-- 安装引导（批次 4 · B3）：未安装游戏的唯一闭环动作。
                                                      点击调 steam://install/<appid>，交给 Steam 弹安装向导（本程序不下载）。 -->
-                                                <Button Grid.Column="1" Style="{StaticResource CardPrimaryButton}" Content="安装" Margin="4,0,0,0"
+                                                <Button Grid.Column="1" Style="{StaticResource ActionPrimaryButton}" Content="安装" Margin="4,0,0,0"
                                                         Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}"
                                                         AutomationProperties.Name="安装此游戏"
                                                         Command="{Binding DataContext.InstallGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
                                                 <!-- 已安装：启动（对应副键恒为「商店页面」；打开安装目录在详情面板内） -->
-                                                <Button Grid.Column="1" Style="{StaticResource CardPrimaryButton}" Content="启动" Margin="4,0,0,0"
+                                                <Button Grid.Column="1" Style="{StaticResource ActionPrimaryButton}" Content="启动" Margin="4,0,0,0"
                                                         Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}"
                                                         Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
@@ -824,11 +832,11 @@
                                 <!-- 操作区：一主 + 三次（主人裁定）。五个命令全是页面既有命令，参数 = SelectedGame，
                                      批次 4 只新增了 InstallGame —— 与卡片同口径 -->
                                 <Border Style="{StaticResource DetailDivider}" Margin="{DynamicResource Space_MD}"/>
-                                <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
+                                <Button Style="{StaticResource ActionPrimaryButton}" Margin="{DynamicResource Space_XXS}"
                                         Content="启动" Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                         Command="{Binding LaunchGameCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 <!-- 安装引导（B3）：未安装游戏的唯一闭环动作（安装在主键位、与已安装态的「启动」同位） -->
-                                <Button Style="{DynamicResource PrimaryButton}" MinHeight="34" Margin="{DynamicResource Space_XXS}"
+                                <Button Style="{StaticResource ActionPrimaryButton}" Margin="{DynamicResource Space_XXS}"
                                         Content="安装" Visibility="{Binding SelectedGame.IsNotInstalled, Converter={StaticResource BoolToVis}}"
                                         AutomationProperties.Name="安装此游戏"
                                         Command="{Binding InstallGameCommand}" CommandParameter="{Binding SelectedGame}"/>
@@ -843,7 +851,7 @@
                                     <Button Content="商店页面"
                                             Command="{Binding OpenStoreCommand}" CommandParameter="{Binding SelectedGame}">
                                         <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource DetailActionButton}">
+                                            <Style TargetType="Button" BasedOn="{StaticResource ActionSecondaryButton}">
                                                 <Setter Property="Margin" Value="{DynamicResource Space_XXS}"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding SelectedGame.IsInstalled}" Value="False">
@@ -853,7 +861,7 @@
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <Button Grid.Column="1" Style="{StaticResource DetailActionButton}" Content="打开目录" Margin="{DynamicResource Space_XXS}"
+                                    <Button Grid.Column="1" Style="{StaticResource ActionSecondaryButton}" Content="打开目录" Margin="{DynamicResource Space_XXS}"
                                             Visibility="{Binding SelectedGame.IsInstalled, Converter={StaticResource BoolToVis}}"
                                             Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedGame}"/>
                                 </Grid>
