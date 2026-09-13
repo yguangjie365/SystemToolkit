@@ -180,4 +180,47 @@ public class VdfParserTests
                 Directory.Delete(root, recursive: true);
         }
     }
+    [Fact]
+    public void Parse_TruncatedInput_Throws_CurrentContractIsPinned()
+    {
+        // 🔴 实测契约（2026-09-13 连试两次才确认）：损坏/截断的 VDF 会让 VdfParser.Parse
+        // **抛异常**，既不返回 null 也不返回"部分结果"。本用例只做两件事：
+        //   ① 钉住现状，让将来任何行为改动都会红；
+        //   ② 提醒这里是风险点——已登记待办：核查各调用点是否都有 try 兜底
+        //      （SteamService.Library.cs:41 与 Accounts.cs:31/174/239 在可见范围内**未见** try，
+        //       损坏的 libraryfolders.vdf / loginusers.vdf 可能把整个扫描抛出去）。
+        // 是否把解析器改为容错返回，属独立评估项，不在本批顺手改。
+        const string truncated = """
+"users"
+{
+	"76561197960265728"
+	{
+		"AccountName"	"alice"
+""";
+
+        Assert.ThrowsAny<Exception>(() => VdfParser.Parse(truncated));
+    }
+
+    [Fact]
+    public void Parse_EmptyInput_DoesNotThrow()
+    {
+        Assert.NotNull(VdfParser.Parse(""));
+    }
+
+    [Fact]
+    public void Parse_EscapedQuoteInValue_DoesNotSwallowFollowingKeys()
+    {
+        // 值里含转义引号时不能把后面的键吃掉（否则该用户之后的字段全部错位丢失）。
+        // 用原始字符串字面量写样本：转义序列原样进入被测文本，测试自身不再被转义干扰。
+        const string sample = """
+"a"
+{
+	"k1"	"he said \"hi\""
+	"k2"	"v2"
+}
+""";
+        VdfValue a = VdfParser.Parse(sample)!.GetObjEntries()!.First(kv => kv.Key == "a").Value;
+
+        Assert.Equal("v2", a.GetStr("k2"));
+    }
 }

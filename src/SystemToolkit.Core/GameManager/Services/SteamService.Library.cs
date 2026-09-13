@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Runtime.Versioning;
 using SystemToolkit.Core.GameManager.Models;
 
+using SystemToolkit.Core.GameManager.Cover;
+
 namespace SystemToolkit.Core.GameManager.Services;
 
 /// <summary>
@@ -193,6 +195,40 @@ public sealed partial class SteamService
 
     private static readonly HttpClient CoverHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
 
+    /// <summary>默认失败记忆（惰性初始化）——测试可注入自己的实例，避免共享静态状态。</summary>
+    private static readonly Lazy<CoverFailureMemory> LazyCoverFailures = new(() => new CoverFailureMemory());
+
+    /// <summary>默认失败记忆实例（生产路径用）。</summary>
+    internal static CoverFailureMemory DefaultCoverFailures => LazyCoverFailures.Value;
+
+    /// <summary>
+    /// **封面 CDN 候选链（显式化：顺序即优先级）** —— 从原内联列表提出，便于单测钉住顺序与内容。
+    /// <list type="number">
+    /// <item>appinfo 给出的相对路径（可能带 hash 子目录）——最准，优先</item>
+    /// <item>新域固定 <c>header.jpg</c>（460×215 横版，贴合卡片比例）</item>
+    /// <item>新域竖版 <c>library_600x900.jpg</c></item>
+    /// <item>新域旧路径（不含 <c>store_item_assets</c> 段）</item>
+    /// <item>旧域保底（截至 2026-09-13 实测 404，留着以防 Steam 回退）</item>
+    /// </list>
+    /// </summary>
+    internal static List<string> BuildCoverCdnUrls(uint appId, string? headerImageSuffix)
+    {
+        const string SharedBase = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/";
+        string id = appId.ToString(CultureInfo.InvariantCulture);
+        var urls = new List<string>(5);
+        if (!string.IsNullOrWhiteSpace(headerImageSuffix))
+        {
+            // 已带 hash 子目录的相对路径：原样拼接（不要另加 header.jpg）
+            urls.Add(SharedBase + id + "/" + headerImageSuffix);
+        }
+
+        urls.Add($"{SharedBase}{id}/header.jpg");
+        urls.Add($"{SharedBase}{id}/library_600x900.jpg");
+        urls.Add($"https://shared.fastly.steamstatic.com/steam/apps/{id}/header.jpg");
+        urls.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{id}/header.jpg");
+        return urls;
+    }
+
     /// <summary>
     /// 本地无封面时从 Steam 官方 CDN 下载到应用缓存目录。
     /// <para>
@@ -215,14 +251,21 @@ public sealed partial class SteamService
     /// <c>appinfo.common.header_image</c> 给出的相对路径（可空）——形如 <c>header.jpg</c>
     /// 或 <c>{hash}/header.jpg</c>。空/缺省时退化为固定候选。
     /// </param>
+    /// <param name="failures">
+    /// 失败记忆（缺省用进程级默认实例）。命中记忆的候选**直接跳过**——
+    /// 候选链里有已知必然失败的项（旧域 404），不记忆则每次刷新都要把整条链重试一遍。
+    /// 只记确定性失败且带 TTL，见 <see cref="CoverFailureMemory"/>。
+    /// </param>
     public static async Task<string?> EnsureCoverFromCdnAsync(
         string cacheDir,
         uint appId,
         CancellationToken ct = default,
-        string? headerImageSuffix = null)
+        string? headerImageSuffix = null,
+        CoverFailureMemory? failures = null)
     {
         if (appId == 0)
             return null;
+        CoverFailureMemory memory = failures ?? DefaultCoverFailures;
         try
         {
             string target = Path.Combine(cacheDir, appId + ".jpg");
@@ -230,28 +273,30 @@ public sealed partial class SteamService
                 return target;
 
             Directory.CreateDirectory(cacheDir);
-            const string SharedBase = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/";
-            var urls = new List<string>(5);
-            if (!string.IsNullOrWhiteSpace(headerImageSuffix))
-            {
-                // 已带 hash 子目录的相对路径：原样拼接（不要另加 header.jpg）
-                urls.Add(SharedBase + appId.ToString(CultureInfo.InvariantCulture) + "/" + headerImageSuffix);
-            }
-
-            string id = appId.ToString(CultureInfo.InvariantCulture);
-            urls.Add($"{SharedBase}{id}/header.jpg");
-            urls.Add($"{SharedBase}{id}/library_600x900.jpg");
-            urls.Add($"https://shared.fastly.steamstatic.com/steam/apps/{id}/header.jpg");
-            // 旧域保底：截至 2026-09-13 实测 404，留着以防 Steam 回退，成本只有一次 404
-            urls.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{id}/header.jpg");
+            List<string> urls = BuildCoverCdnUrls(appId, headerImageSuffix);
 
             foreach (string url in urls)
             {
+                // 失败记忆命中即跳过（只记确定性失败 + 带 TTL，见 CoverFailureMemory）
+                if (memory.IsFailed(url, DateTimeOffset.Now))
+                {
+                    continue;
+                }
+
                 try
                 {
                     using HttpResponseMessage resp = await CoverHttp.GetAsync(url, ct).ConfigureAwait(false);
                     if (!resp.IsSuccessStatusCode)
+                    {
+                        // 🔴 只记"资源确实不在了"（404/410）；超时/5xx 不记——
+                        //    否则一次网络抖动会演变成一整天的封面缺失
+                        if (CoverFailureMemory.ShouldRemember((int)resp.StatusCode))
+                        {
+                            memory.MarkFailed(url, $"HTTP {(int)resp.StatusCode}", DateTimeOffset.Now);
+                        }
+
                         continue;
+                    }
 
                     byte[] bytes = await resp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
                     // 防误存：CDN 偶尔回退到 32×32 图标或空体——尺寸过小不落盘
@@ -261,6 +306,7 @@ public sealed partial class SteamService
                     // 🟡 审查 2026-09-10（🟡-16）：改原子写（唯一 tmp + Move 覆盖）——
                     // 直写目标时若中断会留下半截 jpg，且下次因"文件已存在"不再重下。
                     SystemToolkit.Core.Utilities.AtomicFile.WriteAllBytes(target, bytes);
+                    memory.ClearFailed(url);
                     return target;
                 }
                 catch (OperationCanceledException)
