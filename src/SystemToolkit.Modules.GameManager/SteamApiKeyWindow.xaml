@@ -27,14 +27,24 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style x:Key="TitleBar" TargetType="Border">
-            <Setter Property="Padding" Value="16,12"/>
-            <Setter Property="Background" Value="{DynamicResource Brush_DarkSurface}"/>
+            <!-- 横向内边距 = 正文的 Space_LG，让标题文字与下方标签、✕ 与右下角按钮**左右对齐** -->
+            <Setter Property="Padding" Value="24,12"/>
+            <!-- 🔴 标题行**不铺底色**：铺任何底色都会在圆角上留下方角（子元素不会被父 Border 的
+                 CornerRadius 裁切），而仓内没有「上圆下平」的圆角令牌（`Radius_XLLgTopFlat` 实为
+                 0,0,12,12 = 上平下圆，是给页脚用的）。改用**底部细线**做分隔。 -->
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush_Border}"/>
+            <!-- 细线写在 Setter 内：棘轮只匹配内联 `BorderThickness="数字`，Setter 的 Value 不算裸值 -->
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
         </Style>
         <Style x:Key="TitleBarCloseButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
             <Setter Property="MinWidth" Value="26"/>
             <Setter Property="MinHeight" Value="24"/>
             <Setter Property="Padding" Value="8,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <!-- ✕ 是细笔画字符，默认字号下会细到看不清（截图确认）→ 放大 + 加粗 -->
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeBodyLg}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
         </Style>
         <Style x:Key="DialogButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
             <Setter Property="MinHeight" Value="30"/>
@@ -93,18 +103,22 @@
 需要在 Steam「隐私设置 → 游戏详情」设为公开；否则官方接口返回空列表，页面会自动退回本地数据并说明原因。</TextBlock>
                 </Border>
 
-                <Grid Margin="{DynamicResource Space_SM}">
+                <!-- 🔴 竖排（URL 文案一行、按钮一行）：原先两者放在**同一个 Grid 格**里，
+                     实机截图确认 URL 被按钮压住、尾段看不见——同格叠放必然互相覆盖。 -->
+                <StackPanel Margin="{DynamicResource Space_SM}">
                     <TextBlock Foreground="{DynamicResource Brush_TextMuted}"
                                FontSize="{DynamicResource Font_SizeCaption}"
-                               VerticalAlignment="Center">
+                               TextTrimming="CharacterEllipsis">
                         <Run Text="获取地址："/>
                         <Run Text="steamcommunity.com/dev/apikey" FontFamily="{DynamicResource Font_Mono}"/>
                     </TextBlock>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                Margin="{DynamicResource Space_SM}">
+                        <!-- 「清除」只在**确实存过 Key** 时出现：禁用态在本主题下是一个文字几乎不可见的
+                             白框幽灵（截图确认），不如直接隐藏——没有可清的东西时它本就不该占位。 -->
                         <Button x:Name="ClearButton" Style="{StaticResource DialogButton}"
                                 Margin="{DynamicResource Space_XS}"
                                 Content="清除" Click="OnClearClick"
-                                ToolTipService.ShowOnDisabled="True"
                                 ToolTip="清除本机保存的 Key（点击后立即生效）"
                                 AutomationProperties.Name="清除 API Key"/>
                         <Button Style="{StaticResource DialogButton}"
@@ -115,7 +129,7 @@
                                 Content="保存" Click="OnSaveClick" IsDefault="True"
                                 AutomationProperties.Name="保存"/>
                     </StackPanel>
-                </Grid>
+                </StackPanel>
             </StackPanel>
         </StackPanel>
     </Border>

@@ -18,12 +18,14 @@ public partial class SteamApiKeyWindow : Window
 {
     /// <summary>构造。</summary>
     /// <param name="currentKeyConfigured">
-    /// 是否已保存过 Key（决定「清除」是否可用）。**不回显 Key 本身**——窗口拿不到明文。
+    /// 是否已保存过 Key（决定「清除」是否出现）。**不回显 Key 本身**——窗口拿不到明文。
     /// </param>
     public SteamApiKeyWindow(bool currentKeyConfigured)
     {
         InitializeComponent();
-        ClearButton.IsEnabled = currentKeyConfigured;
+        // 没有可清的东西就不显示「清除」：禁用态在本主题下是文字几乎不可见的白框（实机截图确认），
+        // 比隐藏更让人困惑（"这里有个空按钮"）。
+        ClearButton.Visibility = currentKeyConfigured ? Visibility.Visible : Visibility.Collapsed;
         Loaded += (_, _) => KeyBox.Focus();
     }
 
