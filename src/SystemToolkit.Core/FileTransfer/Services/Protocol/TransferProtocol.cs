@@ -86,7 +86,24 @@ public enum TransferMessageType
     /// <summary>文件数据分片。</summary>
     Chunk,
 
-    /// <summary>分片确认：接收方确认已写入。</summary>
+    /// <summary>
+    /// 分片确认：接收方确认已写入。
+    /// <para>
+    /// 🔴 <b>设计预留，当前协议**不采用**逐分片确认</b>（2026-09-14 v8 审查 🟡-12 核实结论）：
+    /// 本成员属原始协议的 8 个消息类型之一（见 <c>Docs/30-模块设计/05-文件互传模块详细设计.md</c>
+    /// 的"Protocol 2 文件（TransferMessage 8 消息类型）"），但实现侧选了另一套可靠性模型 ——
+    /// <b>断点位置由 <see cref="HandshakeAck"/> 在握手时给出</b>、
+    /// <b>完整性由 <see cref="CompleteAck"/> 携带全文件 SHA-256 校验</b>，
+    /// 故逐分片回执既无生产者也无消费者（全 <c>src/</c> 零引用，实测 2026-09-14）。
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>刻意保留而非删除</b>：它是已对外声明的协议面（<c>JsonStringEnumConverter</c> 按名序列化，
+    /// 删掉会让将来对端发来的该类型反序列化失败）。保留的同时用注释消除"静默丢弃"的歧义，
+    /// 并由 <c>ProtocolMessageTypeCoverageGuardTests</c> 钉住"无引用必须在预留清单里"。
+    /// </para>
+    /// <para>若将来真要做逐分片确认（例如弱网大文件），改这里是**起点不是终点**：
+    /// 需同时补发送侧处理分支、接收侧回执点，以及该守卫的预留清单移除。</para>
+    /// </summary>
     ChunkAck,
 
     /// <summary>传输完成：发送方通知所有分片已发送。</summary>
