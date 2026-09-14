@@ -119,7 +119,12 @@ Background="{DynamicResource Brush_Background}">
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="GroupItem">
-                                                <Expander IsExpanded="False" Style="{DynamicResource ThemedExpander}" Background="Transparent">
+                                                <!-- 🔴 2026-09-15 实机反馈修复：分组头此前只渲染出一个箭头
+                                                     （ThemedExpander 少了 Header 绑定，已在该控件修复）。
+                                                     此处显式 IsExpanded="True" —— 与修复前的「全部展开」
+                                                     视觉一致，避免用户只看到组名、以为驱动包不见了。
+                                                     若想默认折叠成「目录」，把 True 改成 False 即可。 -->
+                                                <Expander IsExpanded="True" Style="{DynamicResource ThemedExpander}" Background="Transparent">
                                                     <Expander.Header>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
