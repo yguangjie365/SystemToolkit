@@ -74,26 +74,19 @@ public partial class AppManagerViewModel
                     return;
                 }
 
-                var newVm = new WingetPackageVm(new WingetPackage
+                // V11-A1：改走建行工厂 —— 此前此处手写了一段与 HookSelectionCounter 等价的订阅
+                //（原 🟡-9 重复），且同样漏了忽略命令挂接与忽略态回写；工厂收口后重复代码一并消失。
+                WingetPackageVm newVm = CreateRow(new WingetPackage
                 {
                     Id = item.Id,
                     Name = item.Name,
                     Description = item.Version,
                     Category = "其他",
                     Source = "winget",
-                })
-                {
-                    // 安装成功即为已安装：局部标记（仍在写闸门内，RefreshStates 的 IsOperating 守卫会拦截）
-                };
+                });
+                // 安装成功即为已安装：局部标记（仍在写闸门内，RefreshStates 的 IsOperating 守卫会拦截）
                 newVm.MarkInstalled();
                 ThirdPartyPackages.Add(newVm);
-                newVm.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName == nameof(WingetPackageVm.IsSelected))
-                    {
-                        SelectedCount = StorePackages.Count(p => p.IsSelected) + ThirdPartyPackages.Count(p => p.IsSelected);
-                    }
-                };
                 PersistAll();
                 RebuildArchives();
                 SearchQuery = "";

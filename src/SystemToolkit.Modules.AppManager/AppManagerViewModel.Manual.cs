@@ -109,8 +109,9 @@ public partial class AppManagerViewModel
             if (index >= 0)
             {
                 // 审查 2026-09-04（P1-2）：替换行 VM 必须重挂勾选计数订阅，否则编辑后该行勾选不计数
-                var replacement = new WingetPackageVm(package);
-                HookSelectionCounter(replacement);
+                // V11-A1：改走建行工厂（勾选计数 + 忽略命令 + 忽略态回写三件套一处收口）——
+                // 此前只挂计数，漏了忽略命令与忽略态：编辑一个**已忽略**的软件后该行会从「已忽略」视图消失
+                WingetPackageVm replacement = CreateRow(package);
                 list[index] = replacement;
                 RecountSelection(); // 审查 O1：旧行若已勾选，替换后必须回算
             }
@@ -466,8 +467,9 @@ public partial class AppManagerViewModel
             ThirdPartyPackages.Clear();
             foreach (WingetPackage item in catalog.Winget)
             {
-                var vm = new WingetPackageVm(item);
-                HookSelectionCounter(vm); // 审查 M3：ImportList 此前漏挂，导入后勾选计数永久为 0
+                // V11-A1：改走建行工厂（勾选计数 + 忽略命令 + 忽略态回写）——审查 M3 的"导入后勾选计数
+                // 永久为 0"与同处遗漏的忽略命令挂接，均由工厂一处根治
+                WingetPackageVm vm = CreateRow(item);
                 if (item.IsMsStore)
                 {
                     StorePackages.Add(vm);

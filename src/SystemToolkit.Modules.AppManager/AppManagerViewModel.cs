@@ -246,11 +246,7 @@ public partial class AppManagerViewModel : ObservableObject
         ThirdPartyPackages.Clear();
         foreach (WingetPackage item in catalog.Winget)
         {
-            var vm = new WingetPackageVm(item);
-            HookSelectionCounter(vm);
-            HookIgnore(vm);
-            // 候选版本传 null：本轮 UI 只提供"永久忽略"，故只有永久条目会命中
-            vm.IsIgnored = _ignoreList.IsIgnored(vm.Id, vm.Model.Source, null);
+            WingetPackageVm vm = CreateRow(item);
             if (item.IsMsStore)
             {
                 StorePackages.Add(vm);
@@ -315,6 +311,32 @@ public partial class AppManagerViewModel : ObservableObject
 
     /// <summary>挂接行内忽略命令（ContextMenu 回不到页 VM → 命令必须在项 VM 上）。</summary>
     private void HookIgnore(WingetPackageVm vm) => vm.HookIgnore(IgnoreSingle, UnignoreSingle);
+
+    /// <summary>
+    /// 🔴 **建行工厂**（V11-A1）—— 新建 <see cref="WingetPackageVm"/> 行的**唯一**入口。
+    /// <para>
+    /// 三件套缺一不可：① 勾选计数订阅（<see cref="HookSelectionCounter"/>）；
+    /// ② 忽略命令挂接（<see cref="HookIgnore"/>）—— 漏挂则右键「永久忽略」**可点但静默无操作**
+    /// （<c>IgnoreCommand</c> 走空条件调用 <c>_ignoreRequest?.Invoke(this)</c>：无日志、无写入）；
+    /// ③ 忽略态回写（<see cref="WingetPackageVm.IsIgnored"/>）—— 漏写则编辑一个**已忽略**的软件后，
+    /// 该行从「已忽略」视图消失（而忽略清单里其实还在），用户视角＝"我没取消忽略，它却不见了"。
+    /// </para>
+    /// <para>
+    /// 四处建行（<c>LoadAsync</c> / <c>EditSoftware</c> / <c>ImportList</c> /
+    /// <c>InstallSearchResultAsync</c>）此前各写各的，除 <c>LoadAsync</c> 外全漏了 ②③；
+    /// 且全仓**无任何测试构造 <c>WingetPackageVm</c>**，故既有 1600+ 条测试一条都抓不到。
+    /// 今后**任何**建行都必须走本方法（回归锁见 <c>AppManagerIgnoreRowTests</c>）。
+    /// </para>
+    /// </summary>
+    private WingetPackageVm CreateRow(WingetPackage package)
+    {
+        var vm = new WingetPackageVm(package);
+        HookSelectionCounter(vm);
+        HookIgnore(vm);
+        // 候选版本传 null：本轮 UI 只提供"永久忽略"，故只有永久条目会命中
+        vm.IsIgnored = _ignoreList.IsIgnored(vm.Id, vm.Model.Source, null);
+        return vm;
+    }
 
     /// <summary>写入/移除一条忽略记录并（可选）落盘。</summary>
     private bool SetIgnore(WingetPackageVm vm, bool ignored, bool persist = true)
