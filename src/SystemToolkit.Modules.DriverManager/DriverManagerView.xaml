@@ -257,8 +257,11 @@ Background="{DynamicResource Brush_Background}">
                                 ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /add-driver /install：加入 Driver Store 并安装到匹配设备（经提权通道）"/>
                         <Button Style="{DynamicResource CompactActionButton}" Content="备份向导…"
                                 Command="{Binding RunBackupCommand}" ToolTipService.ShowOnDisabled="True" ToolTip="pnputil /export-driver + manifest/devices/checksum"/>
+                        <!-- 🟡 V12-D4（2026-09-14）：本按钮**常置禁用**（V0.3-C 未实装），
+                             必须 ShowOnDisabled —— 否则 ToolTip 永不可见、用户只看到一块灰按钮。
+                             与上方三个兄弟按钮的写法保持一致。 -->
                         <Button Style="{DynamicResource CompactActionButton}" Content="恢复向导…" IsEnabled="False"
-                                ToolTip="V0.3-C：HardwareId + 机器指纹匹配恢复"/>
+                                ToolTipService.ShowOnDisabled="True" ToolTip="V0.3-C：HardwareId + 机器指纹匹配恢复"/>
                         <TextBlock Text="提示：点击任意行可查看该驱动包详情"
                                    FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextMuted}"
                                    TextWrapping="Wrap"/>

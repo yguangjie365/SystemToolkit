@@ -17,7 +17,9 @@ public partial class PathInputWindow : Window
     public static string? Show(Window owner, string title, string defaultValue)
     {
         var window = new PathInputWindow(title, defaultValue) { Owner = owner };
-        return window.ShowDialog() == true ? window.InputBox.Text : null;
+        // 🟡 V12-F6（2026-09-14）：Trim 落在**唯一的出口**上 —— 摘要一直承诺"已 Trim"，
+        // 实现却原样返回（调用方若自己 Trim，同一契约就有两处实现，迟早不一致）。
+        return window.ShowDialog() == true ? window.InputBox.Text.Trim() : null;
     }
 
     private void OnAddClick(object sender, RoutedEventArgs e) => DialogResult = true;

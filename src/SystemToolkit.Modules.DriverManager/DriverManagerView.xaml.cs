@@ -78,9 +78,12 @@ public partial class DriverManagerView : UserControl
         double surplus = viewport - checkboxCol - dateCol - nameWidth;
         if (surplus > 0)
         {
-            gv.Columns[2].Width = 80 + surplus * 0.20;              // 提供商
+            // 🟡 V12-D5（2026-09-14）：三列比例**合计 1.0**（0.20 + 0.15 + 0.65）—— 原为
+            // 0.20 + 0.15 + 0.35 = 0.70，剩余 30% 无处安放 ⇒ 列表右端永远留一条空白。
+            // 余量并入「设备/状态」（信息量最大的一列），比例契约写在注释里防再漂。
+            gv.Columns[2].Width = 80 + surplus * 0.20;              // 提供商（比例合计 1.0）
             gv.Columns[3].Width = 90 + surplus * 0.15;              // 版本
-            gv.Columns[5].Width = 150 + surplus * 0.35;             // 设备/状态
+            gv.Columns[5].Width = 150 + surplus * 0.65;             // 设备/状态（吃下全部余量）
         }
         else
         {
