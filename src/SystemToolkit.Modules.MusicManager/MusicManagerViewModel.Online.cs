@@ -556,7 +556,7 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        int seq = ++_playlistSeq; // 🟠-7
+        int seq = Interlocked.Increment(ref _playlistSeq); // 🟠-7  // v11~v14 后续批次：与同类 4 处统一为原子自增
         IsLoadingPlaylists = true;
         try
         {
@@ -713,7 +713,7 @@ public partial class MusicManagerViewModel
         OpenPlaylist = row.Playlist;
         OnPropertyChanged(nameof(ViewTitle));
         PlaylistFilterText = string.Empty; // 换歌单即清空上一次的站内搜索
-        int seq = ++_playlistTracksSeq; // 🔴-2：连点两个歌单时，A 的迟到结果不得覆盖 B
+        int seq = Interlocked.Increment(ref _playlistTracksSeq); // 🔴-2：连点两个歌单时，A 的迟到结果不得覆盖 B  // v11~v14 后续批次：与同类 4 处统一为原子自增
         // 审查 F-02：取曲目失败要可见（登录过期/网络/接口变更），不能 Task Faulted 静默
         try
         {
@@ -856,7 +856,7 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        int seq = ++_recommendSeq; // 🔴-2：推荐区代际（与切平台 / 榜单刷新共用同一个号）
+        int seq = Interlocked.Increment(ref _recommendSeq); // 🔴-2：推荐区代际（与切平台 / 榜单刷新共用同一个号）  // v11~v14 后续批次：与同类 4 处统一为原子自增
         IsLoadingRecommendations = true;
         try
         {
@@ -1287,7 +1287,7 @@ public partial class MusicManagerViewModel
 
         // 🟠 审查 2026-09-11（🟠-3）：进入"检测中"——View 据此显示"检测中…"并禁用，
         // 避免已登录用户在网络慢时看到"登录"按钮而重复点击。
-        int seq = ++_loginCheckSeq;
+        int seq = Interlocked.Increment(ref _loginCheckSeq);  // v11~v14 后续批次：与同类 4 处统一为原子自增
         IsCheckingLogin = true;
         try
         {

@@ -24,6 +24,9 @@ public sealed class OnlineLoginWindow : Window
     private Microsoft.Web.WebView2.Wpf.WebView2? _webView;
     private bool _completed;
 
+    /// <summary>Cookie 轮询连续失败计数（仅用于"稳定失败"留痕一次，见 PollCookiesAsync）。</summary>
+    private int _pollFailures;
+
     private OnlineLoginWindow(OnlineProvider provider)
     {
         _provider = provider;
@@ -192,9 +195,20 @@ public sealed class OnlineLoginWindow : Window
                 Complete(string.Join("; ", matched));
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 轮询失败（导航中/WebView 未就绪）静默重试；窗口仍在，用户可手动关闭
+            // 轮询失败（导航中 / WebView 未就绪）属预期，静默重试；窗口仍在，用户可手动关闭。
+            // 🟠 v11~v14 后续批次：单次失败可以静默，但**稳定失败**（cookie 站点被 WAF 拦、
+            // CookieManager 异常）会让窗口永远停在"正在加载…"且零留痕。第 10 次
+            //（≈15s，PollIntervalMs=1500）落一条 Warn，但**不关窗**（不阻断用户手动操作）。
+            _pollFailures++;
+            if (_pollFailures == 10)
+            {
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "music",
+                    $"登录窗 Cookie 轮询连续失败 {_pollFailures} 次（窗口仍在等待，用户可手动关闭）：{ex.Message}", ex,
+                    action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
+            }
         }
     }
 

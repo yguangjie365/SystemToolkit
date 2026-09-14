@@ -584,9 +584,12 @@ public partial class MusicManagerView : UserControl
     /// <summary>歌词高亮行变化 → 自动滚动到当前行（右栏跟随播放）。</summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        // 🟡 v11~v14 后续批次：原先把 IsPlaying 拆成两处独立 if（:587 与 :608），
+        // 同一属性两处分支易在后续修改时只改一处 ⇒ 合并。两个动作无依赖，顺序无关。
         if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
         {
             UpdateDiscSpin();
+            SetKaraokeRenderHook(_vm.IsPlaying); // P0：播放→挂 60fps 填充钩子；暂停/停→摘
         }
 
         // P3a：历史被清空（HasSearchHistory→false）时收起浮层，避免留一个空壳
@@ -603,11 +606,6 @@ public partial class MusicManagerView : UserControl
         if (e.PropertyName == nameof(MusicManagerViewModel.IsImmersionStyle))
         {
             UpdateRippleFieldActive();
-        }
-
-        if (e.PropertyName == nameof(MusicManagerViewModel.IsPlaying))
-        {
-            SetKaraokeRenderHook(_vm.IsPlaying); // P0：播放→挂 60fps 填充钩子；暂停/停→摘
         }
 
         if (e.PropertyName == nameof(MusicManagerViewModel.LyricProgress)
@@ -666,15 +664,19 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
-        _initialized = true;
         try
         {
             await _vm.InitializeAsync();
+            // 🟡 v11~v14 后续批次：_initialized 原先在 await **之前**置位 ⇒ 初始化失败后
+            // 切走再回来（Loaded 再次触发）会直接 return、**永不重试**，用户只能重启应用。
+            // 改为只在成功后置位（InitializeAsync 内部幂等：LoadAsync 是读操作、
+            // WireEngineOnce 有原子抢占 ⇒ 重复调用只浪费一次 IO，无副作用）。
+            _initialized = true;
         }
         catch (Exception ex)
         {
             // 🔴 初始化失败显式可见（曲库文件 IO 异常等），不让 Dispatcher 吞掉
-            _vm.ReportInitError($"曲库初始化失败：{ex.Message}");
+            _vm.ReportInitError($"曲库初始化失败：{ex.Message}（切走再回来会重试）");
         }
     }
 
