@@ -108,7 +108,11 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     public System.Windows.Data.ListCollectionView InstalledAppsView => _installedView;
 
     /// <summary>导出 Markdown 报告（2026-09-04 实装：SaveFileDialog + OverviewReportBuilder）。</summary>
-    public System.Windows.Input.ICommand ExportReportCommand { get; }
+    /// <remarks>🟡 H-🟡-5 v11~v14 后续批次：原子写下移线程池（网络盘不冻 UI）⇒ 命令改异步，
+    /// 类型同步由 <c>ICommand</c> 收窄为 <c>AsyncRelayCommand</c>（与 <see cref="RefreshFullCommand"/>
+    /// 同一纪律：若留 ICommand，将来有人换回同步 RelayCommand 不会被编译期挡住）。
+    /// WPF 绑定按属性名运行时求值，对 XAML 无影响。</remarks>
+    public CommunityToolkit.Mvvm.Input.AsyncRelayCommand ExportReportCommand { get; }
 
     /// <summary>手动全量刷新（审查 M2：页头刷新图标按钮此前无命令绑定，纯死交互；
     /// RefreshFullAsync 内部有 _busy 闸门防重入）。</summary>
@@ -146,7 +150,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         _tcpTable = tcpTable;
         HealthPanels.Add(new HealthPanelVm("\uE968", "网络连接（本机）"));
         HealthPanels.Add(new HealthPanelVm("\uE958", "磁盘健康"));
-        ExportReportCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ExportReport);
+        ExportReportCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(ExportReportAsync);
         // 审查 🟠-2：采集中禁用全量刷新（V14-O1：谓词读 _busy，故 Busy setter 必须显式
         // NotifyCanExecuteChanged —— 8.4.2 **没有** CommandManager 兜底，见 Busy setter 注释）
         RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync(), () => !_busy);

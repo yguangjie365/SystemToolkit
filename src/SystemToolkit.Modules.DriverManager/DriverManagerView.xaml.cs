@@ -75,6 +75,16 @@ public partial class DriverManagerView : UserControl
         gv.Columns[1].Width = nameWidth;                            // 驱动包/类别
         gv.Columns[4].Width = dateCol;                              // 日期
 
+        // 🟡 B-🟡-2（两批审查，**本批不动宽度**，先把分析写实）：
+        //   本 ListView 同时挂了 `GridViewColumnSizing.AutoFillLastColumn`（XAML :87）与
+        //   本方法（XAML :92 的 SizeChanged）——**两个处理器争抢末列 Columns[5]**，后订阅者获胜。
+        //   按当前算式的实测结果：六列总宽 = viewport + 320（三列最小值 80+90+150 未从 surplus 扣除），
+        //   而 XAML 里 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+        //   ⇒ 若本方法胜出，末列右侧约 320px 被裁掉且**无法横向滚动**。
+        // 正解（待真机确认后落地）：surplus 改为
+        //   `viewport - checkboxCol - dateCol - nameWidth - (80 + 90 + 150)`，
+        //   三列比例保持 0.20 / 0.15 / 0.65（合计 1.0）⇒ 总宽恰好等于 viewport，与 AutoFill 不再打架。
+        // 不先改的原因：列宽是**可见变化**，且「谁后订阅」未实证 ⇒ 需真机点验后再落地。
         double surplus = viewport - checkboxCol - dateCol - nameWidth;
         if (surplus > 0)
         {

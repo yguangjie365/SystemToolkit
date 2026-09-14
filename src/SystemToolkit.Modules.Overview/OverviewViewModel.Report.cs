@@ -9,7 +9,7 @@ namespace SystemToolkit.Modules.Overview;
 public partial class OverviewViewModel
 {
     /// <summary>导出 Markdown 概览报告（危险操作四步之"记录"侧：成功失败均留痕）。</summary>
-    private void ExportReport()
+    private async System.Threading.Tasks.Task ExportReportAsync()
     {
         if (_busy)
         {
@@ -36,7 +36,12 @@ public partial class OverviewViewModel
 
             string markdown = OverviewReportBuilder.Build(_data, System.Environment.MachineName, DateTimeOffset.Now);
             // 审查 🔴-1（2026-09-10）：改走原子写——裸 File.WriteAllText 断电/被杀会留半截文件
-            SystemToolkit.Core.Utilities.AtomicFile.WriteAllText(path, markdown);
+            // 🟡 H-🟡-5（两批审查）：原子写是**同步 IO**——保存目标若是网络盘，
+            // 数百毫秒到数秒的阻塞会直接冻住 UI（用户视角＝点了导出后界面卡住）。下移线程池。
+            // 只移 IO、不移 `OverviewReportBuilder.Build`：后者读的是快照对象，
+            // 放到后台线程有踩到 UI 侧引用的风险；且它只是拼字符串（毫秒级），不是瓶颈。
+            await System.Threading.Tasks.Task.Run(
+                () => SystemToolkit.Core.Utilities.AtomicFile.WriteAllText(path, markdown)).ConfigureAwait(true);
             _logger.Info($"报告已导出：{path}");
             NotifyUser?.Invoke("报告已导出到：\n" + path, "导出成功");
         }
