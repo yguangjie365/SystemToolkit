@@ -59,7 +59,10 @@ public sealed class OnlineLoginWindow : Window
         // 登录入口 URL 与目标 Cookie 对照 NexBox music_open_login_window / qr 捕获口径
         OnlineProvider.NetEase => ("https://music.163.com/#/login", "https://music.163.com", ["MUSIC_U"]),
         OnlineProvider.QQMusic => ("https://y.qq.com/n/ryqq/profile", "https://y.qq.com", ["uin", "qqmusic_key"]),
-        _ => throw new ArgumentOutOfRangeException(nameof(_provider)),
+        // 🟠 V13-M5（2026-09-14 审查）：原写法 `new ArgumentOutOfRangeException(nameof(_provider))`
+        // 只传参数名、**丢掉实际值**（诊断时看不出是哪个平台漏配），且无说明文案。
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(_provider), _provider, "未预置该平台的登录入口 URL/Cookie 名单"),
     };
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

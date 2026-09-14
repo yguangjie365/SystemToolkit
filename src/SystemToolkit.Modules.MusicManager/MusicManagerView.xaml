@@ -61,13 +61,19 @@
             <Setter Property="Padding" Value="10,0"/>
         </Style>
         <Style x:Key="SeekSliderStyle" TargetType="Slider">
+            <!-- 🟠 V13-M3（2026-09-14 审查）：此模板的三处颜色原先为裸 hex（`#26808080` / `#FFFFFF` /
+                 `#40000000`）。轨道与滑块**复用** 2026-09-09 已定义但至今零消费端的
+                 Brush_SliderTrack / Brush_SliderThumb（浅色包取值与裸值逐字节相同 ⇒ 浅色无视觉变化；
+                 深色包取设计值 `#3D5E5E5E` / Color_TextPrimary）；滑块描边用新增的中性透明令牌
+                 Brush_SliderThumbBorder（两主题同值）。 -->
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid Background="Transparent" VerticalAlignment="Center" Height="14">
-                            <Border Height="4" CornerRadius="{DynamicResource Radius_Track}" Background="#26808080"
+                            <Border Height="4" CornerRadius="{DynamicResource Radius_Track}"
+                                    Background="{DynamicResource Brush_SliderTrack}"
                                     VerticalAlignment="Center"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
@@ -96,7 +102,8 @@
                                     <Thumb Width="12" Height="12" Focusable="False">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Ellipse Fill="#FFFFFF" Stroke="#40000000" StrokeThickness="1"/>
+                                                <Ellipse Fill="{DynamicResource Brush_SliderThumb}"
+                                                         Stroke="{DynamicResource Brush_SliderThumbBorder}" StrokeThickness="1"/>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -1518,7 +1525,7 @@
                         <Ellipse Width="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
                                  Height="{Binding ActualWidth, ElementName=DiscHost, Converter={StaticResource Ratio}, ConverterParameter=0.7}"
                                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                 Stroke="#40FFFFFF" StrokeThickness="1">
+                                 Stroke="{DynamicResource Brush_PlayerArtLine}" StrokeThickness="1">
                             <Ellipse.Fill>
                                 <ImageBrush ImageSource="{Binding CurrentCoverImage, Mode=OneWay}" Stretch="UniformToFill"/>
                             </Ellipse.Fill>
@@ -1529,9 +1536,13 @@
                                  Fill="{Binding VinylAccentBrush, Mode=OneWay}" Opacity="0.85"
                                  Visibility="{Binding HasCover, Converter={StaticResource InverseToVis}}">
                             <Ellipse.OpacityMask>
+                                <!-- 🟠 V13-M3：不透明度蒙版**只取 alpha**（颜色通道无意义）——原为裸 hex。
+                                     两个停靠点用中性透明令牌（两主题同值）⇒ 这里用 StaticResource 即可：
+                                     值不随主题变化，不需要动态重解析（同包内 Freezable 上 DynamicResource
+                                     依赖可继承上下文的语义在此不必要）。 -->
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#FF000000" Offset="0"/>
-                                    <GradientStop Color="#80000000" Offset="1"/>
+                                    <GradientStop Color="{StaticResource Color_PlayerArtMaskFull}" Offset="0"/>
+                                    <GradientStop Color="{StaticResource Color_PlayerArtMaskHalf}" Offset="1"/>
                                 </LinearGradientBrush>
                             </Ellipse.OpacityMask>
                         </Ellipse>
@@ -1551,10 +1562,11 @@
                     <!-- 水波场：左右两个发射点的同心波环（背景色自身深/浅），铺满模板区（审查 F-02 报告对照 NexBox ImmersiveRippleField） -->
                     <Canvas x:Name="RippleHost" IsHitTestVisible="False"/>
                     <!-- 背景重影层（对照 NexBox ImmersiveLyricsView）：只取句首 2-4 字，
-                         前景字号 ×2.6、白 0.16、居中 nowrap（字号/文本均由 code-behind 管理） -->
+                         前景字号 ×2.6、白 0.16、居中 nowrap（字号/文本均由 code-behind 管理）
+                         🟠 V13-M3：前景色原为裸 hex `#29FFFFFF`，改中性透明令牌（两主题同值） -->
                     <TextBlock x:Name="ImmersionGhostText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center" FontFamily="{DynamicResource Font_ImmersiveLyric}" FontWeight="Normal"
-                               Foreground="#29FFFFFF"/>
+                               Foreground="{DynamicResource Brush_PlayerArtGhost}"/>
                     <!-- P1 退场层：换行时旧句上移淡出（与新句空间分离，避免同位重叠）；字号/文本/位移由 code-behind 管理 -->
                     <TextBlock x:Name="ImmersionOutgoingText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                TextAlignment="Center" TextWrapping="Wrap" MaxWidth="760"

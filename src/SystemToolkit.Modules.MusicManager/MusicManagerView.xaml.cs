@@ -89,8 +89,11 @@ public partial class MusicManagerView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 🟠 V13-M4（2026-09-14 审查）：两处委托注入由 `??=` 改 `=`（对齐 FileBackupView.OnLoaded 口径）。
+        // `??=` 只保证**首次** Loaded 落值；VM/View 均为 DI 单例，Shell 切换导航会卸载重挂同一实例，
+        // 届时闭包仍捕获旧的 View/Window（Window.GetWindow(this) 已失效）⇒ 每次 Loaded 重赋值才幂等。
         // 文件夹选择回调注入（对照 FileBackup.RestoreRequest 注入模式——VM 不持有窗口引用）
-        _vm.PickFolder ??= () =>
+        _vm.PickFolder = () =>
         {
             var dialog = new Microsoft.Win32.OpenFolderDialog
             {
@@ -101,7 +104,7 @@ public partial class MusicManagerView : UserControl
         };
 
         // 登录窗回调注入（OM-5）：VM 只发请求，窗口由 View 打开，Cookie 回传 VM 加密落盘
-        _vm.LoginRequested ??= OnLoginRequested;
+        _vm.LoginRequested = OnLoginRequested;
 
         // 订阅平衡：Loaded 订阅 / Unloaded 退订（View/VM 均为 DI 单例，Shell 切换导航会卸载重挂同一实例；
         // 不退订则隐藏中的旧实例继续消费 VM 事件）。「-= 先行」保证 Loaded 重复触发也只有一个订阅

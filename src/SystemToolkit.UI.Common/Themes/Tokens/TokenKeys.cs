@@ -46,6 +46,12 @@ public static class TokenKeys
         public const string Brush_DiscGroove = "Brush_DiscGroove";
         public const string Brush_SliderTrack = "Brush_SliderTrack";
         public const string Brush_SliderThumb = "Brush_SliderThumb";
+        // ── 中性透明叠加（2026-09-14 V13-M3）：压在彩色播放器画面上的中性层（画刷见 Brushes 同名组）。
+        //    此处两个是**不透明度蒙版**取值：OpacityMask 只读 alpha，颜色通道无意义。
+        //    🔴 **两主题包同值**（蒙版语义与主题背景无关）——新增主题包照抄，不得各包各值。
+        //    原为 MusicManagerView.xaml 的裸 hex（`#FF000000` / `#80000000`）。
+        public const string Color_PlayerArtMaskFull = "Color_PlayerArtMaskFull";
+        public const string Color_PlayerArtMaskHalf = "Color_PlayerArtMaskHalf";
         public const string Color_OnDark = "Color_OnDark";
         // ── 状态语义（2026-09-08 阶段 2 补齐）：与 Success/Warning/Danger 同级，
         //    均遵循 M-UI-2「语义色走 700 档」决策（白底对比度 ≥4.5）
@@ -102,6 +108,13 @@ public static class TokenKeys
         // ── 音乐完整播放器 ──
         public const string Brush_PlayerVinyl = "Brush_PlayerVinyl";
         public const string Brush_PlayerLabel = "Brush_PlayerLabel";
+
+        // ── 中性透明叠加（2026-09-14 V13-M3 新增）：压在**彩色播放器画面**上的中性层——
+        //    可见性由画面自身明暗决定，与主题背景无关 ⇒ 🔴 **两主题包同值**（新增主题包照抄，
+        //    不得各包各值，否则等于把"中性"改成"主题色"）。原为 MusicManagerView.xaml 的裸 hex。
+        public const string Brush_SliderThumbBorder = "Brush_SliderThumbBorder";
+        public const string Brush_PlayerArtLine = "Brush_PlayerArtLine";
+        public const string Brush_PlayerArtGhost = "Brush_PlayerArtGhost";
     }
 
     public static class Fonts

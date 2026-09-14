@@ -38,6 +38,10 @@
     <Color x:Key="Color_PlayerBgTo">#101508</Color>
     <Color x:Key="Color_DiscGroove">#2E3A1E</Color>
     <SolidColorBrush x:Key="Brush_DiscGroove" Color="{StaticResource Color_DiscGroove}"/>
+    <!-- 中性透明叠加（2026-09-14 V13-M3）：不透明度蒙版**只取 alpha**；🔴 两主题包**同值**
+         （蒙版语义与主题无关，浅/深包不得各改各的）。原为 MusicManagerView.xaml 的裸 hex。 -->
+    <Color x:Key="Color_PlayerArtMaskFull">#FF000000</Color>
+    <Color x:Key="Color_PlayerArtMaskHalf">#80000000</Color>
     <Color x:Key="Color_OnDark">#F5F5F5</Color>
     <!-- 2026-09-10 优化：原 #0046A4 on Surface 仅 2.00（深蓝在深底几乎不可见） -->
     <Color x:Key="Color_Info">#5B9BFF</Color>
@@ -67,6 +71,9 @@
     <SolidColorBrush x:Key="Brush_Warning" Color="{StaticResource Color_Warning}"/>
     <SolidColorBrush x:Key="Brush_SliderTrack" Color="#3D5E5E5E"/>
     <SolidColorBrush x:Key="Brush_SliderThumb" Color="{StaticResource Color_TextPrimary}"/>
+    <!-- 滑块圆描边（2026-09-14 V13-M3 新增，🔴 与浅色包同值）：中性黑 25% —— 深包滑块取
+         Color_TextPrimary（近白），黑描边在深底上同样能勾出圆轮廓。 -->
+    <SolidColorBrush x:Key="Brush_SliderThumbBorder" Color="#40000000"/>
     <SolidColorBrush x:Key="Brush_SegmentWarn" Color="{StaticResource Color_SegmentWarn}"/>
     <SolidColorBrush x:Key="Brush_Danger" Color="{StaticResource Color_Danger}"/>
     <SolidColorBrush x:Key="Brush_DangerSoft" Color="#1FE52020"/>
@@ -105,6 +112,11 @@
         <GradientStop Color="#1F2A14" Offset="1"/>
     </RadialGradientBrush>
     <SolidColorBrush x:Key="Brush_PlayerLabel" Color="#4A5A2E"/>
+    <!-- 中性透明叠加（2026-09-14 V13-M3 新增，🔴 与浅色包同值）：压在**彩色播放器画面**上的中性层，
+         可见性由画面自身明暗决定、与主题背景无关。原为 MusicManagerView.xaml 的裸 hex
+         （封面圆描边 / 沉浸重影大字）。 -->
+    <SolidColorBrush x:Key="Brush_PlayerArtLine" Color="#40FFFFFF"/>
+    <SolidColorBrush x:Key="Brush_PlayerArtGhost" Color="#29FFFFFF"/>
     <SolidColorBrush x:Key="Brush_Selection" Color="{StaticResource Color_Selection}"/>
 
     <!-- ===== 字体族（五款打包字体按 NOTICE.md §五加载；西文在前中文在后按字符回退） ===== -->

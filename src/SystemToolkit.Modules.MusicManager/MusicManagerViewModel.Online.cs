@@ -1304,8 +1304,6 @@ public partial class MusicManagerViewModel
             {
                 QqLoginText = "检测失败";
             }
-
-            RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
         }
         catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
         {
@@ -1324,6 +1322,14 @@ public partial class MusicManagerViewModel
             {
                 IsCheckingLogin = false;
             }
+
+            // 🟠 V13-M6（2026-09-14 审查）：账号区刷新移入 finally——原实现把它放在 try 末尾，
+            // 于是 QQ 平台查询抛异常时：`_netEaseLogin`/`NetEaseLoginText` 已更新，而
+            // `PlatformAccounts`/`CurrentAccountName`（由本方法重建）**停在上一代的值**，
+            // 界面显示"检测完成"却半新半旧（核实记录 v13 §三 🟠-6）。
+            // 本方法是对**当前字段**的纯投影、幂等无副作用 ⇒ 无论成功/取消/失败都重建一次即可收敛。
+            // 置于 IsCheckingLogin 复位**之后**：即便投影意外抛错，忙态也已释放（不制造新的卡死）。
+            RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
         }
     }
 }
