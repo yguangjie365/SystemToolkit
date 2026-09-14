@@ -145,53 +145,66 @@ public partial class FileBackupViewModel
 
         // 🔴 2026-09-08 修复：同校验侧——ReadSnapshot 参数是「快照目录路径」，
         // 误传 SnapshotId → manifest 找不到 → throw 被吞 → 恢复点击无任何反应
-        string? snapDir = SnapshotDirOf(manager, SelectedSnapshot.SnapshotId);
-        if (snapDir is null)
+        // 🟠 V12-F4（2026-09-14）：本段是**前置段**——恢复向导回调、预演（_preview 读磁盘）、
+        // 二次确认回调都与内核同等可抛（View 与 IO 双侧），原先裸露在 try 之外 ⇒ 异常被
+        // AsyncRelayCommand 吞掉，症状仍是「点了没反应、零日志」。落点按核实记录：
+        // RestoreRequest?.Invoke / ConfirmRequest?.Invoke / PreviewConflictsAsync
+        //（⚠ 不是"给 ReadSnapshot 包 try"——它 catch 后返回 null，不抛）。
+        try
         {
-            Log("[恢复] ❌ 未找到该快照的目录（可能已被手动删除）");
-            return;
-        }
+            string? snapDir = SnapshotDirOf(manager, SelectedSnapshot.SnapshotId);
+            if (snapDir is null)
+            {
+                Log("[恢复] ❌ 未找到该快照的目录（可能已被手动删除）");
+                return;
+            }
 
-        // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化移出 UI 线程
-        SnapshotInfo? info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
-        if (info is null)
+            // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化移出 UI 线程
+            SnapshotInfo? info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
+            if (info is null)
+            {
+                Log("[恢复] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");
+                return;
+            }
+
+            string original = SelectedRule.Model.Sources().FirstOrDefault() ?? "";
+
+            // 2026-09-07 补齐旧版恢复向导：目标二选一 + 冲突策略四选一（不再写死 Rename）
+            string summary = $"规则「{info.RuleName}」· 快照 {info.DisplayTime}（{info.FileCount} 个文件，{info.SizeText}）";
+            RestoreChoice? choice = RestoreRequest?.Invoke(summary, original);
+            if (choice is null)
+            {
+                Log("[恢复] 已取消（未确认恢复选项）");
+                return;
+            }
+
+            string target = choice.TargetRoot ?? original;
+            if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target))
+            {
+                Log("[恢复] ❌ 恢复目标不存在：" + target);
+                return;
+            }
+
+            // 冲突预演（与真实恢复同解析规则，只读探测不落盘）
+            RestorePreviewReport preview = await _preview.PreviewConflictsAsync(
+                info, target, SelectedRule.Model.Sources().ToList()).ConfigureAwait(true);
+            string confirm = $"恢复预演（{preview.Total} 个文件）→ {target}\n\n" +
+                $"· 目标已存在：{preview.ExistsCount}（冲突策略：{PolicyText(choice.Policy)}）\n" +
+                $"· 恢复时会被安全校验拒绝：{preview.BlockedCount}\n" +
+                $"· 全新写入：{preview.Total - preview.ExistsCount - preview.BlockedCount}\n\n确定执行恢复吗？";
+            if (ConfirmRequest?.Invoke("恢复快照", confirm) != true)
+            {
+                Log("[恢复] 已取消（预演后未确认）");
+                return;
+            }
+
+            await RestoreCoreAsync(info, SelectedRule.Model, target, choice.Policy).ConfigureAwait(true);
+        }
+        catch (Exception ex)
         {
-            Log("[恢复] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");
-            return;
+            Log("[恢复] ❌ 恢复未启动：" + ex.Message);
+            _logger.Error("恢复快照前置阶段失败", ex);
         }
-
-        string original = SelectedRule.Model.Sources().FirstOrDefault() ?? "";
-
-        // 2026-09-07 补齐旧版恢复向导：目标二选一 + 冲突策略四选一（不再写死 Rename）
-        string summary = $"规则「{info.RuleName}」· 快照 {info.DisplayTime}（{info.FileCount} 个文件，{info.SizeText}）";
-        RestoreChoice? choice = RestoreRequest?.Invoke(summary, original);
-        if (choice is null)
-        {
-            Log("[恢复] 已取消（未确认恢复选项）");
-            return;
-        }
-
-        string target = choice.TargetRoot ?? original;
-        if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target))
-        {
-            Log("[恢复] ❌ 恢复目标不存在：" + target);
-            return;
-        }
-
-        // 冲突预演（与真实恢复同解析规则，只读探测不落盘）
-        RestorePreviewReport preview = await _preview.PreviewConflictsAsync(
-            info, target, SelectedRule.Model.Sources().ToList()).ConfigureAwait(true);
-        string confirm = $"恢复预演（{preview.Total} 个文件）→ {target}\n\n" +
-            $"· 目标已存在：{preview.ExistsCount}（冲突策略：{PolicyText(choice.Policy)}）\n" +
-            $"· 恢复时会被安全校验拒绝：{preview.BlockedCount}\n" +
-            $"· 全新写入：{preview.Total - preview.ExistsCount - preview.BlockedCount}\n\n确定执行恢复吗？";
-        if (ConfirmRequest?.Invoke("恢复快照", confirm) != true)
-        {
-            Log("[恢复] 已取消（预演后未确认）");
-            return;
-        }
-
-        await RestoreCoreAsync(info, SelectedRule.Model, target, choice.Policy).ConfigureAwait(true);
     }
 
     private static string PolicyText(ConflictPolicy policy) => policy switch

@@ -37,50 +37,61 @@ public partial class FileBackupView : UserControl
         }
 
         _loaded = true;
-        Vm.ConfirmRequest = (title, message) =>
-            System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
-            == MessageBoxResult.OK;
-        Vm.PickFolder = title =>
+        // 🟠 V12-F2：组合根接线 + Initialize（读配置、扫快照、建备份根）整体兜底——原实现无任何
+        // catch，任一步抛异常（配置损坏 / 根目录不可写 / 磁盘满）都会直冲 Dispatcher 的全局吞异常
+        // 路径：页面看似正常但列表永远空着，且用户零解释。照 AppManagerView / DriverManagerView 同款。
+        try
         {
-            var dialog = new OpenFolderDialog { Title = title };
-            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
-        };
-        // 文件多选（规则编辑弹窗「添加文件」）
-        Vm.PickFiles = title =>
-        {
-            var dialog = new OpenFileDialog { Title = title, Multiselect = true, Filter = "所有文件|*.*" };
-            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileNames : [];
-        };
-        // 手动输入路径（规则编辑弹窗「手动输入」）
-        Vm.PromptInput = (title, defaultValue) =>
-            PathInputWindow.Show(Window.GetWindow(this), title, defaultValue);
-        // 恢复选项对话框（目标二选一 + 冲突策略四选一）
-        Vm.RestoreRequest = (summary, originalPath) =>
-            RestoreDialog.Show(Window.GetWindow(this), summary, originalPath);
-        // 规则编辑弹窗（新建/编辑共用；表单已由命令先行填充）
-        Vm.EditRuleRequest = () => RuleEditWindow.Show(Window.GetWindow(this), Vm);
-        // 导出保存 / 导入打开路径（审查 🔴-3 采纳：对话框一律 View 注入，VM 不持窗口）
-        Vm.PickSavePath = () =>
-        {
-            var dialog = new SaveFileDialog
+            Vm.ConfirmRequest = (title, message) =>
+                System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
+                == MessageBoxResult.OK;
+            Vm.PickFolder = title =>
             {
-                Title = "导出备份规则",
-                Filter = "JSON 规则文件 (*.json)|*.json",
-                FileName = $"backup-rules_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+                var dialog = new OpenFolderDialog { Title = title };
+                return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
             };
-            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
-        };
-        Vm.PickOpenPath = () =>
-        {
-            var dialog = new OpenFileDialog
+            // 文件多选（规则编辑弹窗「添加文件」）
+            Vm.PickFiles = title =>
             {
-                Title = "导入备份规则",
-                Filter = "JSON 规则文件 (*.json)|*.json",
-                CheckFileExists = true,
+                var dialog = new OpenFileDialog { Title = title, Multiselect = true, Filter = "所有文件|*.*" };
+                return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileNames : [];
             };
-            return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
-        };
-        Vm.Initialize();
+            // 手动输入路径（规则编辑弹窗「手动输入」）
+            Vm.PromptInput = (title, defaultValue) =>
+                PathInputWindow.Show(Window.GetWindow(this), title, defaultValue);
+            // 恢复选项对话框（目标二选一 + 冲突策略四选一）
+            Vm.RestoreRequest = (summary, originalPath) =>
+                RestoreDialog.Show(Window.GetWindow(this), summary, originalPath);
+            // 规则编辑弹窗（新建/编辑共用；表单已由命令先行填充）
+            Vm.EditRuleRequest = () => RuleEditWindow.Show(Window.GetWindow(this), Vm);
+            // 导出保存 / 导入打开路径（审查 🔴-3 采纳：对话框一律 View 注入，VM 不持窗口）
+            Vm.PickSavePath = () =>
+            {
+                var dialog = new SaveFileDialog
+                {
+                    Title = "导出备份规则",
+                    Filter = "JSON 规则文件 (*.json)|*.json",
+                    FileName = $"backup-rules_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+                };
+                return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+            };
+            Vm.PickOpenPath = () =>
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "导入备份规则",
+                    Filter = "JSON 规则文件 (*.json)|*.json",
+                    CheckFileExists = true,
+                };
+                return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+            };
+            Vm.Initialize();
+        }
+        catch (Exception ex)
+        {
+            Vm.AddLog("⚠ 备份页初始化失败：" + ex.Message);
+            LogViewError("文件备份页初始化失败", ex);
+        }
     }
 
     // ══════════ 规则列表拖拽排序 ══════════

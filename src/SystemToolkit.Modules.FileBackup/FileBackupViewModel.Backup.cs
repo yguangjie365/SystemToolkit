@@ -189,6 +189,10 @@ public partial class FileBackupViewModel
         VerifySnapshotCommand.NotifyCanExecuteChanged();
         RestoreAllCommand.NotifyCanExecuteChanged();
         DeleteSnapshotCommand.NotifyCanExecuteChanged();
+        // 🟠 V12-F3：OpenSnapshotDirCommand 原先漏在本名单之外 —— 其 CanExecute 同样是
+        // CanOperateSelected（依赖 SelectedSnapshot 与 IsBusy，而 ObservableProperty 的 setter
+        // 不会自动通知 RelayCommand，本仓已两次实证），漏通知的后果是「打开目录」按钮永久灰死。
+        OpenSnapshotDirCommand.NotifyCanExecuteChanged();
     }
 
     private void OnProgress(int done, int total, string phase)

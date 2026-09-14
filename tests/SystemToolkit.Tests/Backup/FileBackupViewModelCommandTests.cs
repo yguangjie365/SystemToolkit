@@ -93,6 +93,43 @@ public class FileBackupViewModelCommandTests
             "选中规则后必须调用 NotifyCanExecuteChanged，否则界面上的「开始备份/编辑/删除」按钮不会由灰变亮");
     }
 
+    /// <summary>
+    /// 🟠 V12-F3 回归锁（2026-09-14）：「打开目录」命令原先**漏在 RefreshCanExecute 名单之外**——
+    /// 其 CanExecute 同为 <c>CanOperateSelected</c>（依赖 SelectedSnapshot / IsBusy），漏通知的后果
+    /// 是该按钮永久灰死。🔴 断言必须是 <c>CanExecuteChanged</c> 触发：只断言 <c>CanExecute()</c>
+    /// 返回值抓不到这条失效路径（实时求值恒正确）。
+    /// </summary>
+    [Fact]
+    public void SelectedSnapshot_MustRaiseCanExecuteChanged_ForOpenSnapshotDir()
+    {
+        FileBackupViewModel vm = CreateVm();
+        vm.SelectedRule = Rule();   // CanExecute 判据是 CanOperateSelected（规则 + 快照 + 非忙）
+        int raised = 0;
+        vm.OpenSnapshotDirCommand.CanExecuteChanged += (_, _) => raised++;
+
+        vm.SelectedSnapshot = Snapshot();
+
+        Assert.True(raised > 0,
+            "选中快照后必须通知 OpenSnapshotDirCommand，否则「打开目录」按钮不会由灰变亮（V12-F3 回归）");
+        Assert.True(vm.OpenSnapshotDirCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ClearingSelectedSnapshot_AlsoNotifiesOpenSnapshotDir()
+    {
+        FileBackupViewModel vm = CreateVm();
+        vm.SelectedRule = Rule();
+        vm.SelectedSnapshot = Snapshot();
+        int raised = 0;
+        vm.OpenSnapshotDirCommand.CanExecuteChanged += (_, _) => raised++;
+
+        vm.SelectedSnapshot = null;
+
+        // ⚠ 只断言"通知已发出"：CanOperateSelected 的判据是 SelectedRule（快照不是它的条件），
+        // 故清空快照后按钮仍可点（点了会提示"未选中快照"）。通知本身是本次缺陷（漏通知）的正题。
+        Assert.True(raised > 0, "清空选中后必须通知 OpenSnapshotDirCommand（V12-F3 漏通知回归）");
+    }
+
     [Fact]
     public void ClearingSelectedSnapshot_DisablesThemAgain()
     {
@@ -254,5 +291,75 @@ public class FileBackupViewModelCommandTests
                 // 清理失败不影响断言
             }
         }
+    }
+
+    // ════════ 保留快照输入（🟠 V12-F5，2026-09-14） ════════
+    // 缺陷原状：MaxSnapshotsInput 是 int + XAML 双向绑定 ⇒ 输入 "12a" 时 WPF 类型转换
+    // **静默失败**：输入框看着有值、保存后规则仍按旧值落盘（用户以为生效、实际没生效）。
+    // 修法：字符串承载 + 就地校验（MaxSnapshotsError）+ 保存拦截（FormError），不静默回落。
+
+    [Fact]
+    public void MaxSnapshotsInput_InvalidText_SurfacesInlineError()
+    {
+        FileBackupViewModel vm = CreateVm();
+
+        vm.MaxSnapshotsInput = "12a";
+
+        Assert.NotEqual("", vm.MaxSnapshotsError);
+        Assert.Contains("1", vm.MaxSnapshotsError);   // 文案须给出合法范围
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("0")]
+    [InlineData("101")]
+    [InlineData("1 2")]
+    public void MaxSnapshotsInput_OutOfRangeOrMessy_SurfacesInlineError(string input)
+    {
+        FileBackupViewModel vm = CreateVm();
+
+        vm.MaxSnapshotsInput = input;
+
+        Assert.NotEqual("", vm.MaxSnapshotsError);
+    }
+
+    [Fact]
+    public void MaxSnapshotsInput_ValidText_ClearsInlineError()
+    {
+        FileBackupViewModel vm = CreateVm();
+        vm.MaxSnapshotsInput = "12a";   // 先制造错误态
+
+        vm.MaxSnapshotsInput = "12";    // 改回合法值应就地清错
+
+        Assert.Equal("", vm.MaxSnapshotsError);
+    }
+
+    [Fact]
+    public void SaveRule_WithValidMaxSnapshots_PersistsParsedValue()
+    {
+        FileBackupViewModel vm = CreateVm();
+        vm.RuleNameInput = "范围校验";
+        vm.SourcePathsInput = Path.GetTempPath();
+        vm.MaxSnapshotsInput = "12";
+
+        vm.SaveRuleCommand.Execute(null);
+
+        BackupRule saved = Assert.Single(vm.Rules).Model;
+        Assert.Equal(12, saved.MaxSnapshots);
+    }
+
+    [Fact]
+    public void SaveRule_WithInvalidMaxSnapshots_BlocksWithVisibleError()
+    {
+        FileBackupViewModel vm = CreateVm();
+        vm.RuleNameInput = "非法保留数";
+        vm.SourcePathsInput = Path.GetTempPath();
+        vm.MaxSnapshotsInput = "12a";
+
+        vm.SaveRuleCommand.Execute(null);
+
+        Assert.Empty(vm.Rules);                              // 不落盘（静默回落旧值正是原缺陷的成因）
+        Assert.NotEqual("", vm.FormError);                   // 弹窗底部可见错误
+        Assert.NotEqual("", vm.MaxSnapshotsError);           // 字段旁就地提示
     }
 }

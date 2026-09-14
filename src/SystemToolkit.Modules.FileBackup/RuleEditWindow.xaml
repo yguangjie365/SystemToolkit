@@ -11,6 +11,19 @@
     <Window.Resources>
         <!-- Inverse 转换器在主页面是页面级资源，弹窗需自备（跨 Window 不共享 StaticResource） -->
         <local:InverseBoolConverter x:Key="Inverse"/>
+        <!-- 🟠 V12-F5：保留快照输入的就地校验提示（样式化以避免元素级裸间距；无错时整行收起）。
+             输入改由字符串承载后，非法值不再被 WPF 的类型转换静默吞掉。 -->
+        <Style x:Key="MaxSnapshotsError" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+            <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding MaxSnapshotsError}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <!-- 2026-09-07 单屏改造：规则编辑表单从主页面迁入弹窗（用户拍板，对齐软件管理页
          SoftwareEditWindow 范式）。DataContext = FileBackupViewModel，字段绑定沿用主 VM
@@ -91,10 +104,13 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="保留快照" Style="{DynamicResource KvLabel}"/>
             <TextBox Grid.Column="1" Style="{DynamicResource FieldInput}"
-                     Text="{Binding MaxSnapshotsInput, UpdateSourceTrigger=PropertyChanged}"/>
+                     Text="{Binding MaxSnapshotsInput, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="每条规则最多保留的快照数（1–100；超出上限的旧快照会在下次备份后清理）"/>
             <CheckBox Grid.Column="3" Content="启用此规则" Style="{DynamicResource ThemedCheckBox}"
                       IsChecked="{Binding EnabledInput}"/>
         </Grid>
+        <!-- 就地校验提示：间距走 Style Setter（不占棘轮额度），无错时由 DataTrigger 整行收起 -->
+        <TextBlock Text="{Binding MaxSnapshotsError}" Style="{StaticResource MaxSnapshotsError}"/>
 
         <!-- VSS -->
         <Grid Margin="0,0,0,8">

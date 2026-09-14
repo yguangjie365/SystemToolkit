@@ -180,8 +180,25 @@ public partial class FileBackupViewModel : ObservableObject
     [ObservableProperty]
     private string _backupRootInput = "";
 
+    /// <summary>
+    /// 规则保留快照数输入（🟠 V12-F5，2026-09-14 改**字符串承载**）。
+    /// <para>
+    /// 原为 <c>int</c> + XAML 双向绑定：用户输入 <c>12a</c> 这类非法文本时 WPF 的类型转换
+    /// **静默失败**——输入框里显示着什么就一直是"看起来输进去了"，但源属性仍是旧值，
+    /// 保存后规则保留数按旧值落盘（用户以为生效、实际没生效）。改字符串承载后本字段原样接收输入，
+    /// 由 <see cref="MaxSnapshotsError"/> 就地提示，保存时经 <see cref="BackupRule.MaxSnapshotsCap"/>
+    /// 硬钳制（与 Settings 模块同字段同名范式对齐；FileTransfer 端口框同款思路）。
+    /// </para>
+    /// </summary>
     [ObservableProperty]
-    private int _maxSnapshotsInput = 7;
+    private string _maxSnapshotsInput = "7";
+
+    /// <summary>保留快照输入的就地校验提示（空串 = 无错）。🔴 界面必须有它的落点：本主题禁用态几乎不可见，只靠按钮变灰看不出来。</summary>
+    [ObservableProperty]
+    private string _maxSnapshotsError = "";
+
+    partial void OnMaxSnapshotsInputChanged(string value)
+        => MaxSnapshotsError = TryParseMaxSnapshots(value, out _) ? "" : InvalidMaxSnapshotsHint;
 
     [ObservableProperty]
     private string _descriptionInput = "";
@@ -321,11 +338,13 @@ public partial class FileBackupViewModel : ObservableObject
         UseGlobalBackupRoot = value.Model.UseGlobalBackupRoot;
         _ = RefreshScheduleRegisteredAsync();
         BackupRootInput = value.Model.BackupRoot;
-        MaxSnapshotsInput = value.Model.MaxSnapshots;
+        MaxSnapshotsInput = value.Model.MaxSnapshots.ToString();
         DescriptionInput = value.Model.Description;
         ExcludePatternsInput = string.Join(Environment.NewLine, value.Model.ExcludePatterns ?? new List<string>());
         EnabledInput = value.Model.Enabled;
         FormError = "";
+        // V12-F5：切换规则时清掉上一条遗留的就地校验提示（同值时 setter 不触发，不会自动清）
+        MaxSnapshotsError = "";
         ReloadSnapshots();
     }
 
@@ -354,7 +373,8 @@ public partial class FileBackupViewModel : ObservableObject
         DailyTimeInput = "03:00";
         UseVssInput = false;
         ScheduleRegistered = false;
-        MaxSnapshotsInput = _config.Settings.MaxSnapshots;
+        MaxSnapshotsInput = _config.Settings.MaxSnapshots.ToString();
+        MaxSnapshotsError = ""; // V12-F5：同值不触发 setter，显式清掉上一条遗留提示
         DescriptionInput = "";
         ExcludePatternsInput = "";
         EnabledInput = true;
@@ -429,6 +449,14 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
+        // 🟠 V12-F5：非法保留数就地拦住（不静默回落旧值——那正是"输 12a 静默不生效"的成因）
+        if (!TryParseMaxSnapshots(MaxSnapshotsInput, out int maxSnapshots))
+        {
+            FormError = InvalidMaxSnapshotsHint;
+            MaxSnapshotsError = InvalidMaxSnapshotsHint;
+            return;
+        }
+
         var rule = new BackupRule
         {
             RuleId = string.IsNullOrEmpty(EditingRuleId) ? IdGenerator.NewId() : EditingRuleId,
@@ -437,7 +465,7 @@ public partial class FileBackupViewModel : ObservableObject
             SourcePaths = sources,
             UseGlobalBackupRoot = UseGlobalBackupRoot,
             BackupRoot = BackupRootInput.Trim(),
-            MaxSnapshots = Math.Clamp(MaxSnapshotsInput, 1, 100),
+            MaxSnapshots = maxSnapshots,
             Description = DescriptionInput.Trim(),
             ExcludePatterns = ParseExcludePatterns(),
             Enabled = EnabledInput,
@@ -467,6 +495,32 @@ public partial class FileBackupViewModel : ObservableObject
     }
 
     private bool CanSave => !IsBusy;
+
+    /// <summary>保留快照输入的非法提示（就地校验 + 保存拦截共用同一句，避免两处文案漂移）。</summary>
+    private static string InvalidMaxSnapshotsHint
+        => $"保留快照需为 1–{BackupRule.MaxSnapshotsCap} 的整数";
+
+    /// <summary>
+    /// 解析保留快照输入（V12-F5）。全串数字 → 再钳制到 <c>[1, MaxSnapshotsCap]</c>：
+    /// 空串 / 含非数字（<c>12a</c>、<c>1 2</c>、"十二"）/ 越界一律为 false（由调用方就地提示）。
+    /// </summary>
+    private static bool TryParseMaxSnapshots(string? text, out int value)
+    {
+        value = 0;
+        string s = text?.Trim() ?? "";
+        if (!s.All(char.IsAsciiDigit))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(s, out int parsed) || parsed < 1 || parsed > BackupRule.MaxSnapshotsCap)
+        {
+            return false;
+        }
+
+        value = parsed;
+        return true;
+    }
 
     /// <summary>解析排除规则输入（一行一条，去空白/空行，按序号去重保序）。</summary>
     private List<string> ParseExcludePatterns()
