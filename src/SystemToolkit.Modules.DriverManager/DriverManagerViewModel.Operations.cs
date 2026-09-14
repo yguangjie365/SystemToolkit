@@ -15,50 +15,77 @@ public partial class DriverManagerViewModel
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task DeleteSelectedAsync()
     {
-        var targets = Packages
-            .Where(p => p.IsSelected && p.IsThirdParty && !p.IsSystemCritical)
-            .ToList();
-        if (targets.Count == 0)
+        // 🟠 V12-D2：命令体原先**完全裸奔**（无顶层 catch）——ConfirmRequest?.Invoke 是 View 注入的
+        // MessageBox 回调（弹不出窗/壳层异常都会抛），异常会直冲 AsyncRelayCommand 的吞异常路径：
+        // 用户零反馈、日志零记录。timing 仅在**异常早于内核调用**时才在此收尾（内核自带同名 timing
+        // 并已 Complete；LogTiming.Complete 幂等，重复收尾不会产生第二条记录）。
+        LogTiming? timing = null;
+        try
         {
-            AddLog("删除未启动：勾选中没有可删除的第三方驱动包（收件箱/启动关键驱动不可删除）。");
-            return;
-        }
+            var targets = Packages
+                .Where(p => p.IsSelected && p.IsThirdParty && !p.IsSystemCritical)
+                .ToList();
+            if (targets.Count == 0)
+            {
+                AddLog("删除未启动：勾选中没有可删除的第三方驱动包（收件箱/启动关键驱动不可删除）。");
+                return;
+            }
 
-        string names = string.Join("\n", targets.Select(p => $"  {p.InfName}（{p.Provider} {p.Version}）"));
-        if (ConfirmRequest?.Invoke("删除驱动确认",
-                $"将从 Driver Store 删除以下 {targets.Count} 个驱动包：\n{names}\n\n"
-                + "删除后设备可能失去当前驱动（重新扫描硬件可自动重装）。\n确定继续吗？") != true)
+            string names = string.Join("\n", targets.Select(p => $"  {p.InfName}（{p.Provider} {p.Version}）"));
+            if (ConfirmRequest?.Invoke("删除驱动确认",
+                    $"将从 Driver Store 删除以下 {targets.Count} 个驱动包：\n{names}\n\n"
+                    + "删除后设备可能失去当前驱动（重新扫描硬件可自动重装）。\n确定继续吗？") != true)
+            {
+                AddLog("已取消删除。");
+                return;
+            }
+
+            timing = _logger.Time("DriverDelete");
+            await RunPrivilegedBatchAsync(targets, force: false, actionName: "删除");
+        }
+        catch (Exception ex)
         {
-            AddLog("已取消删除。");
-            return;
+            AddLog($"❌ 删除异常：{ex.Message}");
+            StatusText = "删除异常，明细见日志";
+            timing?.Complete(LogResult.Failed, LogLevel.Error, "驱动删除命令异常", ex);
         }
-
-        await RunPrivilegedBatchAsync(targets, force: false, actionName: "删除");
     }
 
     /// <summary>强制删除勾选的第三方驱动包（/force，连设备关联一并移除——红色危险操作）。</summary>
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task ForceDeleteSelectedAsync()
     {
-        var targets = Packages
-            .Where(p => p.IsSelected && p.IsThirdParty && !p.IsSystemCritical)
-            .ToList();
-        if (targets.Count == 0)
+        // 🟠 V12-D2：同上——命令体原先无顶层 catch，向导确认回调的异常会被静默吞掉。
+        LogTiming? timing = null;
+        try
         {
-            AddLog("强制删除未启动：勾选中没有可删除的第三方驱动包。");
-            return;
-        }
+            var targets = Packages
+                .Where(p => p.IsSelected && p.IsThirdParty && !p.IsSystemCritical)
+                .ToList();
+            if (targets.Count == 0)
+            {
+                AddLog("强制删除未启动：勾选中没有可删除的第三方驱动包。");
+                return;
+            }
 
-        string names = string.Join("\n", targets.Select(p => $"  {p.InfName}（{p.Provider} {p.Version}）"));
-        if (ConfirmRequest?.Invoke("⚠ 强制删除确认",
-                $"将强制删除以下 {targets.Count} 个驱动包（/force，设备关联一并移除）：\n{names}\n\n"
-                + "关联设备会立即失去驱动并可能停用，仅建议在驱动引发故障时使用。\n确定继续吗？") != true)
+            string names = string.Join("\n", targets.Select(p => $"  {p.InfName}（{p.Provider} {p.Version}）"));
+            if (ConfirmRequest?.Invoke("⚠ 强制删除确认",
+                    $"将强制删除以下 {targets.Count} 个驱动包（/force，设备关联一并移除）：\n{names}\n\n"
+                    + "关联设备会立即失去驱动并可能停用，仅建议在驱动引发故障时使用。\n确定继续吗？") != true)
+            {
+                AddLog("已取消强制删除。");
+                return;
+            }
+
+            timing = _logger.Time("DriverForceDelete");
+            await RunPrivilegedBatchAsync(targets, force: true, actionName: "强制删除");
+        }
+        catch (Exception ex)
         {
-            AddLog("已取消强制删除。");
-            return;
+            AddLog($"❌ 强制删除异常：{ex.Message}");
+            StatusText = "强制删除异常，明细见日志";
+            timing?.Complete(LogResult.Failed, LogLevel.Error, "驱动强制删除命令异常", ex);
         }
-
-        await RunPrivilegedBatchAsync(targets, force: true, actionName: "强制删除");
     }
 
     /// <summary>备份向导入口：View 弹窗收集范围与目录，编排下沉 DriverBackupService（Core）。</summary>
@@ -169,46 +196,52 @@ public partial class DriverManagerViewModel
     private async Task AddDriversAsync(string? mode)
     {
         LogTiming timing = _logger.Time("DriverAddInf");
+        // 两个派生变量在 try 外声明：catch 里的文案要用（C# 的 catch 看不见 try 内的局部声明）
         bool install = string.Equals(mode, "install", StringComparison.OrdinalIgnoreCase);
         string actionName = install ? "安装" : "添加";
-        string? folder = AddSourceFolderRequest?.Invoke();
-        if (folder is null)
-        {
-            AddLog($"已取消{actionName}。");
-            timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：目录选择取消，未启动");
-            return;
-        }
-
-        if (!Directory.Exists(folder))
-        {
-            AddLog($"{actionName}未启动：目录不存在——{folder}");
-            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录不存在 {folder}");
-            return;
-        }
-
-        // 审查 O16（2026-09-10）：递归枚举 .inf 是 O(files) 系统调用，移出 UI 线程
-        List<string> infs = await Task.Run(() => Directory.GetFiles(folder, "*.inf", SearchOption.AllDirectories).ToList()).ConfigureAwait(true);
-        if (infs.Count == 0)
-        {
-            AddLog($"{actionName}未启动：所选目录（含子目录）未找到任何 .inf 文件——{folder}");
-            timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录内无 .inf——{folder}");
-            return;
-        }
-
-        string preview = string.Join("\n", infs.Take(10).Select(p => "  " + Path.GetFileName(p)))
-            + (infs.Count > 10 ? $"\n  …等共 {infs.Count} 个" : "");
-        if (ConfirmRequest?.Invoke($"{actionName}驱动确认",
-                $"将{actionName}以下 {infs.Count} 个 INF 到 Driver Store{(install ? "并安装到匹配设备" : "")}：\n{preview}\n\n"
-                + "来源不可信的驱动可能危害系统安全，请确认来源可靠。\n确定继续吗？") != true)
-        {
-            AddLog($"已取消{actionName}。");
-            timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：二次确认取消");
-            return;
-        }
-
-        IsOperating = true;
+        string? folder = null;
+        // 🟠 V12-D2：原先 try 起点在 IsOperating = true 之后 —— 目录选择回调 / Directory.Exists /
+        // 「递归枚举 .inf」都裸露在 try 之外（枚举已由 Task.Run 移出 UI 线程，但磁盘故障同样会抛）。
+        // 现把 try 上移到方法体开头，覆盖全部可抛语句；「一次 UAC 覆盖整批」的 IsOperating 语义不变
+        // （仍只在实际执行段置位），提前 return 时 finally 复位的是本就为 false 的值（幂等）。
         try
         {
+            folder = AddSourceFolderRequest?.Invoke();
+            if (folder is null)
+            {
+                AddLog($"已取消{actionName}。");
+                timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：目录选择取消，未启动");
+                return;
+            }
+
+            if (!Directory.Exists(folder))
+            {
+                AddLog($"{actionName}未启动：目录不存在——{folder}");
+                timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录不存在 {folder}");
+                return;
+            }
+
+            // 审查 O16（2026-09-10）：递归枚举 .inf 是 O(files) 系统调用，移出 UI 线程
+            List<string> infs = await Task.Run(() => Directory.GetFiles(folder, "*.inf", SearchOption.AllDirectories).ToList()).ConfigureAwait(true);
+            if (infs.Count == 0)
+            {
+                AddLog($"{actionName}未启动：所选目录（含子目录）未找到任何 .inf 文件——{folder}");
+                timing.Complete(LogResult.Rejected, LogLevel.Warn, $"驱动{actionName}拒绝：目录内无 .inf——{folder}");
+                return;
+            }
+
+            string preview = string.Join("\n", infs.Take(10).Select(p => "  " + Path.GetFileName(p)))
+                + (infs.Count > 10 ? $"\n  …等共 {infs.Count} 个" : "");
+            if (ConfirmRequest?.Invoke($"{actionName}驱动确认",
+                    $"将{actionName}以下 {infs.Count} 个 INF 到 Driver Store{(install ? "并安装到匹配设备" : "")}：\n{preview}\n\n"
+                    + "来源不可信的驱动可能危害系统安全，请确认来源可靠。\n确定继续吗？") != true)
+            {
+                AddLog($"已取消{actionName}。");
+                timing.Complete(LogResult.Cancelled, LogLevel.Info, $"驱动{actionName}：二次确认取消");
+                return;
+            }
+
+            IsOperating = true;
             StatusText = $"正在{actionName} {infs.Count} 个 INF（已弹出 UAC，请确认）…";
             // 单 INF 走 AddDriverAsync（保留计数双判）；批量走 AddManyAsync（逐段退出码判定）
             DriverRunResult result = infs.Count == 1
@@ -239,6 +272,9 @@ public partial class DriverManagerViewModel
         catch (Exception ex)
         {
             // 审查 🔴 采纳（2026-09-09）：AddDriverAsync/AddManyAsync/ScanAsync 抛异常时同样被吞
+            // 🟠 V12-D2（2026-09-14）：try 起点上移后，目录选择回调 / Directory.Exists / 递归枚举
+            // 也不再裸露（原实现这段在 try 外，同样会被 AsyncRelayCommand 静默吞掉）。
+            // IsOperating 只在执行段置位，故异常早于执行段时无需复位（未置位即无泄漏）。
             AddLog($"❌ {actionName}异常：{ex.Message}");
             StatusText = $"{actionName}异常：{ex.Message}";
             timing.Complete(LogResult.Failed, LogLevel.Error, $"驱动{actionName}异常", ex);

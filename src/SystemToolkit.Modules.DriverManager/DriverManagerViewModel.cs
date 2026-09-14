@@ -208,7 +208,12 @@ public partial class DriverManagerViewModel : ObservableObject
     private async Task ScanAsync()
     {
         IsScanning = true;
-        using var scanCts = new CancellationTokenSource();
+        // 🟠 V12-D3：原实现 `using var scanCts` + finally 里 `_scanCts?.Dispose()` 是**双重 Dispose**
+        // （using 作用域退出时再释放一次）；更要紧的是**身份不判**——CancelScan 走 `_scanCts?.Cancel()`，
+        // 若本次扫描的 CTS 已被上一轮/后到者替换，finally 会释放**不属于本次**的实例。
+        // 现改为「身份判定后释放」：只有自己装的 CTS 才由自己清空并释放（与 Music 侧 V13-M11 同款，
+        // 该项留待 P3 批处理）。
+        var scanCts = new CancellationTokenSource();
         _scanCts = scanCts;
         try
         {
@@ -245,8 +250,13 @@ public partial class DriverManagerViewModel : ObservableObject
         finally
         {
             IsScanning = false;
-            _scanCts?.Dispose();
-            _scanCts = null;
+            // 🟠 V12-D3：身份判定后释放——只有"当前登记的就是本次"时才清空并 Dispose，
+            // 避免释放已被替换的实例（后到者仍在用）或重复释放（原 using + 此处 Dispose）。
+            if (ReferenceEquals(_scanCts, scanCts))
+            {
+                _scanCts.Dispose();
+                _scanCts = null;
+            }
         }
     }
 
