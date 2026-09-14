@@ -325,8 +325,20 @@ public sealed partial class SteamService
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            // 🟠 审查 v8-🟠-5：原先这里是**裸 catch 直接 return null**，与"失败记忆内存态零同步"
+            // 叠加后完全无痕 —— IsFailed/MarkFailed 在并发下抛的 ArgumentOutOfRangeException
+            // 就落在这里被吃掉，表现为"每次刷新仍把整条候选链重试一遍"（失败记忆静默失效）。
+            // 并发已由 CoverFailureMemory 内部互斥修掉；这里补上**异常可见**，让今后任何
+            // 意外失败（如缓存目录不可建）都能被追到。
+            // ⚠️ 逐 URL 的内层 catch 仍保持静默：那是有意的 continue（断网时逐条记会刷上百条），
+            // 且真实失败已由调用方汇总成一条日志。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn,
+                "gamemanager",
+                $"封面 CDN 兜底异常（AppId {appId}）：{ex.Message}",
+                ex));
             return null;
         }
     }

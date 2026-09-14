@@ -161,6 +161,76 @@ public sealed class CoverFailureMemoryTests : IDisposable
         Assert.False(memory.IsFailed("https://cdn.example/a.jpg", DateTimeOffset.Now));
     }
 
+    /// <summary>
+    /// 🟠 审查 v8-🟠-5：**并发访问不得丢条目、不得抛异常**。
+    /// <para>
+    /// 生产路径实证：<c>GameManagerViewModel</c> 用 <c>SemaphoreSlim(3)</c> + <c>Task.WhenAll</c>
+    /// 并发 3 路调 <c>EnsureCoverFromCdnAsync</c>，而三路共享的是**同一个进程级实例**
+    /// （<c>SteamService.DefaultCoverFailures</c> 静态 Lazy 单例）→ 同时命中
+    /// <c>IsFailed</c> / <c>MarkFailed</c> / <c>ClearFailed</c>。
+    /// </para>
+    /// <para>
+    /// 裸 <c>List</c> 的两处要害：① <c>EnsureLoaded</c> 的惰性初始化竞态——多线程同时看到
+    /// <c>_logData is null</c>，各自 new 一个 <c>CoverFailureLog</c>，后写者覆盖前者 ⇒
+    /// **已记的条目成批消失**；② <c>MarkFailed</c> 里的 <c>FirstOrDefault</c> 是 foreach，
+    /// 别人正在 Add 时抛 <c>InvalidOperationException: Collection was modified</c>。
+    /// </para>
+    /// <para>
+    /// <b>反向验证</b>：去掉 <c>CoverFailureMemory</c> 里的 <c>lock (_gate)</c>（并在
+    /// <c>MarkFailed</c> 开头插一个 <c>Thread.Sleep(1)</c> 放大窗口）→ 本用例变红
+    /// （条目数不足，或 errors 非空）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentAccess_DoesNotLoseEntriesNorThrow()
+    {
+        const int workers = 8;
+        const int perWorker = 25; // 8 × 25 = 200 < MaxEntries(300)：不会被上限淘汰干扰判据
+        CoverFailureMemory memory = NewMemory();
+        DateTimeOffset now = DateTimeOffset.Now;
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+
+        using var start = new Barrier(workers);
+        Task[] tasks = Enumerable.Range(0, workers).Select(w => Task.Run(() =>
+        {
+            try
+            {
+                start.SignalAndWait(); // 让各路尽可能同时冲进 EnsureLoaded
+                for (int i = 0; i < perWorker; i++)
+                {
+                    memory.MarkFailed($"https://cdn.example/{w}-{i}.jpg", "HTTP 404", now);
+                    memory.IsFailed($"https://cdn.example/{w}-{i}.jpg", now);
+                    // 交叉读别的 worker 的条目：逼出"边遍历边改"
+                    memory.IsFailed($"https://cdn.example/{(w + 1) % workers}-0.jpg", now);
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Enqueue(ex);
+            }
+        })).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        Assert.Empty(errors);
+
+        var missing = new List<string>();
+        for (int w = 0; w < workers; w++)
+        {
+            for (int i = 0; i < perWorker; i++)
+            {
+                if (!memory.IsFailed($"https://cdn.example/{w}-{i}.jpg", now))
+                {
+                    missing.Add($"{w}-{i}");
+                }
+            }
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            $"并发写入丢失 {missing.Count} 条（裸 List 下惰性加载竞态会成批覆盖）：{string.Join(",", missing.Take(10))}");
+    }
+
     [Fact]
     public void SaveFailure_DoesNotThrow()
     {

@@ -82,6 +82,24 @@ public sealed class CoverFailureMemory
 
     private CoverFailureLog? _logData;
 
+    /// <summary>
+    /// 内存态 + 落盘的互斥（🟠 审查 v8-🟠-5）。
+    /// <para>
+    /// 🔴 本实例是**进程级共享**的（<c>SteamService.DefaultCoverFailures</c> 为静态 Lazy 单例），
+    /// 而 <c>GameManagerViewModel</c> 用 <c>SemaphoreSlim(3)</c> + <c>Task.WhenAll</c> 并发 3 路
+    /// 调 <c>EnsureCoverFromCdnAsync</c> → 三路同时命中 <see cref="IsFailed"/> /
+    /// <see cref="MarkFailed"/> / <see cref="ClearFailed"/>，内部却是**裸 <c>List</c>**：
+    /// 丢条目或 <c>ArgumentOutOfRangeException</c>，而异常在调用方被裸 catch 吞掉
+    /// → 失败记忆静默失效（表现为"每次刷新仍把整条候选链重试一遍"）。
+    /// </para>
+    /// <para>
+    /// 用单一互斥而非并发容器：这里要保护的不只是集合，还有"读-改-写 + 落盘"这一整段
+    /// （<c>AtomicFile</c> 只保护磁盘侧的原子性，管不了内存态的交叉修改）。临界区极短，
+    /// 且失败记忆本就是低频路径。
+    /// </para>
+    /// </summary>
+    private readonly object _gate = new();
+
     /// <summary>注入落盘路径、TTL 与日志回调（测试可全部替换）。</summary>
     public CoverFailureMemory(string? filePath = null, TimeSpan? ttl = null, Action<string>? log = null)
     {
@@ -104,27 +122,30 @@ public sealed class CoverFailureMemory
             return false;
         }
 
-        CoverFailureLog data = EnsureLoaded();
-        for (int i = 0; i < data.Entries.Count; i++)
+        lock (_gate)
         {
-            CoverFailureEntry entry = data.Entries[i];
-            if (!string.Equals(entry.Url, url, StringComparison.Ordinal))
+            CoverFailureLog data = EnsureLoaded();
+            for (int i = 0; i < data.Entries.Count; i++)
             {
-                continue;
+                CoverFailureEntry entry = data.Entries[i];
+                if (!string.Equals(entry.Url, url, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (now - entry.FailedAt <= _ttl)
+                {
+                    return true;
+                }
+
+                // 过期即失效并摘除（下次会真的重试一次）
+                data.Entries.RemoveAt(i);
+                Save(data);
+                return false;
             }
 
-            if (now - entry.FailedAt <= _ttl)
-            {
-                return true;
-            }
-
-            // 过期即失效并摘除（下次会真的重试一次）
-            data.Entries.RemoveAt(i);
-            Save(data);
             return false;
         }
-
-        return false;
     }
 
     /// <summary>记录一次确定性失败（同一地址累计次数）。</summary>
@@ -135,26 +156,29 @@ public sealed class CoverFailureMemory
             return;
         }
 
-        CoverFailureLog data = EnsureLoaded();
-        CoverFailureEntry? entry = data.Entries.FirstOrDefault(e => string.Equals(e.Url, url, StringComparison.Ordinal));
-        if (entry is null)
+        lock (_gate)
         {
-            entry = new CoverFailureEntry { Url = url };
-            data.Entries.Add(entry);
+            CoverFailureLog data = EnsureLoaded();
+            CoverFailureEntry? entry = data.Entries.FirstOrDefault(e => string.Equals(e.Url, url, StringComparison.Ordinal));
+            if (entry is null)
+            {
+                entry = new CoverFailureEntry { Url = url };
+                data.Entries.Add(entry);
+            }
+
+            entry.Reason = reason ?? "";
+            entry.FailedAt = now;
+            entry.Count++;
+
+            if (data.Entries.Count > CoverFailureLog.MaxEntries)
+            {
+                // 丢最旧（按失败时间）
+                data.Entries.Sort(static (a, b) => b.FailedAt.CompareTo(a.FailedAt));
+                data.Entries.RemoveRange(CoverFailureLog.MaxEntries, data.Entries.Count - CoverFailureLog.MaxEntries);
+            }
+
+            Save(data);
         }
-
-        entry.Reason = reason ?? "";
-        entry.FailedAt = now;
-        entry.Count++;
-
-        if (data.Entries.Count > CoverFailureLog.MaxEntries)
-        {
-            // 丢最旧（按失败时间）
-            data.Entries.Sort(static (a, b) => b.FailedAt.CompareTo(a.FailedAt));
-            data.Entries.RemoveRange(CoverFailureLog.MaxEntries, data.Entries.Count - CoverFailureLog.MaxEntries);
-        }
-
-        Save(data);
     }
 
     /// <summary>该地址成功一次即清除记忆（"曾经坏过"不该跟着它一辈子）。</summary>
@@ -165,10 +189,13 @@ public sealed class CoverFailureMemory
             return;
         }
 
-        CoverFailureLog data = EnsureLoaded();
-        if (data.Entries.RemoveAll(e => string.Equals(e.Url, url, StringComparison.Ordinal)) > 0)
+        lock (_gate)
         {
-            Save(data);
+            CoverFailureLog data = EnsureLoaded();
+            if (data.Entries.RemoveAll(e => string.Equals(e.Url, url, StringComparison.Ordinal)) > 0)
+            {
+                Save(data);
+            }
         }
     }
 
@@ -182,16 +209,20 @@ public sealed class CoverFailureMemory
     /// <summary>移除已过期条目（供启动清理；返回移除数量）。</summary>
     public int Prune(DateTimeOffset now)
     {
-        CoverFailureLog data = EnsureLoaded();
-        int removed = data.Entries.RemoveAll(e => now - e.FailedAt > _ttl);
-        if (removed > 0)
+        lock (_gate)
         {
-            Save(data);
-        }
+            CoverFailureLog data = EnsureLoaded();
+            int removed = data.Entries.RemoveAll(e => now - e.FailedAt > _ttl);
+            if (removed > 0)
+            {
+                Save(data);
+            }
 
-        return removed;
+            return removed;
+        }
     }
 
+    /// <summary>惰性加载（调用方必须已持有 <see cref="_gate"/>）。</summary>
     private CoverFailureLog EnsureLoaded()
     {
         if (_logData is not null)
