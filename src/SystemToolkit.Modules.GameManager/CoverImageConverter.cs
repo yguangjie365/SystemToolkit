@@ -16,7 +16,15 @@ namespace SystemToolkit.Modules.GameManager;
 /// </summary>
 public sealed class CoverImageConverter : IValueConverter
 {
-    /// <summary>解码目标宽度（物理像素）：卡片宽 320 逻辑 × 1.5 DPI ≈ 480。</summary>
+    /// <summary>
+    /// 解码目标宽度（物理像素）：卡片宽 320 逻辑 × 1.5 DPI ≈ 480。
+    /// <para>🟡 E-🟡-2（两批审查，经评估**保持现状**）：这是**固定值，不随实际 DPI 变化**。
+    /// 200% 缩放（4K）下卡片实际需要 640 物理像素，本值会先降到 480 再拉伸（略糊）。
+    /// 不改的理由：① 封面是 JPEG，多解一份的内存代价与收益不划算；
+    /// ② 动态 DPI 要处理跨屏拖动的 DpiChanged 重解码，复杂度远超视觉收益；
+    /// ③ 卡片用 UniformToFill，1.5x 基准在 1x/2x 下都可接受。
+    /// ⇒ 若日后要做高分屏优化，改这里（或加 1x/2x 两个转换器实例），不要改调用方。</para>
+    /// </summary>
     public int DecodeWidth { get; set; } = 480;
 
     /// <inheritdoc/>

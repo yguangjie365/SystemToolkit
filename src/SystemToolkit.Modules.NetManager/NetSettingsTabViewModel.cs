@@ -321,6 +321,10 @@ public partial class NetSettingsTabViewModel : ObservableObject
                 : exit == 1223
                     ? $"[设置] ⚠️ {action}「{adapter}」：用户拒绝 UAC 提权，已安全终止（无副作用）"
                     : $"[设置] ❌ {action}「{adapter}」失败（退出码 {exit}）");
+            // 🟡 G-🟡-4（两批审查，经评估**保持现状**）：此处无 CancellationToken ——
+            // 用户点完立刻切走页面/关窗时，Delay 结束后的 LoadAsync() 仍会跑（改集合 + 写日志）。
+            // 不修的理由：VM 无生命周期 CTS；引入 _lifetimeCts 需 View 在 Unloaded 时 Cancel，
+            // 且 IsBusy 已防重入 ⇒ 最坏结果是“切回来看到中间态”，会自动被下一次加载纠正。
             await Task.Delay(1500).ConfigureAwait(true); // 状态切换落地等待，再回读
             await LoadAsync().ConfigureAwait(true);
         }

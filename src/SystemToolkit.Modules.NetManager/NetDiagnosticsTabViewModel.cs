@@ -44,6 +44,13 @@ public partial class DiagRowVm : ObservableObject
 /// </summary>
 public partial class NetDiagnosticsTabViewModel : ObservableObject
 {
+    // 🟡 G-🟡-1（两批审查，经评估**保持现状**）：本数组必须与 Core 侧 DiagStepResult.Step 的取值
+    // **逐字一致**（P0 已核：Core 里同为 "适配器"/"网关"/"公网"/"DNS 解析"/"丢包量化"）。
+    // 失配时的真实症状：进度回调里 `Steps.First(s => s.Step == r.Step)` 抛 InvalidOperationException，
+    // 经 Progress<T>.Report 冒泡到本 VM 的 catch ⇒ 用户看到面向开发者的
+    // “Sequence contains no matching element”，而不是“诊断失败”。
+    // 不改成 FirstOrDefault 的原因：那会让失配**静默跳过**进度更新（比抛异常更难发现）。
+    // ⇒ 正解是让 Core 的 Step 用机器可读标识（如枚举/常量），属跨层契约改造，本批不做。
     private static readonly string[] StepNames = ["适配器", "网关", "公网", "DNS 解析", "丢包量化"];
 
     private readonly INetDiagnosticService _diagnostic;

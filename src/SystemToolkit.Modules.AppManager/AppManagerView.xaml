@@ -131,6 +131,11 @@ Background="{DynamicResource Brush_Background}">
         </Grid>
 
         <!-- ============ Tab 行 ============ -->
+        <!-- 🟡 A-🟡-3（两批审查，经评估**保持现状**）：这里的 Tag="store"/"thirdparty"/"archives"
+             与 code-behind OnTabChecked 里的 `_vm.SelectedTabIndex = showStore ? 0 : …`
+             是**两份彼此独立的字面量** —— 只改 XAML 的 Tag 值会静默失效（Tab 切到 archives 分支）。
+             处置：改成数字 Tag 或字符串枚举的收益不抵改动面，维持本仓既有写法；
+             🔴 但**改动任一侧时必须同时改另一侧**（OnTabChecked 里已写明对应关系）。 -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,14">
             <RadioButton Style="{DynamicResource SectionTab}" GroupName="Tabs" IsChecked="True"
                          Content="微软商店应用" Tag="store" Checked="OnTabChecked"/>

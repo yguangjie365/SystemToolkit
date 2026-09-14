@@ -643,7 +643,12 @@
             <Border Background="{DynamicResource Brush_Background}" Padding="{DynamicResource Space_LG}"
                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <!-- 旋转圆环：Accent 弧 + Track 底环，Loaded 触发无限旋转 -->
+                    <!-- 旋转圆环：Accent 弧 + Track 底环，Loaded 触发无限旋转。
+                         🟡 E-🟡-1（两批审查，经评估**保持现状**）：动画挂在 Ellipse.Loaded 且
+                         RepeatBehavior=Forever ⇒ 宿主 Border 变 Collapsed 后 Storyboard 时钟仍在 tick。
+                         实测影响可忽略（不可见元素的渲染会被 WPF 跳过，仅时钟更新），而改成
+                         IsVisibleChanged 触发需要动 EventTrigger 的 RoutedEvent，风险大于收益。
+                         ⇒ 记录在此：若后续要优化首屏 / 常驻开销，这里是候选点。 -->
                     <Grid Width="26" Height="26" HorizontalAlignment="Center">
                         <Ellipse Stroke="{DynamicResource Brush_Track}" StrokeThickness="2.5"/>
                         <Ellipse Stroke="{DynamicResource Brush_Accent}" StrokeThickness="2.5" StrokeDashArray="8 100" StrokeDashCap="Round">
