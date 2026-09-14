@@ -8,32 +8,17 @@ namespace SystemToolkit.Modules.FileBackup;
 /// <summary>bool → 画刷（启用=成功色/停用=静音色），规则列表的启停徽标用。</summary>
 public sealed class EnabledToBrushConverter : IValueConverter
 {
-    // 🔴 审查 2026-09-11（🔴-3）：原为 static readonly —— 类型级初始化**只执行一次**，
-    // 主题切换后徽标颜色永不跟随（Claude→Nvidia 后浅色主题的成功/静音色直接压在近黑底上）。
-    // 改为「按主题 id 缓存」：既跟随主题，又避免每次 Convert 都走一遍资源查找。
-    private static string? _cachedThemeId;
-    private static Brush _enabledBrush = ThemeBrush.Find("Brush_SuccessText", "#047857");
-    private static Brush _disabledBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
-
-    private static void EnsureThemeCache()
-    {
-        string current = ThemeManager.CurrentThemeId;
-        if (_cachedThemeId == current)
-        {
-            return;
-        }
-
-        // 走主题资源（主题未就绪时回退 hex）——直接 new SolidColorBrush 会让徽标脱离主题机制
-        _enabledBrush = ThemeBrush.Find("Brush_SuccessText", "#047857");
-        _disabledBrush = ThemeBrush.Find("Brush_TextMuted", "#6B7280");
-        _cachedThemeId = current;
-    }
-
+    // 🟠 C-🟠-2 v11~v14 后续批次：上一版「按主题 id 缓存」**实际无效**。WPF 只在
+    // **绑定源变化**时重新调用 Convert；本转换器的唯一消费点绑的是 RuleRowVm.Enabled ——
+    // 它是 getter-only 派生属性、不实现 INotifyPropertyChanged ⇒ Convert 只在首次绑定时
+    // 执行一次。因此缓存永远等不到第二次调用：切主题后徽标颜色**停留在旧主题画刷**
+    //（深色主题下浅色成功色压在近黑底上几乎不可见），直到 ReloadRules() 重建行 VM 才跟上。
+    // 原注释「既跟随主题」与实现不符 ⇒ 改为每次直取（开销仅一次字典查找；Convert 的调用
+    // 频率极低，只在绑定重新求值时）。
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        EnsureThemeCache();
-        return value is true ? _enabledBrush : _disabledBrush;
-    }
+        => value is true
+            ? ThemeBrush.Find("Brush_SuccessText", "#047857")
+            : ThemeBrush.Find("Brush_TextMuted", "#6B7280");
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();

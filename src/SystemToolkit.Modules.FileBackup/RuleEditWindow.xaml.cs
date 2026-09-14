@@ -30,10 +30,23 @@ public partial class RuleEditWindow : Window
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        Vm.SaveRuleCommand.Execute(null);
-        if (string.IsNullOrEmpty(Vm.FormError))
+        // 🟡 C-🟡-3 v11~v14 后续批次：SaveRule 内部虽已 try 包住 _rules.Add / Save，但**前置段**
+        //（Directory.Exists 系列、SourcePathItems 拼接、IdGenerator.NewId 等）在 try 之外，
+        // 网络盘掉线等场景仍会抛；从 Execute 冒泡到本事件处理器后**不经任何兜底**
+        // ⇒ 弹窗既不关闭也无提示（FormError 仍为空），用户以为"点了保存没反应"。
+        // 弹窗类文件允许直弹 MessageBox（RecurringDefectGuardTests 只拦 VM 直弹）。
+        try
         {
-            Close();
+            Vm.SaveRuleCommand.Execute(null);
+            if (string.IsNullOrEmpty(Vm.FormError))
+            {
+                Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(this, "保存失败：" + ex.Message, "保存",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }
     }
 }

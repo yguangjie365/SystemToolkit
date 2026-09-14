@@ -185,8 +185,19 @@ public class FileBackupViewModelCommandTests
         Assert.False(vm.EditRuleCommand.CanExecute(null));
         Assert.False(vm.BackupAllCommand.CanExecute(null));
         Assert.False(vm.RestoreAllCommand.CanExecute(null));
-        // 忙态下仍应可取消
+
+        // 🔴 契约变更（🟠 C-🟠-3，v11~v14 后续批次）：「取消」的可执行判据由泛化的 `IsBusy`
+        // **收窄为专用的 `IsBackupRunning`**。理由：校验 / 恢复路径同样会置 IsBusy = true，
+        // 但这两条路径都**没有**把 `_backupCts.Token` 传下去（`VerifyAsync(info, snapDir, reporter)`
+        // 是三参调用），于是原判据下「取消」按钮在校验 / 恢复期间**亮起可点却毫无作用**
+        // —— 用户点了界面毫无变化（§六-14 状态诚实化反面）。
+        // 故 IsBusy 单独为真时，取消**不再**可执行：
+        Assert.False(vm.CancelBackupCommand.CanExecute(null));
+
+        // 只有备份管线启动（同时置 IsBusy + IsBackupRunning）才允许取消：
+        vm.IsBackupRunning = true;
         Assert.True(vm.CancelBackupCommand.CanExecute(null));
+        Assert.False(vm.BackupNowCommand.CanExecute(null)); // 备份中其它命令仍被 IsBusy 拦住
     }
 
     // ════════ 批量命令依赖启用规则集合 ════════

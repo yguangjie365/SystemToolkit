@@ -77,20 +77,36 @@ public partial class FileBackupViewModel
             return;
         }
 
-        string? snapDir = SnapshotDirOf(manager, SelectedSnapshot.SnapshotId);
-        if (snapDir is null)
+        // 🟠 C-🟠-1 v11~v14 后续批次（V12-F4 的姊妹漏网点）：**前置段无 catch**。
+        // SnapshotDirOf（目录枚举 + ReadSnapshotLight）与 ReadSnapshot（反序列化）
+        // 都是磁盘 IO —— 快照根被外部删除 / 权限不足 / 网络盘掉线时即抛；而命令体前置段
+        // 无 catch ⇒ 异常被 AsyncRelayCommand 吞掉 ⇒ 用户点「校验」**零反馈、日志零记录**。
+        // 同文件 RestoreSnapshotAsync 的 V12-F4 已修同款前置段，此处补齐。
+        string? snapDir;
+        SnapshotInfo? info;
+        try
         {
-            Log("[校验] ❌ 未找到该快照的目录（可能已被手动删除）");
-            return;
-        }
+            snapDir = SnapshotDirOf(manager, SelectedSnapshot.SnapshotId);
+            if (snapDir is null)
+            {
+                Log("[校验] ❌ 未找到该快照的目录（可能已被手动删除）");
+                return;
+            }
 
-        // 🔴 2026-09-08 修复：ReadSnapshot 的参数是「快照目录路径」，此前误传 SnapshotId
-        // → manifest 永远找不到 → throw 被 AsyncRelayCommand 吞掉 → 点击无任何反应
-        // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化不应占 UI 线程
-        SnapshotInfo? info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
-        if (info is null)
+            // 🔴 2026-09-08 修复：ReadSnapshot 的参数是「快照目录路径」，此前误传 SnapshotId
+            // → manifest 永远找不到 → throw 被 AsyncRelayCommand 吞掉 → 点击无任何反应
+            // 审查 O16（2026-09-10）：万级快照 manifest 读取+反序列化不应占 UI 线程
+            info = await Task.Run(() => manager.ReadSnapshot(snapDir)).ConfigureAwait(true);
+            if (info is null)
+            {
+                Log("[校验] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");
+                return;
+            }
+        }
+        catch (Exception ex)
         {
-            Log("[校验] ❌ 快照清单读取失败（manifest.json 缺失或损坏）");
+            Log("[校验] ❌ 校验未启动：" + ex.Message);
+            _logger.Error("快照校验前置阶段失败", ex);
             return;
         }
 

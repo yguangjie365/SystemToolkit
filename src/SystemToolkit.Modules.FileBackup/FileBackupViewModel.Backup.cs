@@ -60,6 +60,7 @@ public partial class FileBackupViewModel
     {
         _backupCts = new CancellationTokenSource();
         IsBusy = true;
+        IsBackupRunning = true; // 🟠 C-🟠-3：只有备份这一步是可取消的（须在 RefreshCanExecute 之前）
         HasProgress = true;
         ProgressValue = 0;
         RefreshCanExecute();
@@ -103,6 +104,7 @@ public partial class FileBackupViewModel
         finally
         {
             IsBusy = false;
+            IsBackupRunning = false; // 🟠 C-🟠-3
             HasProgress = false;
             ProgressText = "";
             _backupCts.Dispose();
@@ -170,10 +172,21 @@ public partial class FileBackupViewModel
         }
     }
 
+    /// <summary>是否正在跑**可取消**的备份。与 <c>IsBusy</c> 分离：<c>IsBusy</c> 还覆盖
+    /// 校验 / 恢复等不可取消的操作（它们没把 <c>_backupCts.Token</c> 传下去）。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelBackupCommand))]
+    private bool _isBackupRunning;
+
     [RelayCommand(CanExecute = nameof(CanCancelBackup))]
     private void CancelBackup() => _backupCts?.Cancel();
 
-    private bool CanCancelBackup => IsBusy;
+    // 🟠 C-🟠-3 v11~v14 后续批次：原先判据是泛化的 `IsBusy` ⇒ 校验/恢复路径也会置
+    // IsBusy = true，于是「取消」按钮在**校验 / 恢复期间亮起可点**，但 CancelBackup 只做
+    // `_backupCts?.Cancel()`，对它们毫无影响（那两条路径都把 Token 传给了自己的服务）
+    // ⇒ 用户点了"取消"界面毫无变化。改用只跟备份的专用标志
+    //（对齐 DriverManager 的 IsBackupRunning 范式）。
+    private bool CanCancelBackup => IsBackupRunning;
 
     private void RefreshCanExecute()
     {
