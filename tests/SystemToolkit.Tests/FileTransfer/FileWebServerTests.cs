@@ -19,15 +19,43 @@ namespace SystemToolkit.Tests;
 public class FileWebServerTests
 {
     /// <summary>测试用日志收集器：把服务端留痕内容暴露给断言消息（排查 500 时靠它看真实异常）。</summary>
+    /// <remarks>
+    /// 🟡 审查 v8-🟡-13：<see cref="Messages"/> 必须是**加锁快照**而非裸 <c>List</c>——
+    /// 写入发生在 Kestrel 请求线程/启动线程，断言侧却直接枚举，收尾日志可能还在写，
+    /// 裸 List 会抛 <c>InvalidOperationException: Collection was modified</c>
+    /// （与 2026-09-14 刚修过的 <c>BusCapture</c> 同源；此前靠时序侥幸通过）。
+    /// </remarks>
     private sealed class CapturingLogger : SystemToolkit.Core.Contracts.ILogger
     {
-        public List<string> Messages { get; } = new();
+        private readonly object _gate = new();
 
-        public void Info(string message) => Messages.Add("[INFO] " + message);
+        private readonly List<string> _messages = new();
 
-        public void Warn(string message) => Messages.Add("[WARN] " + message);
+        /// <summary>已捕获日志的**只读快照**（遍历期间集合不变是结构保证）。</summary>
+        public List<string> Messages
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return new List<string>(_messages);
+                }
+            }
+        }
 
-        public void Error(string message, Exception? ex = null) => Messages.Add("[ERROR] " + message + " " + ex);
+        public void Info(string message) => Add("[INFO] " + message);
+
+        public void Warn(string message) => Add("[WARN] " + message);
+
+        public void Error(string message, Exception? ex = null) => Add("[ERROR] " + message + " " + ex);
+
+        private void Add(string line)
+        {
+            lock (_gate)
+            {
+                _messages.Add(line);
+            }
+        }
     }
 
     /// <summary>取一个空闲 TCP 端口。</summary>
@@ -650,6 +678,76 @@ public class FileWebServerTests
                 .EnsureSuccessStatusCode();
 
             Assert.Equal("nested", await File.ReadAllTextAsync(Path.Combine(dir, "photos", "2024", "a.jpg")));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 🟠 审查 v8-🟠-3：上传路径里的**零宽字符必须被剥离**——与 <c>WriteUploadedFileAsync</c>、
+    /// <c>FileTransferService.SanitizeFileName</c> 共用同一判据（<c>TextSanitizer.StripInvisible</c>）。
+    /// <para>
+    /// 不剥离的后果：落盘 <c>a\u200Bb.txt</c> 这类文件名——手机端**看不见**那个字符，
+    /// 但文件名对不上，复制/搜索/再次上传全都匹配不到。
+    /// </para>
+    /// <para>反向验证：去掉 <c>SanitizeRelativePath</c> 每段的 <c>StripInvisible</c> → 本用例变红
+    /// （磁盘上会出现含 U+200B 的文件名）。</para>
+    /// </summary>
+    [Fact]
+    public async Task UploadChunk_ZeroWidthInName_StrippedBeforeLanding()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            byte[] data = Encoding.UTF8.GetBytes("zw");
+            // 零宽空格（U+200B）夹在中间：合法文件名字符，故旧实现会原样落盘
+            (await PostChunkAsync(http, port, server.Token, "a\u200Bb.txt", 2, 1, 0, data))
+                .EnsureSuccessStatusCode();
+
+            Assert.True(File.Exists(Path.Combine(dir, "ab.txt")), "零宽字符应被剥离后落盘为 ab.txt");
+            Assert.DoesNotContain(
+                Directory.GetFiles(dir),
+                f => Path.GetFileName(f).IndexOf('\u200b') >= 0);
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    /// <summary>
+    /// 🟠 审查 v8-🟠-3：**只由零宽字符组成**的段剥离后为空 → 必须拒绝（而不是落一个空名文件）。
+    /// <para>
+    /// ⚠️ U+200B 不是空白字符（<c>char.IsWhiteSpace</c> 为假），所以入口的
+    /// <c>IsNullOrWhiteSpace</c> 挡不住它——必须靠剥离后的空判据。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task UploadChunk_ZeroWidthOnlySegment_RejectedWith400()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+
+            using var http = new HttpClient();
+            byte[] data = Encoding.UTF8.GetBytes("x");
+            HttpResponseMessage resp = await PostChunkAsync(
+                http, port, server.Token, "\u200b\u200b", 1, 1, 0, data);
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            // 断言拒绝**理由**：剥离后为空属"非法路径"，而不是被别的原因顺带挡下
+            Assert.Contains("非法的上传路径", await resp.Content.ReadAsStringAsync());
+            Assert.Empty(Directory.GetFiles(dir));
         }
         finally
         {

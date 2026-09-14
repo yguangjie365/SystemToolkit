@@ -357,6 +357,60 @@ public class WebMessageLogTests
         }
     }
 
+    /// <summary>
+    /// 🟠 审查 v8-🟠-4：流水还有**累计字节**上限（2 MB），不只看条数。
+    /// <para>
+    /// <b>背景</b>：单条 payload 的文本上限是 <c>TransferText.MaxBytes</c>（256 KB），
+    /// 而落进流水的是 <b>JSON 转义后</b>的形态——非 ASCII（中文）每个字符膨胀成 <c>\uXXXX</c>
+    /// 的 6 字节，最坏 ≈768 KB/条。只限 200 条 ⇒ 单次 <c>GET /api/messages</c> 全量下发最坏
+    /// ≈150 MB，而手机端 <c>app.js</c> 是 <c>resp.json()</c> 整包入内存。
+    /// </para>
+    /// <para>
+    /// <b>反向验证</b>：把 <c>MaxMessageLogBytes</c> 预算去掉（只留条数上限）→ 本用例变红
+    /// （6 条都在 200 条以内，会全部保留、<c>truncated</c> 为假）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Messages_ByteBudget_EvictsOldestEvenBelowCountLimit()
+    {
+        string dir = NewTempDir();
+        int port = FreeTcpPort();
+        try
+        {
+            await using var server = new FileWebServer();
+            await server.StartAsync(MakeSettings(port), dir);
+            using var http = new HttpClient();
+
+            // 86,000 个汉字：UTF-8 258,000 字节（< 256 KB 文本上限）→ JSON 转义后 ≈516 KB/条。
+            // 6 条累计 ≈3 MB > 2 MB 预算，但远少于 200 条上限——淘汰只能由**字节**预算触发。
+            string chunk = new string('汉', 86_000);
+            const int posted = 6;
+            for (int i = 0; i < posted; i++)
+            {
+                await PostTextAsync(http, port, server.Token, chunk);
+            }
+
+            JsonElement log = await GetMessagesAsync(http, port, server.Token, since: 1);
+            JsonElement messages = log.GetProperty("messages");
+
+            Assert.Equal(posted, log.GetProperty("lastSeq").GetInt64());
+            Assert.True(
+                messages.GetArrayLength() < posted,
+                $"字节预算生效时必须淘汰最旧（否则 {posted} 条会全留着）");
+            Assert.True(
+                log.GetProperty("truncated").GetBoolean(),
+                "起点已被字节预算淘汰 = 中间确实少了消息，必须如实报缺口");
+            // 留下的必须是**最新**的那条（丢最旧，不是丢最新）
+            Assert.Equal(
+                posted,
+                messages[messages.GetArrayLength() - 1].GetProperty("seq").GetInt64());
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
     /// <summary>补拉端点与其它 API 同级，必须带令牌（否则等于把会话内容公开）。</summary>
     [Fact]
     public async Task Messages_WithoutToken_ReturnsUnauthorized()

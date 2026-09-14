@@ -345,6 +345,14 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <inheritdoc/>
     public string CertFingerprint => _cert?.GetCertHashString(HashAlgorithmName.SHA256) ?? string.Empty;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// 🟠 审查 v8-🟠-1：对外暴露服务端**实际**在用的共享根，供桌面侧「发文件到手机」取真源——
+    /// 它必须与 <c>Browse</c> / <c>PublishFileOfferAsync</c> 用的是同一个目录，
+    /// 否则会出现"复制到 A、去 B 里找"的推送全败。
+    /// </remarks>
+    public string SharedRoot => ShareRoot;
+
     // ── 长期凭据（「记住此设备，30 天免配对」，P3 ⑲） ──
 
     /// <summary>启动时读回长期凭据表，并顺手清掉已过期条目（免得文件只增不减）。</summary>
@@ -1366,6 +1374,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
     /// <inheritdoc/>
     public async Task<int> BroadcastTextAsync(string text, CancellationToken ct = default)
     {
+        // 🟡 审查 v8-🟡-3：本入口此前**完全不用 ct**，而同批兄弟 PublishFileOfferAsync(:1387)
+        // 首行即 ThrowIfCancellationRequested、WriteUploadedFileAsync(:1450) 把 ct 传进 CopyToAsync
+        // ——调用方传令牌以为可取消，实际不可取消（同批新增入口不同构）。
+        ct.ThrowIfCancellationRequested();
+
         // 与 FileTransferService.SendTextAsync 同一判据、同一拒绝方式：不合规就抛，
         // 不静默截断、也不造一个"送达 0 人"的假成功（调用方会把 0 当成"没人在线"）。
         TextValidation validation = TransferText.Validate(text);
@@ -1655,8 +1668,22 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
         {
             return null;
         }
-        foreach (string part in parts)
+
+        string[] cleanedParts = new string[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
         {
+            // 🟠 审查 v8-🟠-3：**先**剥零宽/不可见字符，再逐项校验——与同文件
+            // WriteUploadedFileAsync(:1430) 及 FileTransferService.SanitizeFileName(:2399)
+            // **共用同一判据**（TextSanitizer.StripInvisible），避免第三次"同款修复只改一处"。
+            // 后果实证：真实端点 /api/files/upload-chunk 走本方法，未剥离时可落盘
+            // `a\u200Bb.txt` 这类文件名——手机端看不见、复制/搜索都匹配不上。
+            string part = TextSanitizer.StripInvisible(parts[i]) ?? string.Empty;
+            // 只由零宽组成的段剥离后为空：空文件名段非法（且会让 Path.Combine 语义漂移）
+            if (part.Length == 0)
+            {
+                return null;
+            }
+
             if (part is "." or "..")
             {
                 return null;
@@ -1681,9 +1708,11 @@ public sealed partial class FileWebServer : IFileWebServer, IDisposable
             {
                 return null;
             }
+
+            cleanedParts[i] = part;
         }
 
-        return Path.Combine(parts);
+        return Path.Combine(cleanedParts);
     }
 
     private static readonly string[] WindowsReservedDeviceNames =

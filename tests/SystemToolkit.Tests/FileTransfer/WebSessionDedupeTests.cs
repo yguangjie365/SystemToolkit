@@ -23,15 +23,41 @@ namespace SystemToolkit.Tests;
 public class WebSessionDedupeTests
 {
     /// <summary>测试用日志收集器（断言"清理了几条"这类留痕）。</summary>
+    /// <remarks>
+    /// 🟡 审查 v8-🟡-13：<see cref="Messages"/> 为**加锁快照**——写入发生在启动线程，
+    /// 断言侧直接枚举时可能撞上"集合已修改"（与 <c>BusCapture</c> 同源的裸集合缺陷）。
+    /// </remarks>
     private sealed class CapturingLogger : ILogger
     {
-        public List<string> Messages { get; } = new();
+        private readonly object _gate = new();
 
-        public void Info(string message) => Messages.Add("[INFO] " + message);
+        private readonly List<string> _messages = new();
 
-        public void Warn(string message) => Messages.Add("[WARN] " + message);
+        /// <summary>已捕获日志的**只读快照**。</summary>
+        public List<string> Messages
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return new List<string>(_messages);
+                }
+            }
+        }
 
-        public void Error(string message, Exception? ex = null) => Messages.Add("[ERROR] " + message + " " + ex);
+        public void Info(string message) => Add("[INFO] " + message);
+
+        public void Warn(string message) => Add("[WARN] " + message);
+
+        public void Error(string message, Exception? ex = null) => Add("[ERROR] " + message + " " + ex);
+
+        private void Add(string line)
+        {
+            lock (_gate)
+            {
+                _messages.Add(line);
+            }
+        }
     }
 
     private static int FreeTcpPort()

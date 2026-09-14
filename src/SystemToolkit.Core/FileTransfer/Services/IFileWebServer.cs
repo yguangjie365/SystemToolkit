@@ -83,6 +83,26 @@ public interface IFileWebServer : IAsyncDisposable
     string PairCode { get; }
 
     /// <summary>
+    /// 服务端**实际使用**的共享根目录（绝对路径）——共享目录的**唯一真源**。
+    /// <para>
+    /// 🔴 为什么必须由服务端给出（🟠 审查 v8-🟠-1）：桌面侧另有一份独立持久化的
+    /// 「接收目录」（<c>TransferSettings.ReceiveDirectory</c>），手机侧配置的是
+    /// <c>MobileConfig.ShareDirectory</c>。两者是**两份互不同步的字段**，各自被不同入口读取：
+    /// </para>
+    /// <list type="bullet">
+    /// <item>只配了共享目录（启动 Web 服务的**必要**条件）时，桌面侧按自己的字段判"未设置"
+    /// → 「发文件到手机」直接失效；</item>
+    /// <item>两者指向不同目录时，文件被复制到 A，随后 <c>PublishFileOfferAsync</c> 去 B 里找
+    /// → 抛"共享目录里找不到该文件" → 推送全败。</item>
+    /// </list>
+    /// <para>
+    /// 以本属性为准，则「复制目标」与「<c>/api/files</c> 的可见范围」恒为同一个目录。
+    /// 未配置共享目录时退化为当前用户的「下载」文件夹（与 <c>Browse</c> 的根一致）。
+    /// </para>
+    /// </summary>
+    string SharedRoot { get; }
+
+    /// <summary>
     /// 启动 Web 服务。
     /// </summary>
     /// <param name="settings">传输配置。</param>

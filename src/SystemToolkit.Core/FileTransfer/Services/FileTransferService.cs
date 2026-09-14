@@ -577,13 +577,25 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// </summary>
     private PauseGate GetOrCreatePauseGate(string taskId)
     {
-        foreach (string stale in _pauseGates.Keys.Where(id => !_tasks.ContainsKey(id)).ToArray())
+        // 🟡 审查 v8-🟡-4：**先取闸、再清理**（原先反过来，两步之间没有任何互斥）。
+        // 原实现是「先按 `!_tasks.ContainsKey(id)` 摘除 → 再 GetOrAdd」，两步非原子：
+        // 并发 PauseAsync（另一任务触发的清理）可能把本线程刚拿到的闸摘掉，
+        // 于是 PauseAsync 作用在闸 A 上、传输循环按 id 去查却拿到闸 B（或查不到）——
+        // 界面显示「已暂停」而数据照流。改为先 GetOrAdd（本身原子）再清理**其它**键。
+        PauseGate gate = _pauseGates.GetOrAdd(taskId, _ => new PauseGate());
+
+        foreach (string stale in _pauseGates.Keys
+            .Where(id => !string.Equals(id, taskId, StringComparison.Ordinal)
+                && !_tasks.ContainsKey(id)
+                // 已暂停的闸不回收：回收等于把"暂停"这个状态静默丢掉
+                && !(_pauseGates.TryGetValue(id, out PauseGate? g) && g.IsPaused))
+            .ToArray())
         {
             _pauseGates.TryRemove(stale, out _);
             CancelPauseTimeout(stale);
         }
 
-        return _pauseGates.GetOrAdd(taskId, _ => new PauseGate());
+        return gate;
     }
 
     /// <summary>

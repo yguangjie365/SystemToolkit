@@ -43,6 +43,17 @@ public sealed partial class FileWebServer
     private readonly ConcurrentDictionary<Guid, WsClient> _wsClients = new();
 
     /// <summary>
+    /// 连接数**占位计数**（🟡 审查 v8-🟡-8）。
+    /// <para>
+    /// 🔴 不能用 <c>_wsClients.Count</c> 做准入判据：原先「<c>Count &gt;= Max</c>」与
+    /// 「<c>_wsClients[id] = client</c>」之间隔着 <c>await AcceptWebSocketAsync()</c>——
+    /// 并发升级请求可以**一起**通过检查、随后各自入表，突破 <see cref="MaxWsClients"/>。
+    /// 改为原子计数：<c>Increment</c> 后超限立即回退，占位在 <c>finally</c> 释放。
+    /// </para>
+    /// </summary>
+    private int _wsClientCount;
+
+    /// <summary>
     /// 会话内容消息流水（W3 重连补拉）。只记 <c>chatMessage</c> / <c>fileOffered</c>，
     /// **不记瞬时状态**（设备列表、在线浏览器、传输进度）—— 那些在重连时由首帧三连重新给出，
     /// 补一条过期进度只会误导用户。理由与边界见 <see cref="WebMessageRecord"/>。
@@ -50,13 +61,32 @@ public sealed partial class FileWebServer
     private readonly List<WebMessageRecord> _messageLog = new();
 
     /// <summary>
-    /// 流水上限（超出丢最旧）。手机要补的是"错过的几条消息"，几十条足够；
+    /// 流水**条数**上限（超出丢最旧）。手机要补的是"错过的几条消息"，几十条足够；
     /// 无界增长会让一个长期运行的服务悄悄吃掉内存。
     /// </summary>
     private const int MaxMessageLog = 200;
 
+    /// <summary>
+    /// 流水**累计字节**上限（🟠 审查 v8-🟠-4，超出丢最旧）。
+    /// <para>
+    /// 🔴 <b>为什么条数上限不够</b>：单条 payload 的文本上限是 <c>TransferText.MaxBytes</c>
+    /// = 256 KB，而落进流水的是 <b>JSON 转义后</b>的形态——非 ASCII（中文）每个字符膨胀成
+    /// <c>\uXXXX</c> 的 6 字节，最坏约 768 KB/条。只限 200 条 ⇒ 单次 <c>GET /api/messages</c>
+    /// 全量下发最坏 ≈150 MB，而手机端 <c>app.js</c> 是 <c>resp.json()</c> 整包入内存。
+    /// </para>
+    /// <para>
+    /// 🔴 <b>上限关系（反模式 ㉞：自定上限必须 ≥ 承载它的那一层的上限）</b>：
+    /// 2 MB &gt; 单条最坏 ≈768 KB，故**任何一条合法消息都装得下**——不会出现
+    /// "刚记进去就被自己的预算挤掉"的活锁。条数上限同时保留（防大量小消息累积）。
+    /// </para>
+    /// </summary>
+    private const long MaxMessageLogBytes = 2 * 1024 * 1024;
+
     /// <summary>消息序号（从 1 开始；0 保留给"不入流水"的消息，如首帧快照）。</summary>
     private long _messageSeq;
+
+    /// <summary>流水当前累计字节（与 <see cref="_messageLog"/> 同受 <see cref="_messageLogGate"/> 保护）。</summary>
+    private long _messageLogBytes;
 
     /// <summary>流水与序号的互斥（广播可能在多个请求线程上并发发生）。</summary>
     private readonly object _messageLogGate = new();
@@ -83,67 +113,78 @@ public sealed partial class FileWebServer
         // 🟡 审查 2026-09-11（🟡-1）：连接数上限。token 门已挡住外部未授权者，
         // 此处防的是「已配对设备开数千 upgrade」造成的内存/FD 压力（每个连接 = 一个 socket + 闸 + 缓冲）。
         // 局域网多设备+多浏览器场景下 16 足够；如需更多，调此常量即可。
-        if (_wsClients.Count >= MaxWsClients)
+        // 🟡 审查 v8-🟡-8：判据由「读 _wsClients.Count」改为「原子占位」——
+        // 读计数与入表之间隔着 await，并发升级能一起过关（check-then-act）。
+        if (Interlocked.Increment(ref _wsClientCount) > MaxWsClients)
         {
+            Interlocked.Decrement(ref _wsClientCount);
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             await ctx.Response.WriteAsync("实时推送连接数已达上限，请稍后重试。", ctx.RequestAborted);
             return;
         }
 
-        using WebSocket socket = await ctx.WebSockets.AcceptWebSocketAsync();
-        string clientIp = ctx.Connection.RemoteIpAddress?.ToString() ?? "未知地址";
-        var client = new WsClient(socket, clientIp, DateTimeOffset.UtcNow);
-        var id = Guid.NewGuid();
-        _wsClients[id] = client;
-
         try
         {
-            // 首帧：前端据此渲染初始列表（此后只收增量）
-            await client.SendJsonAsync(
-                BuildEnvelope("deviceList", SnapshotDevices()),
-                ctx.RequestAborted);
-            await client.SendJsonAsync(
-                BuildEnvelope("browserList", BuildBrowserList()),
-                ctx.RequestAborted);
-            // clientId = 本连接的 id：前端据此在 browserList 里认出「哪一条是我」
-            // （手机端需要知道"浏览器那条里哪个是我"，而不是把电脑当成"本机"）
-            await client.SendJsonAsync(
-                BuildEnvelope("serverInfo", new { host = _lanIp, clientId = id }),
-                ctx.RequestAborted);
+            using WebSocket socket = await ctx.WebSockets.AcceptWebSocketAsync();
+            string clientIp = ctx.Connection.RemoteIpAddress?.ToString() ?? "未知地址";
+            var client = new WsClient(socket, clientIp, DateTimeOffset.UtcNow);
+            var id = Guid.NewGuid();
+            _wsClients[id] = client;
 
-            // 已在线的其它浏览器需要看到本连接加入（在线数变化）——不推的话，
-            // 先连的浏览器永远停在它连接那一刻的列表长度。排除自己：首帧已含自己。
-            await BroadcastBrowserListAsync(excludeId: id);
-
-            byte[] buffer = new byte[4096];
-            while (socket.State == WebSocketState.Open)
+            try
             {
-                WebSocketReceiveResult result = await socket.ReceiveAsync(
-                    new ArraySegment<byte>(buffer), ctx.RequestAborted);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    break;
-                }
+                // 首帧：前端据此渲染初始列表（此后只收增量）
+                await client.SendJsonAsync(
+                    BuildEnvelope("deviceList", SnapshotDevices()),
+                    ctx.RequestAborted);
+                await client.SendJsonAsync(
+                    BuildEnvelope("browserList", BuildBrowserList()),
+                    ctx.RequestAborted);
+                // clientId = 本连接的 id：前端据此在 browserList 里认出「哪一条是我」
+                // （手机端需要知道"浏览器那条里哪个是我"，而不是把电脑当成"本机"）
+                await client.SendJsonAsync(
+                    BuildEnvelope("serverInfo", new { host = _lanIp, clientId = id }),
+                    ctx.RequestAborted);
 
-                // App 层心跳：前端只发 ping，统一回 pong（不解析内容，免得为心跳加协议负担）
-                await client.SendJsonAsync("""{"type":"pong"}""", ctx.RequestAborted);
+                // 已在线的其它浏览器需要看到本连接加入（在线数变化）——不推的话，
+                // 先连的浏览器永远停在它连接那一刻的列表长度。排除自己：首帧已含自己。
+                await BroadcastBrowserListAsync(excludeId: id);
+
+                byte[] buffer = new byte[4096];
+                while (socket.State == WebSocketState.Open)
+                {
+                    WebSocketReceiveResult result = await socket.ReceiveAsync(
+                        new ArraySegment<byte>(buffer), ctx.RequestAborted);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        break;
+                    }
+
+                    // App 层心跳：前端只发 ping，统一回 pong（不解析内容，免得为心跳加协议负担）
+                    await client.SendJsonAsync("""{"type":"pong"}""", ctx.RequestAborted);
+                }
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // 客户端断开 / 服务停止：正常收尾路径
-        }
-        catch (WebSocketException)
-        {
-            // 网络中断（手机锁屏、Wi-Fi 抖动）：同样按断开处理
+            catch (OperationCanceledException)
+            {
+                // 客户端断开 / 服务停止：正常收尾路径
+            }
+            catch (WebSocketException)
+            {
+                // 网络中断（手机锁屏、Wi-Fi 抖动）：同样按断开处理
+            }
+            finally
+            {
+                _wsClients.TryRemove(id, out _);
+                await client.CloseAsync();
+
+                // 本连接已移出集合 → 重推全量，其余浏览器看到在线数下降
+                await BroadcastBrowserListAsync();
+            }
         }
         finally
         {
-            _wsClients.TryRemove(id, out _);
-            await client.CloseAsync();
-
-            // 本连接已移出集合 → 重推全量，其余浏览器看到在线数下降
-            await BroadcastBrowserListAsync();
+            // 占位释放必须晚于 _wsClients 移除（否则新连接会看到"名额已空但表里还满"）
+            Interlocked.Decrement(ref _wsClientCount);
         }
     }
 
@@ -311,15 +352,26 @@ public sealed partial class FileWebServer
         return (seq, results.Count(static ok => ok));
     }
 
-    /// <summary>把一条消息追加进补拉流水（分配序号），超出上限丢最旧。返回分配到的序号。</summary>
+    /// <summary>
+    /// 把一条消息追加进补拉流水（分配序号），超出上限丢最旧。返回分配到的序号。
+    /// <para>
+    /// 🔴 两条上限**同时**生效（🟠 审查 v8-🟠-4）：条数 <see cref="MaxMessageLog"/>
+    /// 与累计字节 <see cref="MaxMessageLogBytes"/>。淘汰顺序恒为「丢最旧」，
+    /// 且**永远保留最新一条**（<c>Count &gt; 1</c>）——否则一条超预算的消息会被自己挤掉，
+    /// 变成"记了等于没记"的活锁。
+    /// </para>
+    /// </summary>
     private long AppendMessageLog(string type, string payloadJson)
     {
         lock (_messageLogGate)
         {
             long seq = ++_messageSeq;
             _messageLog.Add(new WebMessageRecord(seq, type, payloadJson, DateTimeOffset.UtcNow));
-            while (_messageLog.Count > MaxMessageLog)
+            _messageLogBytes += Encoding.UTF8.GetByteCount(payloadJson);
+            while (_messageLog.Count > 1
+                && (_messageLog.Count > MaxMessageLog || _messageLogBytes > MaxMessageLogBytes))
             {
+                _messageLogBytes -= Encoding.UTF8.GetByteCount(_messageLog[0].PayloadJson);
                 _messageLog.RemoveAt(0);
             }
 
