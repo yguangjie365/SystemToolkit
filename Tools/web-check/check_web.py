@@ -103,22 +103,31 @@ def main() -> int:
     # ── 4. 会话内容消息的 payload：渲染必需字段前端必须读 ───────────────────
     # 读点按**各自的渲染函数**取：全局取会把两个类型的字段混在一起，
     # 于是"A 类型漏读了某字段、而 B 类型恰好读了同名字段"就查不出来。
+    # 🟡 2026-09-14（v8-🟡-11）：登记表从 2 型扩到 3 型 —— transferUpdate 原先只被
+    # 第 2 节按**类型名**比对（服务端推 ⊄ 前端 case），它的 **8 个字段**漂移查不出来。
+    # 另：读点提取改为"按函数形参名"取（原先写死 `p.`，而 transferUpdate 的形参是 `t`）。
     render_funcs = {
         "chatMessage": "appendTextBubble",
         "fileOffered": "appendFileOfferBubble",
+        "transferUpdate": "applyTransferUpdate",
     }
     content_types = {
         "chatMessage": {"text", "origin", "from"},
         "fileOffered": {"name", "path", "size"},
+        # status/transferId 是分支判据与匹配键；fileName/errorMessage 是文案来源
+        "transferUpdate": {"status", "transferId", "fileName", "errorMessage"},
     }
     for type_name, required in content_types.items():
         func = render_funcs[type_name]
-        body = re.search(r"function " + func + r"\([\s\S]*?\n    \}", js)
+        body = re.search(r"function " + func + r"\((\w*)[\s\S]*?\n    \}", js)
         if not body:
             problems.append("找不到 %s 的渲染函数 %s" % (type_name, func))
             continue
 
-        js_reads = set(re.findall(r"\bp\.(\w+)", body.group(0)))
+        # 读点 = "<形参名>.<字段>"（前面不能紧跟 . 或词字符，避免把 msg.t.x 之类算进来）
+        param = body.group(1)
+        js_reads = set(re.findall(r"(?<![.\w])" + re.escape(param) + r"\.(\w+)", body.group(0))) \
+            if param else set()
         seg = re.search(
             r'(?:BuildEnvelope|PublishAsync)\("' + type_name + r'", new\s*\{(.*?)\n\s*\}(?:,\s*excludeId)?\)',
             ws_cs, re.S)
@@ -133,7 +142,8 @@ def main() -> int:
         if missing_req:
             problems.append("%s 渲染必需字段前端没读：%s" % (type_name, ", ".join(missing_req)))
         if srv_payload - js_reads - required:
-            notes.append("服务端提供但前端暂未使用：%s" % ", ".join(sorted(srv_payload - js_reads - required)))
+            notes.append("%s 服务端提供但前端暂未使用：%s"
+                         % (type_name, ", ".join(sorted(srv_payload - js_reads - required))))
 
     # ── 5. 关键改动逐条落盘核验（改了什么就查什么） ────────────────────────
     # 每个批次往这里加自己那批的关键点；历史批次的条目保留（防回归）。
@@ -163,6 +173,11 @@ def main() -> int:
         ("W3b · JS 每次连上都补拉（open 里调用）", "fetchMissedMessages();" in js),
         ("W3b · JS 文件气泡用 textContent（文件名不拼 HTML）", "name.textContent = p.name" in js),
         ("W3b · JS 未读角标有清零路径", "function clearUnread(" in js and "clearUnread();" in js),
+        # v8 审查修复（2026-09-14）：服务端侧的两处硬约束（本脚本已读 ws_cs，顺手钉住）
+        ("v8 · WS 连接准入改为原子占位（不再拿 _wsClients.Count 做判据）",
+         "Interlocked.Increment(ref _wsClientCount)" in ws_cs
+         and "_wsClients.Count >= MaxWsClients" not in ws_cs),
+        ("v8 · 消息流水有累计字节预算（不只看条数）", "MaxMessageLogBytes" in ws_cs),
     ]
     bad = [name for name, ok in disk_checks if not ok]
     for name, ok in disk_checks:
