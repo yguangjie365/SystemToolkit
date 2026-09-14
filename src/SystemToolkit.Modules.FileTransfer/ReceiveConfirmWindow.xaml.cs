@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using SystemToolkit.Core.FileTransfer.Models;
 using SystemToolkit.Core.FileTransfer.Services;
 using SystemToolkit.Core.Utilities;
@@ -20,11 +21,56 @@ public partial class ReceiveConfirmWindow : Window
 {
     private readonly TransferRequestEventArgs _request;
 
+    /// <summary>到点自动收场用的计时器（🟠 审查 v8-🟠-2）。<c>timeoutSeconds &lt;= 0</c> 时为 <c>null</c>。</summary>
+    private readonly DispatcherTimer? _timeoutTimer;
+
+    /// <summary>剩余秒数（倒计时展示用）。</summary>
+    private int _remainingSeconds;
+
     public ReceiveConfirmWindow(TransferRequestEventArgs request, int timeoutSeconds)
     {
         _request = request;
         InitializeComponent();
         Render(request, timeoutSeconds);
+
+        // 🟠 审查 v8-🟠-2：文案一直承诺「约 N 秒后自动拒绝」，但窗口此前**没有任何计时器或
+        // 自动关闭路径**，而 ShowDialog() 也不会因服务端超时而返回 —— 于是对端早已按超时判定
+        // "拒绝"，用户却仍能点「接收并复制」，本机照样写剪贴板：**交付与回执脱钩**。
+        // 这里把承诺兑现：到点自动按「拒绝」收场（Decision 默认值即 Reject，关窗即回执）。
+        if (timeoutSeconds > 0)
+        {
+            _remainingSeconds = timeoutSeconds;
+            _timeoutTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+            {
+                Interval = TimeSpan.FromSeconds(1),
+            };
+            _timeoutTimer.Tick += OnTimeoutTick;
+            _timeoutTimer.Start();
+        }
+
+        // 手动关窗（按钮 / Esc / 系统菜单）后计时器必须停 —— 与 🟡-6 同款纪律：不留长驻 1s 循环
+        Closed += (_, _) => _timeoutTimer?.Stop();
+    }
+
+    /// <summary>
+    /// 每秒倒计时；归零即按「拒绝」收场并关窗 —— 兑现 <see cref="TimeoutHint"/> 上的承诺。
+    /// <para>
+    /// <see cref="Decision"/> 保持默认的 <see cref="TransferDecision.Reject"/>：关窗即回执，
+    /// 与服务端（以及对端）的超时判定一致，不再出现"对端认为失败、本机其实写成功了"。
+    /// </para>
+    /// </summary>
+    private void OnTimeoutTick(object? sender, EventArgs e)
+    {
+        _remainingSeconds--;
+        if (_remainingSeconds > 0)
+        {
+            TimeoutHint.Text = $"若不响应，约 {_remainingSeconds} 秒后自动拒绝（本窗口会关闭）";
+            return;
+        }
+
+        _timeoutTimer?.Stop();
+        TimeoutHint.Text = "已超时：本次接收按「拒绝」处理";
+        Close();
     }
 
     /// <summary>
@@ -39,7 +85,10 @@ public partial class ReceiveConfirmWindow : Window
 
     private void Render(TransferRequestEventArgs request, int timeoutSeconds)
     {
-        TimeoutHint.Text = $"若不响应，约 {timeoutSeconds} 秒后自动拒绝";
+        // 🟠 审查 v8-🟠-2：文案必须与代码能力一致 —— 计时器存在时才承诺"自动拒绝并关窗"。
+        TimeoutHint.Text = timeoutSeconds > 0
+            ? $"若不响应，约 {timeoutSeconds} 秒后自动拒绝（本窗口会关闭）"
+            : "若不响应，对方会按超时取消";
 
         PeerText.Text = string.IsNullOrEmpty(request.PeerDeviceName)
             ? request.PeerEndpoint

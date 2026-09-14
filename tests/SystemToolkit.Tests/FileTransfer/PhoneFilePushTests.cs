@@ -69,9 +69,17 @@ public class PhoneFilePushTests
         return Encoding.UTF8.GetString(buffer, 0, result.Count);
     }
 
-    /// <summary>造一个已注入 Web 通道与"文件选择器"的桌面 VM（选择器返回给定路径）。</summary>
+    /// <summary>
+    /// 造一个已注入 Web 通道与"文件选择器"的桌面 VM（选择器返回给定路径）。
+    /// <para>
+    /// 🔴 审查 v8-🟠-1：<paramref name="receiveDirectory"/> 是**故意**独立于共享目录的形参。
+    /// 原先把它与 <c>web.StartAsync(..., shareDir)</c> 设成同值，正好把
+    /// 「共享目录取错配置源」这个缺陷**结构性掩盖**了（用例永远绿）。现在各用例显式传
+    /// <see cref="string.Empty"/> 或一个**不同的**目录，钉住"推送只认服务端 SharedRoot"。
+    /// </para>
+    /// </summary>
     private static (FileTransferDesktopViewModel Vm, ConcurrentQueue<string> Logs, string HistDir)
-        NewVm(FileWebServer web, string shareDir, params string[] pickedFiles)
+        NewVm(FileWebServer web, string receiveDirectory, params string[] pickedFiles)
     {
         string hist = NewTempDir("hist");
         var logs = new ConcurrentQueue<string>();
@@ -84,7 +92,7 @@ public class PhoneFilePushTests
             dispatcher: null,
             web: web)
         {
-            ReceiveDirectory = shareDir,
+            ReceiveDirectory = receiveDirectory,
             PickFiles = () => pickedFiles,
         };
         return (vm, logs, hist);
@@ -110,7 +118,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, source);
+                NewVm(server, receiveDirectory: string.Empty, source);
             try
             {
                 using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
@@ -166,7 +174,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, existing);
+                NewVm(server, receiveDirectory: string.Empty, existing);
             try
             {
                 using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
@@ -208,7 +216,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, existing);
+                NewVm(server, receiveDirectory: string.Empty, existing);
             try
             {
                 using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
@@ -253,7 +261,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, source);
+                NewVm(server, receiveDirectory: string.Empty, source);
             try
             {
                 vm.ConflictPolicy = TransferConflictPolicy.Rename;
@@ -303,7 +311,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, source);
+                NewVm(server, receiveDirectory: string.Empty, source);
             try
             {
                 vm.ConflictPolicy = TransferConflictPolicy.Skip;
@@ -345,7 +353,7 @@ public class PhoneFilePushTests
 
             using var server = new FileWebServer(); // 只构造不启动
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir, source);
+                NewVm(server, receiveDirectory: string.Empty, source);
             try
             {
                 await vm.SendFileToPhoneCommand.ExecuteAsync(null);
@@ -377,7 +385,7 @@ public class PhoneFilePushTests
             await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
 
             (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
-                NewVm(server, shareDir); // 不传任何文件
+                NewVm(server, receiveDirectory: string.Empty); // 不传任何文件
             try
             {
                 await vm.SendFileToPhoneCommand.ExecuteAsync(null);
@@ -393,6 +401,167 @@ public class PhoneFilePushTests
         finally
         {
             DeleteTempDir(shareDir);
+        }
+    }
+
+    /// <summary>
+    /// 🟠 审查 v8-🟠-1（失效形态 ①）：**只配了共享目录**（启动 Web 服务的必要条件）、
+    /// 「接收目录」为空时，「发文件到手机」必须照常工作。
+    /// <para>
+    /// 旧实现取 <c>ReceiveDirectory</c> 当共享目录，此处会直接报"接收目录未设置"而功能失效。
+    /// </para>
+    /// <para>反向验证：把 <c>SendFileToPhoneCoreAsync</c> 里的 <c>_web.SharedRoot</c> 换回
+    /// <c>ReceiveDirectory</c> → 本用例变红（文件不会被复制，日志出现"共享目录不可用"）。</para>
+    /// </summary>
+    [Fact]
+    public async Task ReceiveDirectoryEmpty_ButShareRootSet_StillPushes()
+    {
+        string shareDir = NewTempDir("share");
+        string otherDir = NewTempDir("other");
+        int port = FreeTcpPort();
+        try
+        {
+            string source = Path.Combine(otherDir, "only-share.txt");
+            await File.WriteAllTextAsync(source, "payload");
+
+            await using var server = new FileWebServer();
+            await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
+
+            (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
+                NewVm(server, receiveDirectory: string.Empty, source);
+            try
+            {
+                using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+                await vm.SendFileToPhoneCommand.ExecuteAsync(null);
+
+                Assert.True(
+                    File.Exists(Path.Combine(shareDir, "only-share.txt")),
+                    "共享目录已配置时，接收目录为空也必须能推送");
+                string frame = await ReceiveTextAsync(ws);
+                Assert.Contains("\"type\":\"fileOffered\"", frame);
+                Assert.Contains(logs, m => m.Contains("已向 1 个手机浏览器推送 1 个文件"));
+            }
+            finally
+            {
+                DeleteTempDir(hist);
+            }
+        }
+        finally
+        {
+            DeleteTempDir(shareDir);
+            DeleteTempDir(otherDir);
+        }
+    }
+
+    /// <summary>
+    /// 🟠 审查 v8-🟠-1（失效形态 ②）：「接收目录」与共享目录**指向不同目录**时，
+    /// 文件必须复制进**共享目录**（手机唯一可见的目录），而不是接收目录。
+    /// <para>
+    /// 旧实现按接收目录复制 → 随后 <c>PublishFileOfferAsync</c> 去共享目录里找
+    /// → 抛"共享目录里找不到该文件" → **推送全败**（且副本还留在用户没预期的地方）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ReceiveDirectoryDiffers_FromShareRoot_CopiesIntoShareRoot()
+    {
+        string shareDir = NewTempDir("share");
+        string receiveDir = NewTempDir("receive");
+        string otherDir = NewTempDir("other");
+        int port = FreeTcpPort();
+        try
+        {
+            string source = Path.Combine(otherDir, "mixed.txt");
+            await File.WriteAllTextAsync(source, "payload");
+
+            await using var server = new FileWebServer();
+            await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
+
+            (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
+                NewVm(server, receiveDir, source);
+            try
+            {
+                using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+                await vm.SendFileToPhoneCommand.ExecuteAsync(null);
+
+                // 复制目标是**共享目录**（手机看得到的那个），不是接收目录
+                Assert.True(File.Exists(Path.Combine(shareDir, "mixed.txt")));
+                Assert.False(
+                    File.Exists(Path.Combine(receiveDir, "mixed.txt")),
+                    "文件不该落到手机看不到的「接收目录」里");
+
+                string frame = await ReceiveTextAsync(ws);
+                Assert.Contains("\"type\":\"fileOffered\"", frame);
+                // 不一致时给出可操作提示（说清"手机只能看到共享目录里的文件"）
+                Assert.Contains(logs, m => m.Contains("与「接收目录」") && m.Contains("共享目录"));
+            }
+            finally
+            {
+                DeleteTempDir(hist);
+            }
+        }
+        finally
+        {
+            DeleteTempDir(shareDir);
+            DeleteTempDir(receiveDir);
+            DeleteTempDir(otherDir);
+        }
+    }
+
+    /// <summary>
+    /// 🟠 审查 v8-🟠-6：复制到共享目录必须**原子**——失败时不能在共享目录留下半截文件、
+    /// 也不能留下 <c>.part</c> 残留（否则手机 <c>/api/files</c> 能浏览到半成品，用户还会再推一次）。
+    /// <para>
+    /// <b>怎么造出"复制之后、落定之前"的失败</b>：在共享目录里预先建一个**同名目录**
+    /// （<c>shareDir/boom.txt/</c>）。此时 <c>File.Exists(target)</c> 为假（它是目录），
+    /// 复制照常写进 <c>boom.txt.part</c>，但收尾的 <c>File.Move(tmp, target, overwrite)</c> 必失败
+    /// ——正是新代码里那个 <c>catch</c> 分支。
+    /// </para>
+    /// <para>反向验证：删掉 <c>catch</c> 里的 <c>File.Delete(tmpTarget)</c> → 本用例变红
+    /// （共享目录里会留下 <c>boom.txt.part</c>）。</para>
+    /// </summary>
+    [Fact]
+    public async Task CopyFailure_LeavesNoHalfFileNorPartResidue()
+    {
+        string shareDir = NewTempDir("share");
+        string otherDir = NewTempDir("other");
+        int port = FreeTcpPort();
+        try
+        {
+            string source = Path.Combine(otherDir, "boom.txt");
+            await File.WriteAllTextAsync(source, "payload");
+            Directory.CreateDirectory(Path.Combine(shareDir, "boom.txt")); // 占住最终路径
+
+            await using var server = new FileWebServer();
+            await server.StartAsync(new TransferSettings { WebPort = port }, shareDir);
+
+            (FileTransferDesktopViewModel vm, ConcurrentQueue<string> logs, string hist) =
+                NewVm(server, receiveDirectory: string.Empty, source);
+            try
+            {
+                using System.Net.WebSockets.ClientWebSocket ws = await ConnectWsAsync(port, server.Token);
+                await vm.SendFileToPhoneCommand.ExecuteAsync(null);
+
+                Assert.Contains(logs, m => m.Contains("复制到共享目录失败"));
+                // 不留半截：既没有 .part 残留，也没有被误当成成品的文件
+                Assert.False(
+                    File.Exists(Path.Combine(shareDir, "boom.txt.part")),
+                    "失败后必须清掉 .part 临时文件");
+                Assert.Empty(Directory.GetFiles(shareDir));
+
+                // 失败就不该推送：紧跟一次 ping，下一帧应是 pong（次序断言，不靠等待超时）
+                await ws.SendAsync(Encoding.UTF8.GetBytes("{\"type\":\"ping\"}"),
+                    System.Net.WebSockets.WebSocketMessageType.Text, true, CancellationToken.None);
+                Assert.Contains("\"type\":\"pong\"", await ReceiveTextAsync(ws));
+            }
+            finally
+            {
+                DeleteTempDir(hist);
+            }
+        }
+        finally
+        {
+            DeleteTempDir(shareDir);
+            DeleteTempDir(otherDir);
         }
     }
 }

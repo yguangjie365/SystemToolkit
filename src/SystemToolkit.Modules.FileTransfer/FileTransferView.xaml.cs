@@ -22,10 +22,16 @@ public partial class FileTransferView : UserControl
         InitializeComponent();
         DataContext = vm;
         Loaded += OnLoaded;
+        // 🟡 审查 v8-🟡-6：页面卸载（切 Tab / 主题切换重建视图）时停掉手机通道的 1s 配对码节拍
+        Unloaded += (_, _) => Vm.Mobile.PauseTimer();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 🟡 审查 v8-🟡-6：把 1s 配对码节拍接回去。**必须放在 _loaded 早退之前**——
+        // VM 是 DI 单例，下面的初始化只跑一次，而"停表"在 Unloaded 里每次离开页面都会发生。
+        Vm.Mobile.ResumeTimer();
+
         if (_loaded)
         {
             return;
@@ -187,16 +193,21 @@ public partial class FileTransferView : UserControl
     }
 
     /// <summary>
-    /// 拖到哪行就发到哪行（审查 🔴-3 采纳）：沿可视树向上找 ListBoxItem 取行 DataContext，
-    /// 找不到再回退 SelectedItem——不再要求「先选中再拖」。
+    /// 拖到哪行就发到哪行（审查 🔴-3 采纳）：沿可视树向上找 ListBoxItem 取行 DataContext。
+    /// <para>
+    /// 🔴 审查 v8-🟡-2：**不再回退 <c>SelectedItem</c>**。Drop 事件挂在 ListBox 本身
+    /// （见 <c>FileTransferView.xaml</c> 的 AllowDrop 段），拖到列表**空白区**时可视树走完也找不到
+    /// <c>ListBoxItem</c>——回退 <c>SelectedItem</c> 会把文件**静默发给上一次选中的设备**，
+    /// 用户以为"没拖到"、实际已经发出去了。找不到就返回 <c>null</c>，由调用方给可操作提示。
+    /// </para>
     /// ⚠️ 不要用 ItemsControl.ItemsControlFromItemContainer——它对容器内部元素返回 null
     /// （MusicManager 双击回归同款教训，2026-09-08 实证）。
     /// </summary>
-    private static object? ResolveRowUnderMouse(object? source, ListBox list)
+    private static object? ResolveRowUnderMouse(object? source)
     {
         if (source is not DependencyObject start)
         {
-            return list.SelectedItem;
+            return null;
         }
 
         DependencyObject d = start;
@@ -212,7 +223,7 @@ public partial class FileTransferView : UserControl
                 : LogicalTreeHelper.GetParent(d);
         }
 
-        return list.SelectedItem;
+        return null;
     }
 
     private void OnDiscoveredDeviceDrop(object sender, DragEventArgs e)
@@ -222,12 +233,12 @@ public partial class FileTransferView : UserControl
             return;
         }
 
-        if (sender is not ListBox list)
+        if (sender is not ListBox)
         {
             return;
         }
 
-        if (ResolveRowUnderMouse(e.OriginalSource, list) is DiscoveredDeviceRowVm device)
+        if (ResolveRowUnderMouse(e.OriginalSource) is DiscoveredDeviceRowVm device)
         {
             _ = Vm.Desktop.SendFilesToAsync(device.Model.IPAddress.ToString(), device.Model.TransferPort, files);
         }
@@ -245,12 +256,12 @@ public partial class FileTransferView : UserControl
             return;
         }
 
-        if (sender is not ListBox list)
+        if (sender is not ListBox)
         {
             return;
         }
 
-        if (ResolveRowUnderMouse(e.OriginalSource, list) is KnownPeerRowVm peer
+        if (ResolveRowUnderMouse(e.OriginalSource) is KnownPeerRowVm peer
             && System.Net.IPAddress.TryParse(peer.Ip, out _)
             && peer.Port is >= 1 and <= 65535)
         {

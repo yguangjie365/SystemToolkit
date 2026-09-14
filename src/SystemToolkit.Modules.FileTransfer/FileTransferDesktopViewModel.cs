@@ -1168,11 +1168,31 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             return;
         }
 
-        string shareDir = ReceiveDirectory?.Trim() ?? string.Empty;
+        // 🟠 审查 v8-🟠-1：共享目录的**唯一真源 = 服务端实际在用的 SharedRoot**。
+        // 原先这里读 ReceiveDirectory（桌面侧 TCP 接收目录），与服务端共享根
+        // （手机侧配置的 MobileConfig.ShareDirectory）是两份**互不同步的持久化字段**：
+        //   ① 只配了共享目录（启动 Web 服务的**必要**条件）时，这里报"接收目录未设置"→ 功能直接失效；
+        //   ② 两者指向不同目录时，文件被复制到 A，随后 PublishFileOfferAsync 去 B 里找
+        //      → 抛"共享目录里找不到该文件" → 推送全败。
+        // 以服务端为准后，「复制目标」与「/api/files 的可见范围」恒为同一目录。
+        string shareDir = _web.SharedRoot;
         if (string.IsNullOrEmpty(shareDir))
         {
-            _log("[互传] ⚠️ 接收目录未设置，无法确定共享目录位置。");
+            _log("[互传] ⚠️ 共享目录不可用（Web 服务未启动或未配置共享目录），无法确定文件该放到哪里。");
             return;
+        }
+
+        // 不一致时给可操作提示：用户以为文件进了「接收目录」，实际去了共享目录——
+        // 说清楚"手机只能看到共享目录里的文件"，比让人自己猜为什么找不到更省事。
+        string receiveDir = ReceiveDirectory?.Trim() ?? string.Empty;
+        if (receiveDir.Length > 0
+            && !string.Equals(
+                Path.GetFullPath(receiveDir).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(shareDir).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _log($"[互传] ℹ️ 本次推送使用**共享目录**：{shareDir}"
+                + $"（与「接收目录」{receiveDir} 不同——手机只能看到共享目录里的文件）");
         }
 
         IReadOnlyList<string>? files = PickFiles?.Invoke();
@@ -1276,12 +1296,36 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
 
             _log($"[互传] 正在复制到共享目录：{originalName} → {Path.GetFileName(target)}");
-            await using (FileStream src = new(full, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 81920, useAsync: true))
-            await using (FileStream dst = new(target, FileMode.Create, FileAccess.Write, FileShare.None,
-                bufferSize: 81920, useAsync: true))
+            // 🟠 审查 v8-🟠-6：**原子写**（同仓同场景范式见 FileWebServer.WriteUploadedFileAsync:1488）。
+            // 原先直接写最终路径：CopyToAsync 中途失败（源盘掉线 / 目标盘满）只留半截文件在共享目录，
+            // 随后手机 /api/files 能浏览到它、用户还能把它再推一次——**半成品被当成成品**。
+            // 改法：写 target + ".part" → 成功后 Move 覆盖；失败删临时文件再上抛（由外层 catch 留痕）。
+            // ⚠️ ".part" 是共享约定：Browse(:1347) 与 /api/files 都按扩展名过滤掉 .part，手机看不到半截文件。
+            string tmpTarget = target + ".part";
+            try
             {
-                await src.CopyToAsync(dst).ConfigureAwait(true);
+                await using (FileStream src = new(full, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    bufferSize: 81920, useAsync: true))
+                await using (FileStream dst = new(tmpTarget, FileMode.Create, FileAccess.Write, FileShare.None,
+                    bufferSize: 81920, useAsync: true))
+                {
+                    await src.CopyToAsync(dst).ConfigureAwait(true);
+                }
+
+                File.Move(tmpTarget, target, overwrite: true);
+            }
+            catch
+            {
+                try
+                {
+                    File.Delete(tmpTarget);
+                }
+                catch
+                {
+                    // 清理失败不改变结论：失败原因由外层 catch 留痕
+                }
+
+                throw;
             }
 
             return Path.GetRelativePath(root, target);

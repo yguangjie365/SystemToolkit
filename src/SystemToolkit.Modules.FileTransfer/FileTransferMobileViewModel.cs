@@ -269,16 +269,6 @@ public partial class FileTransferMobileViewModel : ObservableObject
         ? "Web 服务运行中：改端口后需先「停止 Web 服务」再「启动」才生效"
         : "启动 Web 服务时生效";
 
-    private void RefreshUrlPreview()
-    {
-        if (!IsWebRunning)
-        {
-            return;
-        }
-
-        UrlText = _web.LanUrl;
-    }
-
     private void RefreshShareDirectoryFreeSpace()
     {
         string dir = ShareDirectory?.Trim() ?? string.Empty;
@@ -446,8 +436,18 @@ public partial class FileTransferMobileViewModel : ObservableObject
     {
         if (!string.IsNullOrEmpty(PairCodeText) && PairCodeText != "——————")
         {
-            System.Windows.Clipboard.SetText(PairCodeText);
-            _log("[手机通道] 配对码已复制到剪贴板");
+            // 🟡 审查 v8-🟡-5：裸调 Clipboard 在剪贴板被别的进程占用时抛 ExternalException，
+            // 会直冲 DispatchedUnhandledException（命令体虽被 AsyncRelayCommand 吞掉，
+            // 但同步命令没有这一层）——同仓先例见 LanScanTabViewModel.CopyRow:664。
+            try
+            {
+                System.Windows.Clipboard.SetText(PairCodeText);
+                _log("[手机通道] 配对码已复制到剪贴板");
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                _log("[手机通道] ⚠ 剪贴板占用中，配对码复制失败（可稍后重试）");
+            }
         }
     }
 
@@ -485,8 +485,16 @@ public partial class FileTransferMobileViewModel : ObservableObject
     {
         if (!string.IsNullOrEmpty(CertFingerprintFull))
         {
-            System.Windows.Clipboard.SetText(CertFingerprintFull);
-            _log("[手机] 证书指纹已复制到剪贴板");
+            // 🟡 审查 v8-🟡-5：同 CopyPairCode —— 剪贴板被占用时不得让异常直冲 Dispatcher
+            try
+            {
+                System.Windows.Clipboard.SetText(CertFingerprintFull);
+                _log("[手机] 证书指纹已复制到剪贴板");
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                _log("[手机] ⚠ 剪贴板占用中，证书指纹复制失败（可稍后重试）");
+            }
         }
     }
 
@@ -502,6 +510,31 @@ public partial class FileTransferMobileViewModel : ObservableObject
         timer.Tick += (_, _) => RefreshPairingDisplay();
         timer.Start();
         _codeTimer = timer;
+    }
+
+    /// <summary>
+    /// 停掉 1s 配对码节拍（🟡 审查 v8-🟡-6）。
+    /// <para>
+    /// 🔴 原先**只有** <see cref="StopWebAsync"/> 会停表，而本 VM 是 DI 单例、不随页面销毁——
+    /// 切走页面后 1s 循环仍在跑（无谓的 UI 刷新与 Dispatcher 唤醒）。页面生命周期钩子
+    /// （<c>FileTransferView.Unloaded</c>）与窗口失活都走这里。可重复调用。
+    /// </para>
+    /// </summary>
+    public void PauseTimer()
+    {
+        _codeTimer?.Stop();
+        _codeTimer = null;
+    }
+
+    /// <summary>
+    /// 恢复 1s 配对码节拍（页面重新挂回时调用）。幂等：服务没在跑就没有节拍可言。
+    /// </summary>
+    public void ResumeTimer()
+    {
+        if (IsWebRunning)
+        {
+            EnsureCodeTimer();
+        }
     }
 
     private void RefreshPairingDisplay()
