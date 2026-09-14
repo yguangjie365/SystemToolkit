@@ -483,6 +483,13 @@ public partial class SplitRouteTabViewModel : ObservableObject
     private void RunOnUi(Action action)
     {
         System.Windows.Threading.Dispatcher? d = _dispatcher;
+        // 🟡 X-2（两批审查，5 处同款，经评估**保持现状**）：`d is null` 时直执行是**有意**的——
+        // ① 生产路径 `Application.Current?.Dispatcher` 在 App.OnStartup（UI 线程）内注入，非 null；
+        // ② `SystemToolkit.Worker` 目前是 stub，不构造任何模块 VM ⇒ 生产上走不到本分支；
+        // ③ 测试宿主**刻意**传 null（全仓 9 处）——拒绝执行会让 VM 状态永不更新、测试无从断言。
+        // 🔴 未来若 worker 化落地（无 UI 线程构造 VM），本分支才真正危险：
+        //    届时后台线程会**直接改 UI 集合**（ObservableCollection 跨线程）。改法是拒绝执行并落日志，
+        //    但必须**同时**给测试宿主一条「有 Dispatcher」的通道（否则现有 9 处用例全红）。
         if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
         {
             RunGuarded(action);
