@@ -57,6 +57,11 @@ public partial class NetRepairTabViewModel : ObservableObject
     public ObservableCollection<RepairStepVm> Steps { get; } = new();
 
     [ObservableProperty]
+    // 🟠 G-🟠-1 v11~v14 后续批次：原先无通知 ⇒ IsBusy 置位时按钮保持可点，
+    // 而命令体又没有 if (IsBusy) 守卫（RelayCommand.Execute 不查 CanExecute）
+    // ⇒ 双击必然并发执行。命令在结束时的手工通知保留（双通知无害），此处补齐入口侧。
+    [NotifyCanExecuteChangedFor(nameof(RunSafeSequenceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RunStepCommand))]
     private bool _isBusy;
 
     [RelayCommand(CanExecute = nameof(CanRun))]

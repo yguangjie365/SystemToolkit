@@ -70,6 +70,10 @@ public partial class LanScanTabViewModel : ObservableObject
     // ══════════════ 扫描状态 ══════════════
 
     [ObservableProperty]
+    // 🟠 G-🟠-1 v11~v14 后续批次：原先无通知 ⇒ IsBusy 置位时按钮保持可点，
+    // 而命令体又没有 if (IsBusy) 守卫（RelayCommand.Execute 不查 CanExecute）
+    // ⇒ 双击必然并发执行。命令在结束时的手工通知保留（双通知无害），此处补齐入口侧。
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     private bool _isBusy;
 
     /// <summary>扫描进行中（进度条与「取消」按钮可见性；区别于监控静默轮）。</summary>
@@ -488,7 +492,16 @@ public partial class LanScanTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>从未扫描过时展示既有基线设备（灰/离线形态），避免首屏全空丢历史。</summary>
+    /// <summary>从未扫描过时补齐既有基线的**事件流**，避免首屏全空丢历史。
+    /// <para>
+    /// ⚠️ 本方法**只填 <c>Events</c>，不填 <c>Rows</c>** —— 设备表格仍走空态，要等一次真实扫描
+    /// （<c>TableVis</c> / <c>EmptyVis</c> 的判据是 <c>HasData = _lastResult is not null</c>）。
+    /// 🟡 G-🟠-2 v11~v14 后续批次订正：原注释称"展示既有基线设备（灰/离线形态）"、
+    /// 原日志称"已加载历史基线 N 台"，都与实现不符（既没建 <c>Rows</c> 也没置 <c>_lastResult</c>）
+    /// ⇒ 用户会遇到"日志说加载了 15 台、界面却提示还没扫描"这对矛盾。
+    /// 若要真正兑现"灰/离线形态"，需同时改 <c>HasData</c> 判据并构造 Offline 行（留待后续评估）。
+    /// </para>
+    /// </summary>
     private void LoadExistingBaseline()
     {
         LanBaseline? baseline = _scan.PeekBaseline();
@@ -497,7 +510,8 @@ public partial class LanScanTabViewModel : ObservableObject
             return;
         }
 
-        _log($"[局域网] 已加载历史基线 {baseline.Entries.Count} 台（来自上次运行），点「重新扫描」刷新");
+        _log($"[局域网] 已载入历史基线的事件记录 {baseline.Events.Count} 条（来自上次运行）；"
+            + $"设备列表（{baseline.Entries.Count} 台）需点「重新扫描」后展示");
         Events.Clear();
         foreach (LanEvent evt in baseline.Events.Take(50))
         {
@@ -508,6 +522,14 @@ public partial class LanScanTabViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan))]
     private async Task ScanAsync()
     {
+        // 🟠 G-🟠-1：命令体兜底守卫——RelayCommand.Execute **不检查 CanExecute**，
+        // CanExecute 的拦截完全依赖 Button.IsEnabled（只在通知触发时重询）。双击是极常见操作，
+        // 一旦通知失效即并发进方法体：后到者覆盖 _runCts、两轮结果互相覆盖、取消失效。
+        if (IsBusy)
+        {
+            return;
+        }
+
         LanSubnetPlan? plan = BuildPlan(out string planError);
         if (plan is null)
         {
@@ -556,14 +578,20 @@ public partial class LanScanTabViewModel : ObservableObject
             // 🟠 V14-N4：置 null 前先 Cancel + Dispose——Cancel 只是置位，注册句柄（Task.Delay /
             // 传输层内部 linked source）要 Dispose 才释放；只置 null 会让 CTS 及其注册留在
             // 终结器队列里，反复扫描逐轮累积（同款纪律见 DriverManagerViewModel 的 V12-D3）。
-            try
+            // 🟡 G-🟡-3 v11~v14 后续批次：加身份判定（V12-D3 同款）——并发场景下后到者
+            // 已把 _runCts 换成自己的实例，此时直接置 null 会清掉**别人**的引用，
+            // 令其后续取消失效（G-🟠-1g 的内部守卫已挡住并发，此处是纵深防御）。
+            if (ReferenceEquals(_runCts, runCts))
             {
-                runCts.Cancel();
-            }
-            finally
-            {
-                runCts.Dispose();
-                _runCts = null;
+                try
+                {
+                    runCts.Cancel();
+                }
+                finally
+                {
+                    runCts.Dispose();
+                    _runCts = null;
+                }
             }
 
             ScanCommand.NotifyCanExecuteChanged();

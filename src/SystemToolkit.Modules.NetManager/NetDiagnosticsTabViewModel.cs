@@ -70,6 +70,14 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
     public ObservableCollection<DiagRowVm> Steps { get; } = new();
 
     [ObservableProperty]
+    // 🟠 G-🟠-1 v11~v14 后续批次：原先无通知 ⇒ IsBusy 置位时按钮保持可点，
+    // 而命令体又没有 if (IsBusy) 守卫（RelayCommand.Execute 不查 CanExecute）
+    // ⇒ 双击必然并发执行。命令在结束时的手工通知保留（双通知无害），此处补齐入口侧。
+    [NotifyCanExecuteChangedFor(nameof(RunDiagnosticsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ProbeMtuCommand))]
+    [NotifyCanExecuteChangedFor(nameof(TestPortCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CheckHostsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DnsLookupCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -264,6 +272,8 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
     public ObservableCollection<DnsServerStats> BenchmarkResults { get; } = new();
 
     [ObservableProperty]
+    // 🟠 G-🟠-1：同 _isBusy —— 基准测试期间按钮原保持可点。
+    [NotifyCanExecuteChangedFor(nameof(RunBenchmarkCommand))]
     private bool _isBenchmarking;
 
     [ObservableProperty]

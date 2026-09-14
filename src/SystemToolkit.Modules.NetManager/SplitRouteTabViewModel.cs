@@ -461,6 +461,13 @@ public partial class SplitRouteTabViewModel : ObservableObject
                     return Task.CompletedTask;
                 }, ct).ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+                // 🟡 G-🟡-2 v11~v14 后续批次：用户主动关闭守护走 cts.Cancel()，OCE 属**正常停止**，
+                // 原被下面的 catch (Exception) 接住 ⇒ 日志出现"❌ 守护循环异常终止：操作已取消"，
+                // 看起来像出错（同款分流见 LanScanTabViewModel.MonitorLoopAsync）。
+                _log("[分流] 守护巡检已停止");
+            }
             catch (Exception ex)
             {
                 _log("[分流] ❌ 守护循环异常终止：" + ex.Message);
