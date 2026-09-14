@@ -613,6 +613,14 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                 catch (Exception stopEx)
                 {
                     _logger.Warn($"[互传] 回滚停止传输服务失败：{stopEx.Message}");
+                    // 🟠 D-🟠-5 v11~v14 后续批次：回滚失败意味着传输服务**实际仍在监听端口**，
+                    // 而后面的 `throw;` 会跳过下面的 `IsTransferRunning = true` ⇒ 该标志停在
+                    // false ⇒ XAML 里「停止服务」按钮（Visibility 绑 IsTransferRunning）
+                    // **不可见** —— 用户既停不掉它，重试启动又会因端口被本进程占用而失败
+                    // ⇒ 只能重启应用。置 true 让按钮亮起，用户至少能再点一次停止。
+                    // 安全性依据（P0 核实）：Core 侧 `FileTransferService.StopAsync` **幂等**
+                    //（`if (server is null) return;`），未启动时重复停止不会抛。
+                    IsTransferRunning = true;
                 }
 
                 throw;
@@ -880,10 +888,26 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         // 事件来自 UDP 回调线程 → 封送 UI 线程
         RunOnUi(() =>
         {
+            // 🟠 D-🟠-4 v11~v14 后续批次：`Clear()` 会让 ListBox 的 SelectedItem 变 null ——
+            // 用户刚点选的设备被"取消高亮"（UDP 一次心跳/变化事件即触发），随后点
+            // "发送文件到所选设备"却被提示"请先选择目标设备"，用户反应是"我明明选了"。
+            // 改为原子重建 + 按 EndpointText（IP:Port，网段内唯一）回选。
+            string? keepEndpoint = SelectedDevice?.EndpointText;
             DiscoveredDevices.Clear();
+            DiscoveredDeviceRowVm? reselect = null;
             foreach (DiscoveredDevice device in _discovery.Devices.OrderByDescending(d => d.IsOnline).ThenBy(d => d.Name))
             {
-                DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
+                var row = new DiscoveredDeviceRowVm(device);
+                DiscoveredDevices.Add(row);
+                if (keepEndpoint is not null && row.EndpointText == keepEndpoint)
+                {
+                    reselect = row;
+                }
+            }
+
+            if (reselect is not null)
+            {
+                SelectedDevice = reselect;
             }
 
             RefreshDeviceKnownFlags();
@@ -903,10 +927,24 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         {
             if (IsTransferRunning)
             {
+                // 🟠 D-🟠-4：同 OnDeviceChanged —— 重建集合必须回选，否则"刷新"会把用户
+                // 刚选中的设备清掉（本方法直接由「刷新」按钮驱动，触发概率更高）。
+                string? keepEndpoint = SelectedDevice?.EndpointText;
                 DiscoveredDevices.Clear();
+                DiscoveredDeviceRowVm? reselect = null;
                 foreach (DiscoveredDevice device in _discovery.Devices.OrderByDescending(d => d.IsOnline).ThenBy(d => d.Name))
                 {
-                    DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
+                    var row = new DiscoveredDeviceRowVm(device);
+                    DiscoveredDevices.Add(row);
+                    if (keepEndpoint is not null && row.EndpointText == keepEndpoint)
+                    {
+                        reselect = row;
+                    }
+                }
+
+                if (reselect is not null)
+                {
+                    SelectedDevice = reselect;
                 }
 
                 RefreshDeviceKnownFlags();
@@ -1203,8 +1241,8 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         string receiveDir = ReceiveDirectory?.Trim() ?? string.Empty;
         if (receiveDir.Length > 0
             && !string.Equals(
-                Path.GetFullPath(receiveDir).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(shareDir).TrimEnd(Path.DirectorySeparatorChar),
+                SafeFullPath(receiveDir),
+                SafeFullPath(shareDir),
                 StringComparison.OrdinalIgnoreCase))
         {
             _log($"[互传] ℹ️ 本次推送使用**共享目录**：{shareDir}"
@@ -1259,6 +1297,29 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     /// 确保文件位于共享目录内：已在里面就原样返回；否则复制过去。
     /// </summary>
     /// <returns>共享目录内的**相对路径**（失败返回 <c>null</c>，原因已写日志）。</returns>
+    /// <summary>
+    /// 取绝对路径的**不抛**版本（🟠 D-🟠-6 v11~v14 后续批次）。
+    /// <para>
+    /// <see cref="Path.GetFullPath(string)"/> 对用户手输的非法路径（含 <c>| * ?</c> 等字符、
+    /// 格式错误）会抛 <see cref="ArgumentException"/>。原实现直接裸调它做"接收目录/共享目录
+    /// 是否同一处"的比较 —— 用户输入非法串时异常会从命令体逃逸，用户只在点"发送文件到手机"
+    /// 那一刻看到面向开发者的措辞，输入当时没有任何提示。
+    /// 本助手吞掉异常并原样返回：比较结果落"不相等"分支 ⇒ 只影响一条**提示文案**是否显示，
+    /// **不影响任何实际读写路径**（真正的路径校验在各目的地的 try 内完成）。
+    /// </para>
+    /// </summary>
+    private static string SafeFullPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        }
+        catch (Exception)
+        {
+            return path; // 非法输入：按"原样"参与比较（等价于判为不同目录）
+        }
+    }
+
     private async Task<string?> EnsureInSharedDirectoryAsync(string sourcePath, string shareDir)
     {
         try
@@ -1328,7 +1389,12 @@ public partial class FileTransferDesktopViewModel : ObservableObject
                     await src.CopyToAsync(dst).ConfigureAwait(true);
                 }
 
-                File.Move(tmpTarget, target, overwrite: true);
+                // 🟠 D-🟠-1 v11~v14 后续批次：`File.Move` **跨分区**时是「复制 + 删除」
+                // 而非同卷 rename —— 8 GB 文件跨盘会全量再复制一遍；加上上面的
+                // `ConfigureAwait(true)`，这一步就在 **UI 线程**执行 ⇒ 界面完全冻结
+                //（"未响应"）数十秒，用户很可能强杀进程。下移到线程池。
+                // await 后仍回 UI 线程，后续 _log 调用不受影响；异常仍在下面 catch 内。
+                await Task.Run(() => File.Move(tmpTarget, target, overwrite: true)).ConfigureAwait(true);
             }
             catch
             {
