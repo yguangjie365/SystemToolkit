@@ -43,6 +43,12 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
 
             _busy = value;
             OnPropertyChanged(nameof(Busy));
+            // 🔴 V14-O1：RefreshFullCommand 的 CanExecute 谓词读 _busy，而 8.4.2 的
+            // RelayCommand/AsyncRelayCommand **没有** CommandManager 兜底（包文档里
+            // CommandManager/useCommandManager 各 0 次；实测 InvalidateRequerySuggested()
+            // 也刷不动它）⇒ 不显式通知，按钮 IsEnabled 会**双向卡死**：
+            // 该禁不禁（采集中仍可点）、该启不启（采集完仍灰着）。
+            (RefreshFullCommand as CommunityToolkit.Mvvm.Input.AsyncRelayCommand)?.NotifyCanExecuteChanged();
         }
     }
 
@@ -134,7 +140,8 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         HealthPanels.Add(new HealthPanelVm("\uE968", "网络连接（本机）"));
         HealthPanels.Add(new HealthPanelVm("\uE958", "磁盘健康"));
         ExportReportCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ExportReport);
-        // 审查 🟠-2：采集中禁用全量刷新（CommunityToolkit RelayCommand 经 CommandManager 自动重询）
+        // 审查 🟠-2：采集中禁用全量刷新（V14-O1：谓词读 _busy，故 Busy setter 必须显式
+        // NotifyCanExecuteChanged —— 8.4.2 **没有** CommandManager 兜底，见 Busy setter 注释）
         RefreshFullCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(() => RefreshFullAsync(), () => !_busy);
         _installedView = new System.Windows.Data.ListCollectionView(InstalledPrograms)
         {

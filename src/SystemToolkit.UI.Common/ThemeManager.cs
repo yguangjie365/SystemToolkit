@@ -119,9 +119,14 @@ public static class ThemeManager
                 persisted = string.IsNullOrWhiteSpace(a?.Theme) ? null : a.Theme;
             }
         }
-        catch
+        catch (Exception ex)
         {
             persisted = null; // 损坏 = 默认，不阻断启动
+            // V14-U1（Q-021 口径，2026-09-14）：偏好读取类"失败不阻断"的 catch **必须留一条日志**
+            // —— 否则"用户改过主题、重启却回到默认"这件事在应用内零线索（原为空 catch）。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn, "theme",
+                $"主题偏好读取失败，回退默认主题「{DefaultThemeId}」：{AppearancePath}", ex));
         }
 
         Apply(persisted);
@@ -192,9 +197,14 @@ public static class ThemeManager
 
             File.Copy(LegacyAppearancePath, AppearancePath);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 迁移失败不阻断启动（读不到偏好即回退默认主题）
+            // V14-U1（Q-021 口径，2026-09-14）：迁移失败不阻断启动（读不到偏好即回退默认主题），
+            // 但**必须留一条日志** —— 同文件 ApplyAndPersist 2026-09-11 修过同款空 catch（🟠-6），
+            // 当时只修了一处，这两处残留到本轮才被独立点回（"修一处、漏两处"的实证）。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn, "theme",
+                $"旧主题偏好迁移失败（回退默认主题，旧文件仍在 Roaming 原处）：{LegacyAppearancePath}", ex));
         }
     }
 
