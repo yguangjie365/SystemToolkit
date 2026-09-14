@@ -16,9 +16,5 @@
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Player.cs::SetQualityAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.cs::NextAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.cs::PlayFromLibraryAsync",
-  "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.cs::PreviousAsync",
-  "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ApplyDnsAsync",
-  "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ApplyIpAsync",
-  "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::DeleteSnapshotAsync",
-  "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ToggleAdapterAsync"
+  "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.cs::PreviousAsync"
 ]

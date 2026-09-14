@@ -215,6 +215,22 @@ public partial class NetSettingsTabViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanWrite))]
     private async Task ApplyIpAsync()
     {
+        // 🔴 V14-N2：命令壳——内核含 View 注入的 Confirm 回调与 SnapshotThenRunAsync 通道，
+        // 任一抛出都会被 AsyncRelayCommand 吞掉（用户零反馈、日志零记录）。
+        // 壳层兜底口径对齐 OL-B11 W3c 的「命令壳 + Core 内核分离」：守卫只认方法体顶层 catch，
+        // 且这是"try 覆盖方法体全部可抛语句"的最简形态（不重排内核的早期 return 校验链）。
+        try
+        {
+            await ApplyIpCoreAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[设置] ❌ 应用 IPv4 失败：{ex.Message}（可重试，或先检查网卡是否被其它程序占用）");
+        }
+    }
+
+    private async Task ApplyIpCoreAsync()
+    {
         IpFormError = "";
         if (SelectedAdapter is null)
         {
@@ -299,6 +315,12 @@ public partial class NetSettingsTabViewModel : ObservableObject
             await Task.Delay(1500).ConfigureAwait(true); // 状态切换落地等待，再回读
             await LoadAsync().ConfigureAwait(true);
         }
+        catch (Exception ex)
+        {
+            // 🔴 V14-N2：原先只有 try/finally —— 异常被 AsyncRelayCommand 吞掉，用户零反馈；
+            // IsBusy 复位仍由 finally 负责（catch 不改闸门语义）。
+            _log($"[设置] ❌ {action}「{adapter}」执行异常：{ex.Message}");
+        }
         finally
         {
             IsBusy = false;
@@ -309,6 +331,20 @@ public partial class NetSettingsTabViewModel : ObservableObject
 
     [RelayCommand(CanExecute = nameof(CanWrite))]
     private async Task ApplyDnsAsync()
+    {
+        // 🔴 V14-N2：命令壳（同 ApplyIpAsync）——内核含 View 注入的 Confirm 与快照通道，
+        // 异常会被 AsyncRelayCommand 吞掉；壳层顶层兜底 + 内核分离。
+        try
+        {
+            await ApplyDnsCoreAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[设置] ❌ 应用 DNS 失败：{ex.Message}（可重试，或先检查网卡是否被其它程序占用）");
+        }
+    }
+
+    private async Task ApplyDnsCoreAsync()
     {
         DnsFormError = "";
         if (SelectedAdapter is null)
@@ -459,9 +495,18 @@ public partial class NetSettingsTabViewModel : ObservableObject
             return;
         }
 
-        await _snapshots.DeleteAsync(record.Id).ConfigureAwait(true);
-        _log($"[快照] 已删除 {record.CreatedAt:yyyy-MM-dd HH:mm:ss} 的快照");
-        await RefreshSnapshotsAsync().ConfigureAwait(true);
+        // 🔴 V14-N2：原先整个方法体裸露（无 try/catch）—— DeleteAsync / RefreshSnapshotsAsync 任一抛
+        // 都会被 AsyncRelayCommand 吞掉，用户看到的是"点了删除没反应"。
+        try
+        {
+            await _snapshots.DeleteAsync(record.Id).ConfigureAwait(true);
+            _log($"[快照] 已删除 {record.CreatedAt:yyyy-MM-dd HH:mm:ss} 的快照");
+            await RefreshSnapshotsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[快照] ❌ 删除快照失败：{ex.Message}");
+        }
     }
 
     /// <summary>
@@ -516,6 +561,13 @@ public partial class NetSettingsTabViewModel : ObservableObject
                     ? $"[设置] ⚠️ {relatedAction}：用户拒绝 UAC 提权，已安全终止（可用配置快照回滚）"
                     : $"[设置] ❌ {relatedAction} 失败（退出码 {exit}）。可用配置快照一键回滚");
             await LoadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // 🔴 V14-N2：本通道原先只有 try/finally（无 catch）—— CaptureAsync / run() / LoadAsync
+            // 任一抛出都会外传给 AsyncRelayCommand 吞掉：用户侧"点了应用什么都没发生"，
+            // 且快照可能已生成或未生成、状态不一致也无从查起。就地捕获并如实汇报。
+            _log($"[设置] ❌ {relatedAction} 执行异常：{ex.Message}");
         }
         finally
         {

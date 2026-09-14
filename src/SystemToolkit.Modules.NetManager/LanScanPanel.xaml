@@ -269,7 +269,7 @@
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding LastSeenText}" FontFamily="{DynamicResource Font_Mono}"
-                                               FontSize="{DynamicResource Font_Micro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
+                                               FontSize="{DynamicResource Font_SizeMicro}" Foreground="{DynamicResource Brush_TextSecondary}"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>

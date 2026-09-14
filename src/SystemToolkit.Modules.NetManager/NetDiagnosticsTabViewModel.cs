@@ -14,7 +14,11 @@ public partial class DiagRowVm : ObservableObject
 
     public DiagRowVm(string step) => Step = step;
 
+    // 🔴 V14-N1：StatusText 是 Status 的 switch 派生属性，而 [ObservableProperty] 只通知 Status 本身
+    // ⇒ 无此特性时「待检测 → 检测中 → 正常/异常」的迁移**全不显示**（XAML NetManagerView.xaml:342
+    // 绑的正是 StatusText）。范式：同文件主 VM 的 Conclusion → IsConclusionGood/IsConclusionBad。
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
     private DiagStatus _status = DiagStatus.Pending;
 
     [ObservableProperty]
