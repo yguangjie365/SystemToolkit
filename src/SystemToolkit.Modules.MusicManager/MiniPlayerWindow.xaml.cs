@@ -50,9 +50,12 @@ public partial class MiniPlayerWindow : Window
     /// 避免主窗口最小化联动带走迷你窗（v5 用户要求：主程序最小化时迷你窗留在桌面）。</summary>
     public static void Toggle(IPlaybackBarSource source, Window anchor)
     {
-        if (_current is { IsLoaded: true })
+        // 🟡 V13-M8（2026-09-14）：判据原本是 `_current is { IsLoaded: true }` ——
+        // IsLoaded 为 false 的既有窗口不会被 Close()，而是被下面直接覆盖成新实例 ⇒ 孤儿窗口
+        // 留在桌面上（再也无人能关它）。改为"只要存在实例就关掉"，IsLoaded 不再参与判定。
+        if (_current is { } win)
         {
-            _current.Close();
+            win.Close(); // Closed 处理器会把静态字段置回 null（本次 return，无需再建窗）
             return;
         }
 

@@ -232,7 +232,11 @@ public partial class MusicManagerViewModel : ObservableObject
         }
 
         string root = picked;
-        _scanCts = new CancellationTokenSource();
+        // 🟡 V13-M11（2026-09-14）：身份判定后释放（与 V12-D3 同款）—— 原来 finally 里无条件
+        // `_scanCts?.Dispose(); _scanCts = null;`：若本次扫描的 CTS 已被后到的一轮替换，finally
+        // 会释放**不属于本次**的实例（后到者仍在用），且把字段清成 null 使其"看起来没在扫"。
+        var scanCts = new CancellationTokenSource();
+        _scanCts = scanCts;
         IsScanning = true;
         ScanStatusText = "扫描中…";
         _log.Info($"[Music] 开始扫描根目录：{root}");
@@ -261,7 +265,7 @@ public partial class MusicManagerViewModel : ObservableObject
                     _lastScanProgressAt = now;
                     ScanStatusText = $"扫描中… {p.Percent}%（{p.Scanned}/{p.Total}）";
                 }),
-                _scanCts.Token);
+                scanCts.Token);
 
             // 合并/替换策略（审查 🔴-1 采纳）：
             // 完整扫描（未取消）→ 以本轮结果替换，磁盘已删除的曲目不再残留为僵尸条目；
@@ -326,8 +330,12 @@ public partial class MusicManagerViewModel : ObservableObject
         finally
         {
             IsScanning = false;
-            _scanCts?.Dispose();
-            _scanCts = null;
+            // 🟡 V13-M11：只有"字段里登记的仍是本次"时才释放并清空（V12-D3 同款判据）。
+            if (ReferenceEquals(_scanCts, scanCts))
+            {
+                _scanCts.Dispose();
+                _scanCts = null;
+            }
         }
     }
 
@@ -944,7 +952,10 @@ public partial class MusicManagerViewModel : ObservableObject
             return;
         }
 
-        long seq = ++_playSeq; // 竞态序号：本次请求的身份证
+        // 🟡 V13-M10（2026-09-14）：代际序号改原子自增（同文件 `_engineWired` 早已用
+        // Interlocked；`++` 在读改写之间可被并发调用覆盖 ⇒ 两代拿到同一个号，"过期结果整批
+        // 丢弃"的判据失效）。读侧保持朴素比较——该字段只用于"是否仍是当前代"的相等判定。
+        long seq = Interlocked.Increment(ref _playSeq); // 竞态序号：本次请求的身份证
         if (song.IsOnline)
         {
             await PlayOnlineCoreAsync(engine, song, seq);

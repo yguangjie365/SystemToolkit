@@ -256,7 +256,8 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        int seq = ++_onlineSeq; // 🟠-7：本代请求号（迟到的旧结果整批丢弃）
+        // 🟡 V13-M10（2026-09-14）：原子自增（搜索与榜单列表详情共用本代际号）
+        int seq = Interlocked.Increment(ref _onlineSeq); // 🟠-7：本代请求号（迟到的旧结果整批丢弃）
         IsSearchingOnline = true;
         try
         {
@@ -982,7 +983,8 @@ public partial class MusicManagerViewModel
             return;
         }
 
-        int seq = ++_onlineSeq; // 🟠-7：与搜索共用代际（两者写同一个 SearchResults）
+        // 🟡 V13-M10（2026-09-14）：与搜索共用代际，同样改原子自增
+        int seq = Interlocked.Increment(ref _onlineSeq); // 🟠-7：与搜索共用代际（两者写同一个 SearchResults）
         IsSearchingOnline = true;
         try
         {

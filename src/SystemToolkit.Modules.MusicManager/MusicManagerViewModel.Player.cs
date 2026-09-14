@@ -298,7 +298,9 @@ public partial class MusicManagerViewModel
     /// <summary>起播/切歌后装载封面与主色（后台 IO；结果经 RunOnUi 回 UI）。</summary>
     private async Task LoadCoverAsync(MusicSong song)
     {
-        long seq = ++_coverSeq; // 竞态：快速切歌时旧封面 IO 不得覆盖新曲
+        // 🟡 V13-M10（2026-09-14）：`++` 改原子自增——快速切歌时两代封面并存在途，
+        // 读改写竞态会让两代拿到同一个号（"旧结果不得覆盖新曲"的判据失效）。
+        long seq = Interlocked.Increment(ref _coverSeq); // 竞态：快速切歌时旧封面 IO 不得覆盖新曲
         BitmapSource? image = null;
         try
         {

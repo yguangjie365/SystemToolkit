@@ -52,7 +52,13 @@ public sealed class RatioConverter : IValueConverter
         string[] parts = (parameter as string ?? "1").Split('|');
         double ratio = double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double r) ? r : 1d;
         double result = source * ratio;
-        if (parts.Length > 2)
+
+        // 🟡 V13-M9（2026-09-14）：契约 = **只支持 1 段（比例）或 3 段（比例|最小值|最大值）**，
+        // 见类型摘要；全仓 6 处 ConverterParameter 实测都落在这两种形式（0.12 / 1.7 / 0.7 与
+        // 0.95|240|720 / 0.26|200|300 / 0.3|160|260）。原判据 `parts.Length > 2` 会让**两段**
+        // （如 "0.62|300"）静默按"无上下限"参与计算 —— 现按段数显式分支：只有 3 段才夹取，
+        // 其余段数（含契约外的 2 段/4 段）退化为"只乘比例"。要新增形式先改本契约与调用点。
+        if (parts.Length == 3)
         {
             double min = double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double mn) ? mn : 0d;
             double max = double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double mx) ? mx : double.MaxValue;

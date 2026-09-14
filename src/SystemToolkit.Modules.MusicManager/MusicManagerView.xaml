@@ -1764,6 +1764,14 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <!-- 🟡 V13-M7（2026-09-14）：本行的 OneWay + Command **是有意为之，不是漏改**。
+                             点击链：ToggleButton 自身翻转 IsChecked（WPF 内部用 SetCurrentValue ⇒ 不破坏
+                             绑定）→ Command 翻 VM 的 IsDynamicBackground → OneWay 再把 VM 值推回来
+                             （VM 的 setter 触发 View 的 ApplyDynamicBackground）⇒ 三态自洽。
+                             🔴 严禁改成 `Mode=TwoWay` **且保留** Command：那会翻转两次（ToggleButton 一次、
+                             Command 再翻一次 VM 回到原值）⇒ 开关"点了没用"。
+                             若将来确要改 TwoWay，必须同时删掉 Command 并把 VM 的 `IsDynamicBackground`
+                             换成可公开赋值（其 setter 目前是 private，TwoWay 写不进去）。 -->
                         <ToggleButton Height="26" Padding="8,0" Margin="8,0,0,0"
                                       IsChecked="{Binding IsDynamicBackground, Mode=OneWay}" Command="{Binding ToggleDynamicBackgroundCommand}"
                                       AutomationProperties.Name="动态背景" ToolTip="动态流动背景">
