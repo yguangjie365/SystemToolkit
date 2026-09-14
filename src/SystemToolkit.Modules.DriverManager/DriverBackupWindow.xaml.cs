@@ -11,14 +11,9 @@ namespace SystemToolkit.Modules.DriverManager;
 /// </summary>
 public sealed partial class DriverBackupWindow : Window
 {
-    private readonly int _thirdPartyCount;
-    private readonly int _selectedCount;
-
     private DriverBackupWindow(int thirdPartyCount, int selectedCount)
     {
         InitializeComponent();
-        _thirdPartyCount = thirdPartyCount;
-        _selectedCount = selectedCount;
 
         ScopeAllRadio.Content = $"全部第三方驱动（{thirdPartyCount} 个）——收件箱驱动不在导出范围";
         ScopeAllRadio.IsChecked = thirdPartyCount > 0;
@@ -61,6 +56,15 @@ public sealed partial class DriverBackupWindow : Window
     public static (IReadOnlyList<string> Names, string DestDir, bool AllThirdParty)? Show(
         Window? owner, int thirdPartyCount, int selectedCount, Func<bool, string, IReadOnlyList<string>> pickNames)
     {
+        // 🟠 v11~v14 后续批次：无可用范围时提前拒绝。否则两个 RadioButton 虽都已禁用，
+        // 用户仍可点「开始备份（需提权）」→ pickNames 内的 Directory.CreateDirectory 先建出
+        // 一个空时间戳目录，再因 names.Count == 0 返回 null（上层视作"用户取消"）⇒
+        // 用户零反馈、磁盘却多一个空目录。此处返回 null 后上层落一条"向导取消，未启动"日志。
+        if (thirdPartyCount == 0 && selectedCount == 0)
+        {
+            return null;
+        }
+
         var win = new DriverBackupWindow(thirdPartyCount, selectedCount)
         {
             Owner = owner,

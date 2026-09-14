@@ -223,6 +223,11 @@ public partial class DriverManagerViewModel : ObservableObject
             DriverStoreClassifier.Classify(list, applyCleanupCategories: true);
 
             Packages.Clear();
+            // 🔴 v11~v14 后续批次（DriverManager 🔴-1）：重建集合必须复位底栏计数。
+            // 新行 VM 的 _isSelected 默认 false，而 SetField 判等 ⇒ 不触发 PropertyChanged；
+            // SelectedCount 的唯一刷新点是勾选事件回调 ⇒ 不复位就会残留上一轮的「已选 N 项」，
+            // 且 ClearSelection（赋已是 false 的值）也救不回来。
+            RecountSelection();
             foreach (DriverPackage pkg in list)
             {
                 var vm = new DriverPackageVm(pkg);
@@ -334,7 +339,15 @@ public partial class DriverManagerViewModel : ObservableObject
         {
             vm.IsSelected = false;
         }
+
+        // 全部本就是 false 时上面的赋值会被 SetField 判等短路（不触发 PropertyChanged），
+        // 计数回调不会跑 ⇒ 必须显式回算，否则「已选 N 项」清不掉（🔴-1 的第二个入口）。
+        RecountSelection();
     }
+
+    /// <summary>按当前勾选状态回算底栏计数（与 AppManagerViewModel.RecountSelection 同款）。
+    /// 🔴 单一判据：勾选回调与集合重建都走这里，避免同一口径两处各写。</summary>
+    private void RecountSelection() => SelectedCount = Packages.Count(p => p.IsSelected);
 
     private void AddLog(string message)
     {
@@ -350,7 +363,7 @@ public partial class DriverManagerViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(DriverPackageVm.IsSelected))
             {
-                SelectedCount = Packages.Count(p => p.IsSelected);
+                RecountSelection();
             }
         };
     }
