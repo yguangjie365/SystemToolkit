@@ -82,12 +82,10 @@ public partial class SoftwareEditWindow : Window
 
     private object? BuildItem(object? original)
     {
-        if (string.IsNullOrWhiteSpace(NameBox.Text))
-        {
-            System.Windows.MessageBox.Show("名称不能为空。", "保存", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return null; // 视为未完成：窗口不关闭（此处简单返回 null 上层当作取消）
-        }
-
+        // 🟡 V11-A5（2026-09-14）：此处原有的"名称不能为空"检查是**不可达代码** —— 本方法只在
+        // Show 见到 `DialogResult == true` 时调用，而置 true 的两条路径中，删除路径由 `_deleted`
+        // 分支（Show 内）提前返回，保存路径（OnSaveClick）已先行拦截空名 ⇒ 该 MessageBox 永不显示。
+        // 名称非空的不变式由 OnSaveClick 单点保证，此处不再重复出第二套文案。
         if (original is WingetPackage pkg)
         {
             pkg.Name = NameBox.Text.Trim();
@@ -136,10 +134,5 @@ public partial class SoftwareEditWindow : Window
 
         _deleted = true;
         DialogResult = true;
-    }
-
-    private void OnCancelClick(object sender, RoutedEventArgs e)
-    {
-        // IsCancel=true 已处理关闭
     }
 }

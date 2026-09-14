@@ -324,7 +324,10 @@ Background="{DynamicResource Brush_Background}">
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <ListView ItemsSource="{Binding ThirdPartyView}"
+                            <!-- 🟡 V11-A7（2026-09-14）：显式声明 Grid.Row="0" —— 本行与下方「空态提示」
+                                 （同段已写 Grid.Row="0"）同层，再下面的 Grid.Row="1" 是手动软件区。
+                                 原先靠默认值 0 隐式落在第 0 行，结构上看不出与谁同格。 -->
+                            <ListView Grid.Row="0" ItemsSource="{Binding ThirdPartyView}"
                             controls:GridViewColumnSizing.AutoFillLastColumn="True"
                                       BorderThickness="0" Background="Transparent"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
