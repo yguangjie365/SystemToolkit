@@ -101,7 +101,39 @@ public static class ThemeManager
         string packUri = string.IsNullOrEmpty(match.PackUri) ? Themes[0].PackUri : match.PackUri;
         dicts[0] = new ResourceDictionary { Source = new Uri(packUri) };
         CurrentThemeId = id;
-        ThemeChanged?.Invoke(); // 宿主重建视图（BasedOn 派生样式跟随，见事件注释）
+        NotifyThemeChanged(); // 宿主重建视图（BasedOn 派生样式跟随，见事件注释）
+    }
+
+    /// <summary>
+    /// 通知全部订阅者主题已切换。
+    /// 🟠 V14-U3：原先裸调 <c>ThemeChanged?.Invoke()</c>，两处不合格 ——
+    /// ①**多播链会被首个异常中断**，排在后面的订阅者收不到通知（本事件现有 3 个订阅者：
+    /// 宿主重建视图 / FileBackup 的 VSS 复查 / Music 的播放器笔刷刷新）；
+    /// ②异常会冲出 <see cref="Apply"/>（启动路径 = 崩在 Application 初始化里；切换路径 =
+    /// 主题已换、但调用方拿到异常，且持久化那一步被跳过）。
+    /// 基础设施事件的口径是「**尽力通知全部订阅者**、自身不抛异常」，故逐个订阅者独立兜底 + 留痕。
+    /// </summary>
+    private static void NotifyThemeChanged()
+    {
+        if (ThemeChanged is not { } handlers)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action)handler)();
+            }
+            catch (Exception ex)
+            {
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "theme",
+                    $"主题切换订阅者回调异常（该订阅者已跳过，其余照常通知）："
+                    + $"{handler.Method.DeclaringType?.Name}.{handler.Method.Name}", ex));
+            }
+        }
     }
 
     /// <summary>启动入口：读持久化主题应用（损坏/缺失回退默认）。任何视图解析资源前调用。</summary>

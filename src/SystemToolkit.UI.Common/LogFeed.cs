@@ -46,7 +46,20 @@ public static class LogFeed
         Dispatcher? dispatcher = DispatcherFor();
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            dispatcher.InvokeAsync(() => Append(lines, message, maxLines));
+            // 🟠 V14-U2：封送出去的 lambda 原先完全裸露——集合写入异常会在 UI 线程上直冲
+            // DispatcherUnhandledException（全局处理器吞掉并计数，5s 内超 100 条才放行），
+            // 表现为"日志少了一行且完全无线索"。就地兜底，并落到进程日志总线（见 LogFeedFailure）。
+            dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    Append(lines, message, maxLines);
+                }
+                catch (Exception ex)
+                {
+                    LogFeedFailure("追加", ex);
+                }
+            });
             return;
         }
 
@@ -63,10 +76,33 @@ public static class LogFeed
         Dispatcher? dispatcher = DispatcherFor();
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            dispatcher.InvokeAsync(() => Clear(lines));
+            // 🟠 V14-U2：同 Append 的封送分支——lambda 内兜底（清空失败同样不得直冲 Dispatcher）。
+            dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    Clear(lines);
+                }
+                catch (Exception ex)
+                {
+                    LogFeedFailure("清空", ex);
+                }
+            });
             return;
         }
 
         lines.Clear();
     }
+
+    /// <summary>
+    /// 日志面板写入失败的唯一落点。
+    /// 🔴 **只走进程日志总线（<see cref="SystemToolkit.Core.Logging.AppLog"/>，落点是文件）** ——
+    /// 绝不能再回到 <see cref="Append"/> / <see cref="Clear"/>：本次异常正来自那次集合写入，
+    /// 再调一次就是递归（同一集合、同一故障，一路套下去）。总线落点与 UI 集合无交集，
+    /// 且其实现自保不抛（<c>ILogSink</c> 契约），可安全用作终态兜底。
+    /// </summary>
+    private static void LogFeedFailure(string operation, Exception ex)
+        => SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Warn, "ui",
+            $"日志面板{operation}失败（该条已丢弃，不影响其它日志）：{ex.Message}", ex));
 }
