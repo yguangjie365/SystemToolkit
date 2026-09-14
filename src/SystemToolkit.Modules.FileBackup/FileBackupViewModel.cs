@@ -55,7 +55,17 @@ public sealed class SnapshotRowVm
 
     public string StatusText => Model.StatusText;
 
+    /// <summary>快照是否失败。🔴 取机器可读的 <c>Model.Status</c>，<b>不比对中文显示文本</b>——
+    /// 上游（Core）若改文案 / 加空格 / 加标点，比对字符串会静默失配（徽章永远停在默认色）。</summary>
+    public bool IsFailedStatus => Model.Status != "success";
+
     public string ChecksumText => Model.ChecksumText;
+
+    /// <summary>校验是否通过（取 <c>Model.ChecksumStatus</c>，理由见 <see cref="IsFailedStatus"/>）。</summary>
+    public bool IsChecksumPassed => Model.ChecksumStatus == "passed";
+
+    /// <summary>校验是否失败；“未校验”时与 <see cref="IsChecksumPassed"/> 同为 false（对应默认灰色）。</summary>
+    public bool IsChecksumFailed => Model.ChecksumStatus == "failed";
 
     /// <summary>路径列友好文本（规则名 · 快照时间；ToolTip 保留完整 BackupPath）。</summary>
     public string DisplayPath => Model.DisplayPath;

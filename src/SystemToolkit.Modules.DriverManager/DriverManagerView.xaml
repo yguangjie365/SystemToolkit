@@ -393,10 +393,14 @@ Background="{DynamicResource Brush_Background}">
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Style="{DynamicResource CompactActionButton}" Content="清空选择" Height="24" Command="{Binding ClearSelectionCommand}"/>
                     <Separator Width="1" Background="{DynamicResource Brush_Border}" Margin="8,0" Opacity="0.3"/>
+                    <!-- 🟡 B-🟡-5：写操作进行中（CanOperate = !IsOperating）按钮会禁用——与上方 4 个按钮一致，
+                         补 ToolTip + ShowOnDisabled，让用户知道“为什么现在不能点”，而不是对着灰按钮干瞪眼。 -->
                     <Button Content="删除驱动" Command="{Binding DeleteSelectedCommand}"
-                            Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0" Margin="0,0,6,0"/>
+                            Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0" Margin="0,0,6,0"
+                            ToolTipService.ShowOnDisabled="True" ToolTip="pnputil 操作进行中，请等待完成"/>
                     <Button Content="强制删除" Command="{Binding ForceDeleteSelectedCommand}"
-                            Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0"/>
+                            Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0"
+                            ToolTipService.ShowOnDisabled="True" ToolTip="pnputil 操作进行中，请等待完成"/>
                 </StackPanel>
             </Grid>
         </Border>

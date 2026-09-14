@@ -390,7 +390,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="接收目录" Style="{DynamicResource KvLabel}" Margin="0,0,8,0"/>
                                     <TextBox Grid.Column="1" Style="{DynamicResource FieldInput}"
-                                             Text="{Binding Desktop.ReceiveDirectory, UpdateSourceTrigger=PropertyChanged}"/>
+                                             Text="{Binding Desktop.ReceiveDirectory, UpdateSourceTrigger=LostFocus}"/>
                                     <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickReceiveDirectory"/>
                                     <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Click="OnOpenReceiveDirectory"/>
                                 </Grid>
@@ -890,7 +890,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="共享目录" Style="{DynamicResource KvLabel}" Margin="0,0,8,0"/>
                                         <TextBox Grid.Column="1" Style="{DynamicResource FieldInput}"
-                                                 Text="{Binding Mobile.ShareDirectory, UpdateSourceTrigger=PropertyChanged}"/>
+                                                 Text="{Binding Mobile.ShareDirectory, UpdateSourceTrigger=LostFocus}"/>
                                         <Button Grid.Column="3" Style="{DynamicResource CardButton}" Content="选择…" Click="OnPickShareDirectory"/>
                                         <Button Grid.Column="5" Style="{DynamicResource CardButton}" Content="打开" Command="{Binding Mobile.OpenShareDirectoryCommand}"/>
                                     </Grid>
