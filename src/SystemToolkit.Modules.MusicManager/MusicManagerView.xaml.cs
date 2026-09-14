@@ -111,7 +111,10 @@ public partial class MusicManagerView : UserControl
         _vm.PropertyChanged += OnViewModelPropertyChanged;
 
         // P3a：窗口级鼠标按下挂钩（外部点击收起浮层）；「-= 先行」防重复订阅
-        if (Window.GetWindow(this) is { } win)
+        // 🟡 F-🟡-7：缓存宿主窗口引用——OnUnloaded 时可视树可能已拆除，`Window.GetWindow(this)`
+        // 返回 null ⇒ 退订不到真正的宿主；View/VM 是 DI 单例、Shell 会卸载重挂，累积订阅会重复触发。
+        _attachedWindow = Window.GetWindow(this);
+        if (_attachedWindow is { } win)
         {
             win.PreviewMouseDown -= OnWindowPreviewMouseDown;
             win.PreviewMouseDown += OnWindowPreviewMouseDown;
@@ -129,9 +132,10 @@ public partial class MusicManagerView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
-        if (Window.GetWindow(this) is { } win)
+        if (_attachedWindow is { } win)
         {
             win.PreviewMouseDown -= OnWindowPreviewMouseDown;
+            _attachedWindow = null;
         }
 
         SearchHistoryPopup.IsOpen = false; // 切页不残留浮层
@@ -1021,6 +1025,12 @@ public partial class MusicManagerView : UserControl
 
     private EventHandler? _karaokeRenderHandler;
 
+    /// <summary>已挂 <c>PreviewMouseDown</c> 的宿主窗口（缓存，供 <c>OnUnloaded</c> 精确退订）。</summary>
+    private Window? _attachedWindow;
+
+    /// <summary>卡拉OK 渲染帧异常计数（60fps 下不每帧打日志，但要定期留痕，防“永远静默”）。</summary>
+    private int _karaokeErrorCount;
+
     private void OnKaraokeRender(object? sender, EventArgs e)
     {
         // 🟠 审查 2026-09-10（🟠-12）：CompositionTarget.Rendering 是**静态**事件，其回调异常
@@ -1043,9 +1053,18 @@ public partial class MusicManagerView : UserControl
             ApplyKaraokeToRow(FullLyricsList, ref _karaokeVinylBlock, p);
             ApplyKaraokeToRow(ModernLyricsList, ref _karaokeModernBlock, p);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 渲染帧失败：静默跳过（60fps 下不打日志，避免刷屏；下一帧自然重试）
+            // 🟡 F-🟡-4：60fps 下每帧打日志会刷屏；但**稳定**失败（如模板变更后目标 TextBlock
+            // 恒为 null）会永远静默——用户只看到“逐字填充没了”，日志里查不到任何线索。
+            // ⇒ 首次 + 每 600 帧（≈10s）留痕一次，既防刷屏也防“永远没人知道”。
+            _karaokeErrorCount++;
+            if (_karaokeErrorCount == 1 || _karaokeErrorCount % 600 == 0)
+            {
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "music",
+                    "卡拉OK渲染帧异常（累计 " + _karaokeErrorCount + " 次）：" + ex.Message, ex));
+            }
         }
     }
 

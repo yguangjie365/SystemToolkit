@@ -414,8 +414,16 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         ? "服务运行中：改端口后需先「停止服务」再「启动服务」才生效"
         : "启动服务时生效";
 
+    /// <summary>加载期（<c>LoadConfig</c>）抑制“端口回写 → 配置落盘”的连锁写。</summary>
+    private bool _loadingConfig;
+
     private void SaveAndValidatePorts()
     {
+        if (_loadingConfig)
+        {
+            return; // 🟡 D-🟡-5：加载期不写盘（端口/目录回写会触发本方法 ⇒ 每次进页面都多写一次配置）
+        }
+
         PortErrorText = PortValidator.Validate(
             ("TCP 端口", TcpPort), ("UDP 端口", DiscoveryPort)) ?? string.Empty;
         OnPropertyChanged(nameof(TcpPort));
@@ -732,6 +740,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
 
     private void LoadConfig()
     {
+        _loadingConfig = true; // D-🟡-5：下方给端口/目录赋值会触发 SaveAndValidatePorts ⇒ 加载期不该写盘
         try
         {
             DeviceId = _discovery.LocalDeviceId;
@@ -765,6 +774,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         catch (Exception ex)
         {
             _log("[互传] ⚠️ 配置读取失败（使用默认值）：" + ex.Message);
+        }
+        finally
+        {
+            _loadingConfig = false;
         }
     }
 

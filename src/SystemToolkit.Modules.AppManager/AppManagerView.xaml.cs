@@ -67,7 +67,7 @@ public partial class AppManagerView : UserControl
         Loaded += OnViewLoaded;
     }
 
-    /// <summary>首次进入页面：加载清单（快），随后后台异步检测安装状态（不阻塞 UI）。</summary>
+    /// <summary>首次进入页面：加载清单（快），随后顺序检测安装状态（await 不阻塞 UI——本方法是 async void）。</summary>
     private async void OnViewLoaded(object sender, RoutedEventArgs e)
     {
         if (_loaded)
@@ -81,7 +81,11 @@ public partial class AppManagerView : UserControl
         try
         {
             await _vm.LoadAsync();
-            _ = _vm.RefreshStatesAsync();
+
+            // 🟠 A-🟠-2（两批审查）：原为 fire-and-forget（`_ = ...`）——它的异常**不在本 try/catch
+            // 的覆盖范围内**，会成为未观察的 Task ⇒ “点了没反应 + 零日志”。改 await 后与本方法
+            // 共用同一条兜底路径（OnViewLoaded 是 async void，await 不阻塞 UI 线程）。
+            await _vm.RefreshStatesAsync();
         }
         catch (Exception ex)
         {

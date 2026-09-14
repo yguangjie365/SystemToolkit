@@ -1331,7 +1331,16 @@ public partial class MusicManagerViewModel
             // 界面显示"检测完成"却半新半旧（核实记录 v13 §三 🟠-6）。
             // 本方法是对**当前字段**的纯投影、幂等无副作用 ⇒ 无论成功/取消/失败都重建一次即可收敛。
             // 置于 IsCheckingLogin 复位**之后**：即便投影意外抛错，忙态也已释放（不制造新的卡死）。
-            RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
+            // 🟡 F-🟡-6（两批审查）：finally 里抛异常会①覆盖 try 里已记录的原始异常；
+            // ②本方法被 `_ = RefreshLoginStateAsync()` fire-and-forget 调用 ⇒ 异常成未观察 Task 被吞。
+            try
+            {
+                RefreshAccountArea(); // P3：头部账号胶囊 + 平台切换菜单
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("[Music] 账号区刷新异常：" + ex.Message);
+            }
         }
     }
 }

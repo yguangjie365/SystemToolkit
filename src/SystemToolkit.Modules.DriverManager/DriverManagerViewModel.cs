@@ -38,6 +38,12 @@ public partial class DriverPackageVm : ObservableObject
         ? "启动关键设备类驱动（如存储控制器）——删除可致蓝屏或无法开机，已禁止删除"
         : "收件箱驱动——随 Windows 发行，pnputil 拒绝删除";
 
+    /// <summary>WHQL 签名主体名前缀（Windows 对 “Microsoft Windows Hardware Compatibility Publisher” 的签发名）。</summary>
+    private const string WhqlSignerPrefix = "Microsoft Windows Hardware Compatibility";
+
+    /// <summary>WHQL 第三方签名主体名前缀（“Microsoft Windows Third Party Component Publisher”）。</summary>
+    private const string WhqlThirdPartySignerPrefix = "Microsoft Windows Third Party";
+
     /// <summary>签名者（v2.0 XML 源新增；长串缩写显示，完整值进 ToolTip）。</summary>
     public string SignerText
     {
@@ -49,9 +55,9 @@ public partial class DriverPackageVm : ObservableObject
                 return "—";
             }
 
-            return s.StartsWith("Microsoft Windows Hardware Compatibility", StringComparison.OrdinalIgnoreCase)
+            return s.StartsWith(WhqlSignerPrefix, StringComparison.OrdinalIgnoreCase)
                 ? "WHQL"
-                : s.StartsWith("Microsoft Windows Third Party", StringComparison.OrdinalIgnoreCase)
+                : s.StartsWith(WhqlThirdPartySignerPrefix, StringComparison.OrdinalIgnoreCase)
                     ? "WHQL(第三方)"
                     : s;
         }

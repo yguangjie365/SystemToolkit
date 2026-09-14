@@ -184,19 +184,28 @@ public partial class FileTransferMobileViewModel : ObservableObject
     /// </summary>
     public async Task TryAutoStartWithAppAsync()
     {
-        Initialize();
-        if (!AutoStartWithApp || IsWebRunning)
+        // 🟡 D-🟡-4（两批审查）：模块注释承诺“钩子内不抛异常”——这条承诺必须由**代码**保证，
+        // 不能依赖“被调用方当前恰好都不抛”的隐式契约（未来任一方法改成会抛即打破）。
+        try
         {
-            return;
-        }
+            Initialize();
+            if (!AutoStartWithApp || IsWebRunning)
+            {
+                return;
+            }
 
-        if (string.IsNullOrWhiteSpace(ShareDirectory) || !Directory.Exists(ShareDirectory))
+            if (string.IsNullOrWhiteSpace(ShareDirectory) || !Directory.Exists(ShareDirectory))
+            {
+                _log("[手机] ⚠️ 已勾选「随应用启动」，但共享目录不存在 → 本次未启动 Web 服务");
+                return;
+            }
+
+            await StartWebAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
         {
-            _log("[手机] ⚠️ 已勾选「随应用启动」，但共享目录不存在 → 本次未启动 Web 服务");
-            return;
+            _log("[手机] ⚠️ 随应用启动失败：" + ex.Message);
         }
-
-        await StartWebAsync().ConfigureAwait(true);
     }
 
     /// <summary>确认对话框回调（由组合根转接）。</summary>

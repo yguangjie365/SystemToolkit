@@ -220,8 +220,6 @@ public partial class AppManagerViewModel : ObservableObject
             catalog = new EnvCatalog();
         }
 
-        _initialized = true; // 仅在加载（或降级）成功后置位
-
         // 忽略清单（与清单同目录）：读盘同样移出 UI 线程；失败按空清单继续（不影响主清单）
         try
         {
@@ -273,6 +271,11 @@ public partial class AppManagerViewModel : ObservableObject
         RebuildViews();
         RebuildArchives();
         AddLog($"已加载软件清单：{StorePackages.Count} 个商店应用，{ManualSoftwares.Count + ThirdPartyPackages.Count} 个第三方应用");
+
+        // 🟡 A-🟡-5（两批审查）：置位移到**方法末尾**——原先在首次读盘之后就置位，其后任一语句
+        // 抛异常都会让“已初始化”成立而清单停在半成品；且重进页面时 OnViewLoaded 的 _loaded
+        // 也已为 true ⇒ 再也修不好（只能重启应用）。放在末尾后，失败可随下次进入重试。
+        _initialized = true;
     }
 
     private void RebuildViews()
@@ -587,18 +590,40 @@ public partial class AppManagerViewModel : ObservableObject
     // ==================================================================
     private void PersistAll()
     {
-        try
+        // 🟡 A-🟡-4（P0 已核：EnvListService 的 SaveWinget/SaveManual/SaveDriver 各自独立、失败各抛）
+        // ⇒ 中途抛时**前面的已经落盘**。原实现统一报“保存软件清单失败”，用户会以为三份都没存
+        // （误导性错误消息 ⇒ 状态不诚实）。改为逐条记账，如实区分“全部成功 / 部分成功”。
+        string saved = string.Empty;
+        string failed = string.Empty;
+
+        void Save(string name, Action write)
         {
-            _env.SaveWinget(StorePackages.Concat(ThirdPartyPackages).Select(v => v.Model));
-            _env.SaveManual(ManualSoftwares);
-            _env.SaveDriver(_driverSoftwares);
+            try
+            {
+                write();
+                saved = saved.Length == 0 ? name : saved + "、" + name;
+            }
+            catch (Exception ex)
+            {
+                string detail = name + "（" + ex.Message + "）";
+                failed = failed.Length == 0 ? detail : failed + "；" + detail;
+                _logger.Error("保存" + name + "失败", ex);
+            }
+        }
+
+        Save("winget 清单", () => _env.SaveWinget(StorePackages.Concat(ThirdPartyPackages).Select(v => v.Model)));
+        Save("手动清单", () => _env.SaveManual(ManualSoftwares));
+        Save("驱动清单", () => _env.SaveDriver(_driverSoftwares));
+
+        if (failed.Length == 0)
+        {
             AddLog("软件清单已保存");
+            return;
         }
-        catch (Exception ex)
-        {
-            _logger.Error("保存软件清单失败", ex);
-            AddLog("保存软件清单失败：" + ex.Message);
-        }
+
+        AddLog("⚠ 软件清单保存不完整"
+            + (saved.Length == 0 ? string.Empty : "：已保存 " + saved)
+            + "；失败 " + failed);
     }
 
     // ==================================================================
