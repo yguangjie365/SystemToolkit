@@ -54,13 +54,16 @@ public partial class AppManagerViewModel
 
         await AcquireOperationAsync();
 
-        IsSearchPopupOpen = false;
-        // 🟠 审查 2026-09-10（🟠-2）：本入口此前既不建 _opCts 也不传 ct，导致
-        // CancelOperation/关窗取消对「从搜索弹窗安装」这条路径完全失效（子 winget 进程收不到取消）。
-        // 与 RunPackageOperationAsync 同构：建局部闸 → 传入 → finally 释放并 dispose。
-        _opCts = new CancellationTokenSource();
+        // 🟠 V11-A3：IsSearchPopupOpen / _opCts 赋值原先裸露在 try 之外——任一步抛出都会绕过
+        // finally，导致 winget 闸门与忙态（IsOperating）**永久不释放**（此后安装/升级/卸载恒被拒）。
+        // 两句连同其后的执行段全部移入 try；Acquire 本身仍在 try 外（其失败由 V11-A2 的兜底负责）。
         try
         {
+            IsSearchPopupOpen = false;
+            // 🟠 审查 2026-09-10（🟠-2）：本入口此前既不建 _opCts 也不传 ct，导致
+            // CancelOperation/关窗取消对「从搜索弹窗安装」这条路径完全失效（子 winget 进程收不到取消）。
+            // 与 RunPackageOperationAsync 同构：建局部闸 → 传入 → finally 释放并 dispose。
+            _opCts = new CancellationTokenSource();
             AddLog($"开始安装：{item.Name}（{item.Id}）");
             WingetRunResult result = await _winget.InstallAsync(item.Id, "winget", _opCts.Token);
             if (result.Success)

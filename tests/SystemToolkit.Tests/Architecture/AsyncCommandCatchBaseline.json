@@ -1,9 +1,6 @@
 [
   "src\\SystemToolkit.Modules.AppManager\\AppManagerViewModel.Archives.cs::RestoreEnvironmentAsync",
   "src\\SystemToolkit.Modules.AppManager\\AppManagerViewModel.Manual.cs::BatchInstallAsync",
-  "src\\SystemToolkit.Modules.AppManager\\AppManagerViewModel.Refresh.cs::InstallAsync",
-  "src\\SystemToolkit.Modules.AppManager\\AppManagerViewModel.Refresh.cs::UninstallAsync",
-  "src\\SystemToolkit.Modules.AppManager\\AppManagerViewModel.Refresh.cs::UpgradeAsync",
   "src\\SystemToolkit.Modules.DriverManager\\DriverManagerViewModel.Operations.cs::DeleteSelectedAsync",
   "src\\SystemToolkit.Modules.DriverManager\\DriverManagerViewModel.Operations.cs::ForceDeleteSelectedAsync",
   "src\\SystemToolkit.Modules.FileBackup\\FileBackupViewModel.Backup.cs::BackupAllAsync",

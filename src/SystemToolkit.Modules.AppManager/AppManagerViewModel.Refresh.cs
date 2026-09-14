@@ -179,6 +179,33 @@ public partial class AppManagerViewModel
         _wingetGate.Release();
     }
 
+    /// <summary>
+    /// V11-A2：单条写操作「进闸」兜底。获取闸门（<see cref="AcquireOperationAsync"/>）本身抛 / 取消时，
+    /// 命令体没有顶层 catch，异常会被 AsyncRelayCommand 吞掉 —— 用户零反馈，且已置位的
+    /// <c>IsOperating</c>（忙态 → 所有命令 CanOperate 恒假）与已占用的闸门**永久不释放**。
+    /// <para>
+    /// 异常计数与 <c>RunPackageOperationAsync</c> 内层**刻意不重复**：后者 catch 后正常返回，
+    /// 故凡是进到这里的异常，其命令必未产生安装历史记录，此处 ±1 恒配对。
+    /// </para>
+    /// </summary>
+    private void ExitOperationOnFailure(string action, Exception ex)
+    {
+        _logger.Time("AppManagerOperation").Complete(
+            LogResult.Failed, LogLevel.Error, $"获取 winget 操作闸门失败（{action}）", ex);
+        try
+        {
+            // 用 ExitOperation 而非裸 Release：同步复位 IsOperating（否则忙态同样永久卡死）
+            ExitOperation();
+        }
+        catch (Exception releaseEx)
+        {
+            // 兜底路径的兜底：绝不从 catch 再抛（会绕过全局熔断直冲 Dispatcher）
+            _logger.Warn($"释放 winget 操作闸门时再次异常（{action}）：{releaseEx.Message}");
+        }
+
+        AddLog($"{action}未启动：winget 操作通道异常（{ex.Message}）");
+    }
+
     /// <summary>取消当前单条 winget 操作（命中 CancellationToken 抛 OperationCanceledException）。</summary>
     [RelayCommand]
     private void CancelOperation()
@@ -197,7 +224,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // V11-A2：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("安装", ex);
+            return;
+        }
 
         await RunPackageOperationAsync(pkg, InstallAction.Install, "InstallPackage", ct => _winget.InstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
@@ -212,7 +248,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // V11-A2：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("升级", ex);
+            return;
+        }
 
         await RunPackageOperationAsync(pkg, InstallAction.Upgrade, "UpgradePackage", ct => _winget.UpgradeAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkInstalled);
     }
@@ -236,7 +281,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // V11-A2：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("卸载", ex);
+            return;
+        }
 
         await RunPackageOperationAsync(pkg, InstallAction.Uninstall, "UninstallPackage", ct => _winget.UninstallAsync(pkg.Id, pkg.Model.Source, ct), pkg.MarkNotInstalled);
     }

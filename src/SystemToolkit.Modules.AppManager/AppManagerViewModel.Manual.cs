@@ -365,14 +365,17 @@ public partial class AppManagerViewModel
     [RelayCommand]
     private void ExportList()
     {
-        string? exportPath = PickSavePath?.Invoke();
-        if (string.IsNullOrEmpty(exportPath))
-        {
-            return;
-        }
-
+        // 🟠 V11-A4：View 注入委托（PickSavePath）原在 try 之外——回调内部抛异常（对话框/壳层
+        // 异常）会直冲 UI 线程且零反馈。移入 try：与紧随其后的导出 IO 同一条失败路径。
+        string? exportPath = null;
         try
         {
+            exportPath = PickSavePath?.Invoke();
+            if (string.IsNullOrEmpty(exportPath))
+            {
+                return;
+            }
+
             int count = _env.ExportWingetManifest(exportPath);
             AddLog($"已导出清单（winget 官方格式，{count} 个包）：{exportPath}");
             AddLog("范围说明：该格式只含包 Id（不含名称/分类/图标），手工软件与驱动工具清单不在其中；"
@@ -380,7 +383,7 @@ public partial class AppManagerViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error("导出软件清单失败：" + exportPath, ex);
+            _logger.Error("导出软件清单失败：" + (exportPath ?? "(未取到路径)"), ex);
             AddLog("导出失败：" + ex.Message);
         }
     }
@@ -396,15 +399,26 @@ public partial class AppManagerViewModel
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task ExportInstalledAsync()
     {
-        string? exportPath = PickSavePath?.Invoke();
-        if (string.IsNullOrEmpty(exportPath))
+        // 🟠 V11-A4：PickSavePath 回调（View 注入）原先裸露在 try 之外——这是 AsyncRelayCommand 的
+        // 吞异常路径（用户零反馈、日志零记录）。与 V11-A2 同构：Acquire 单独兜底，委托调用移入 try。
+        try
         {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            ExitOperationOnFailure("导出本机已安装软件", ex);
             return;
         }
 
-        await AcquireOperationAsync();
         try
         {
+            string? exportPath = PickSavePath?.Invoke();
+            if (string.IsNullOrEmpty(exportPath))
+            {
+                return;
+            }
+
             AddLog("正在导出本机已安装软件（winget export）…");
             WingetRunResult result = await _winget.ExportAsync(exportPath);
             if (!result.Success)
@@ -418,7 +432,7 @@ public partial class AppManagerViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error("导出本机已安装软件失败：" + exportPath, ex);
+            _logger.Error("导出本机已安装软件失败", ex);
             AddLog("导出失败：" + ex.Message);
         }
         finally
@@ -434,24 +448,27 @@ public partial class AppManagerViewModel
     [RelayCommand]
     private void ImportList()
     {
-        string? importPath = PickOpenPath?.Invoke();
-        if (string.IsNullOrEmpty(importPath))
-        {
-            return;
-        }
-
-        int current = StorePackages.Count + ThirdPartyPackages.Count + ManualSoftwares.Count;
-        if (ConfirmRequest?.Invoke("导入清单",
-                $"导入将用所选文件替换当前清单（当前共 {current} 条）。\n" +
-                "· winget 官方格式：只替换商店/第三方应用清单，手工与驱动清单**保留**\n" +
-                "· 本工具旧格式：替换全部三类清单\n" +
-                "覆盖前会自动备份当前清单。\n\n确定继续吗？") != true)
-        {
-            return;
-        }
-
+        // 🟠 V11-A4：PickOpenPath / ConfirmRequest 两个 View 注入委托原先裸露在 try 之外——
+        // 回调抛异常会直冲 UI 线程。移入 try 后与导入 IO 共用同一失败路径。
+        string? importPath = null;
         try
         {
+            importPath = PickOpenPath?.Invoke();
+            if (string.IsNullOrEmpty(importPath))
+            {
+                return;
+            }
+
+            int current = StorePackages.Count + ThirdPartyPackages.Count + ManualSoftwares.Count;
+            if (ConfirmRequest?.Invoke("导入清单",
+                    $"导入将用所选文件替换当前清单（当前共 {current} 条）。\n" +
+                    "· winget 官方格式：只替换商店/第三方应用清单，手工与驱动清单**保留**\n" +
+                    "· 本工具旧格式：替换全部三类清单\n" +
+                    "覆盖前会自动备份当前清单。\n\n确定继续吗？") != true)
+            {
+                return;
+            }
+
             // 备份在 try 内（审查 M5）：备份 IO 异常必须走导入失败路径留痕，
             // 而不是冒泡到全局兜底被吞、导入静默中止
             string? backupPath = _env.BackupCatalog();
@@ -515,7 +532,7 @@ public partial class AppManagerViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error("导入软件清单失败：" + importPath, ex);
+            _logger.Error("导入软件清单失败：" + (importPath ?? "(未取到路径)"), ex);
             AddLog("导入失败：" + ex.Message);
         }
     }
