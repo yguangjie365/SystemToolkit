@@ -97,6 +97,18 @@ public partial class FileTransferView : UserControl
         }
     }
 
+    /// <summary>
+    /// View 侧事件处理器的统一兜底日志（🟠-4 审查 v10）。
+    /// <para>
+    /// 为什么需要：UI 事件处理器抛出的异常**不经过**任何兜底，会直接冲
+    /// <c>DispatcherUnhandledException</c> 杀进程；而这些处理器要做"开资源管理器 / 弹对话框 /
+    /// 写 VM 属性（触发落盘）"这类会抛的动作。统一走 AppLog，与 <c>OnLoaded</c> 的兜底同款。
+    /// </para>
+    /// </summary>
+    private static void LogViewError(string what, Exception ex)
+        => SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Warn, "filetransfer", what + "：" + ex.Message));
+
     /// <summary>多选文件对话框（发送入口；取消返回 null）。</summary>
     private IReadOnlyList<string>? PickFiles()
     {
@@ -124,36 +136,59 @@ public partial class FileTransferView : UserControl
         return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
     }
 
+    // 🟠-4 审查 v10：UI 事件处理器异常会直冲 DispatcherUnhandledException 杀进程。
+    // 这两个还额外碰对话框与 VM 属性 setter（后者触发落盘），值得整体兜底。
     private void OnPickReceiveDirectory(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog
+        try
         {
-            Title = "选择接收文件保存目录",
-        };
-        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            var dialog = new OpenFolderDialog
+            {
+                Title = "选择接收文件保存目录",
+            };
+            if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            {
+                Vm.Desktop.ReceiveDirectory = dialog.FolderName;
+            }
+        }
+        catch (Exception ex)
         {
-            Vm.Desktop.ReceiveDirectory = dialog.FolderName;
+            LogViewError("选择接收目录失败", ex);
         }
     }
 
     private void OnPickShareDirectory(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog
+        try
         {
-            Title = "选择共享给手机的目录",
-        };
-        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            var dialog = new OpenFolderDialog
+            {
+                Title = "选择共享给手机的目录",
+            };
+            if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            {
+                Vm.Mobile.ShareDirectory = dialog.FolderName;
+            }
+        }
+        catch (Exception ex)
         {
-            Vm.Mobile.ShareDirectory = dialog.FolderName;
+            LogViewError("选择共享目录失败", ex);
         }
     }
 
     private void OnOpenWebPage(object sender, RoutedEventArgs e)
     {
-        string url = Vm.Mobile.UrlText;
-        if (!string.IsNullOrWhiteSpace(url))
+        try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            string url = Vm.Mobile.UrlText;
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            LogViewError("打开网页失败", ex);
         }
     }
 
@@ -168,9 +203,16 @@ public partial class FileTransferView : UserControl
         }
 
         // 审查 v5（🟡-12）：ArgumentList 逐参传递，替代手工引号拼接
-        var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
-        psi.ArgumentList.Add(dir);
-        Process.Start(psi);
+        try
+        {
+            var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+            psi.ArgumentList.Add(dir);
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            LogViewError("打开接收目录失败", ex);
+        }
     }
 
     private void OnTabChecked(object sender, RoutedEventArgs e)

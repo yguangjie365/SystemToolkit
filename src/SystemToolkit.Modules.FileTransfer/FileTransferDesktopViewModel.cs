@@ -298,6 +298,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(TextSizeText))]
     [NotifyPropertyChangedFor(nameof(TextSendHintText))]
     [NotifyCanExecuteChangedFor(nameof(SendTextCommand))]
+    // 🟠-2 审查 v10：`SendTextToPhone` 同样用 `CanExecute = nameof(CanSendText)`，
+    // 而 `CanSendText` 的判据就是 `TextToSend` —— 原先只通知了 SendTextCommand，
+    // 「发文本到手机」按钮会**永久停在禁用**（初始为空 → false，之后无人通知重算）。
+    [NotifyCanExecuteChangedFor(nameof(SendTextToPhoneCommand))]
     private string _textToSend = string.Empty;
 
     /// <summary>当前文本的 UTF-8 体积与上限（如 <c>412 B / 256 KB</c>）。与协议限长同一口径。</summary>
@@ -657,6 +661,9 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             }
 
             IsTransferRunning = false;
+            _transferPort = 0;                              // 🟡-6：服务停了就不该再显示上次的端口
+            OnPropertyChanged(nameof(TransferPortText));
+            RefreshReceiveDirectoryFreeSpace();             // 🟡-7：目录可能已被外部删掉，剩余空间要跟着变
             _log("[互传] 服务已停止");
 
             // 审查 v5（🟡-9）：StopAsync 仅给在途任务 50ms 收尾宽限，其 TaskUpdated 经 RunOnUi
@@ -822,32 +829,9 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void AddDiscoveredToKnown()
-    {
-        if (SelectedDevice is null)
-        {
-            _log("[互传] ⚠️ 请先选择要加入的设备");
-            return;
-        }
-
-        string ip = SelectedDevice.Model.IPAddress.ToString();
-        KnownPeerRowVm? existing = KnownPeers.FirstOrDefault(p => p.Ip == ip);
-        if (existing is not null)
-        {
-            _log($"[互传] ⚠️ 该设备已在已知列表中（{existing.Name}）");
-            return;
-        }
-
-        KnownPeers.Add(new KnownPeerRowVm
-        {
-            Name = SelectedDevice.Model.Name,
-            Ip = ip,
-            Port = SelectedDevice.Model.TransferPort,
-        });
-        RefreshDeviceKnownFlags();
-        _log($"[互传] 已将 {SelectedDevice.Model.Name} 加入已知设备（记得点保存）");
-    }
+    // 🟡-8 审查 v10：原 `AddDiscoveredToKnown()` 已删除 —— 全仓零引用（无 XAML 绑定、
+    // 无测试引用，实测 2026-09-14），其职责已由 P3 ⑭ 的 `AddDeviceToKnown(DiscoveredDeviceRowVm?)`
+    // 承载（行级入口，语义更准）。死代码留着会误导后来者以为有两条加入路径。
 
     // ── 设备发现 ──
 
@@ -914,28 +898,36 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshDevicesAsync()
     {
-        if (IsTransferRunning)
+        // 🟡-9 审查 v10：命令体缺顶层 catch（AsyncRelayCommand 会吞异常 → 静默空操作）
+        try
         {
-            DiscoveredDevices.Clear();
-            foreach (DiscoveredDevice device in _discovery.Devices.OrderByDescending(d => d.IsOnline).ThenBy(d => d.Name))
+            if (IsTransferRunning)
             {
-                DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
+                DiscoveredDevices.Clear();
+                foreach (DiscoveredDevice device in _discovery.Devices.OrderByDescending(d => d.IsOnline).ThenBy(d => d.Name))
+                {
+                    DiscoveredDevices.Add(new DiscoveredDeviceRowVm(device));
+                }
+
+                RefreshDeviceKnownFlags();
+
+                // 如实给出"最近刷新时间"（本模块无"扫描中"状态，见 LastDeviceRefreshText 注释）
+                LastDeviceRefreshText = "最近刷新 " + DateTime.Now.ToString(
+                    "HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+
+                _log($"[互传] 已刷新：{_discovery.Devices.Count} 台在线设备");
+            }
+            else
+            {
+                _log("[互传] ⚠️ 传输服务未启动——请先启动服务（同时开启设备发现）");
             }
 
-            RefreshDeviceKnownFlags();
-
-            // 如实给出"最近刷新时间"（本模块无"扫描中"状态，见 LastDeviceRefreshText 注释）
-            LastDeviceRefreshText = "最近刷新 " + DateTime.Now.ToString(
-                "HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-
-            _log($"[互传] 已刷新：{_discovery.Devices.Count} 台在线设备");
+            await Task.CompletedTask.ConfigureAwait(true);
         }
-        else
+        catch (Exception ex)
         {
-            _log("[互传] ⚠️ 传输服务未启动——请先启动服务（同时开启设备发现）");
+            _log("[互传] ❌ 刷新设备列表失败：" + ex.Message);
         }
-
-        await Task.CompletedTask.ConfigureAwait(true);
     }
 
     // ── 发送 ──
@@ -982,7 +974,19 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             return;
         }
 
-        await SendFilesToAsync(SelectedDevice.Model.IPAddress.ToString(), SelectedDevice.Model.TransferPort, files).ConfigureAwait(true);
+        // 🟡-9 审查 v10：命令体缺顶层 catch
+        try
+        {
+            await SendFilesToAsync(SelectedDevice.Model.IPAddress.ToString(), SelectedDevice.Model.TransferPort, files).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            _log("[互传] ⚠️ 发送已取消。");
+        }
+        catch (Exception ex)
+        {
+            _log("[互传] ❌ 发送失败：" + ex.Message);
+        }
     }
 
     [RelayCommand]
@@ -1007,7 +1011,19 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             return;
         }
 
-        await SendFilesToAsync(SelectedKnownPeer.Ip, SelectedKnownPeer.Port, files).ConfigureAwait(true);
+        // 🟡-9 审查 v10：命令体缺顶层 catch
+        try
+        {
+            await SendFilesToAsync(SelectedKnownPeer.Ip, SelectedKnownPeer.Port, files).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            _log("[互传] ⚠️ 发送已取消。");
+        }
+        catch (Exception ex)
+        {
+            _log("[互传] ❌ 发送失败：" + ex.Message);
+        }
     }
 
     /// <summary>把本机剪贴板内容读进输入框（读失败就地提示，不弹错误框）。</summary>
@@ -1826,9 +1842,17 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             return;
         }
 
-        _history.Clear();
-        ReloadHistory();
-        _log("[互传] 传输历史已清空");
+        // 🟡-9 审查 v10：同步命令缺兜底（`_history.Clear()` 落盘失败会抛）
+        try
+        {
+            _history.Clear();
+            ReloadHistory();
+            _log("[互传] 传输历史已清空");
+        }
+        catch (Exception ex)
+        {
+            _log("[互传] ❌ 清空历史失败：" + ex.Message);
+        }
     }
 
     /// <summary>模块配置（JSON 持久化）。</summary>

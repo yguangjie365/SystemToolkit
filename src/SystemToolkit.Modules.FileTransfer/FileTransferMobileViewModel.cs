@@ -102,8 +102,21 @@ public partial class FileTransferMobileViewModel : ObservableObject
     /// <summary>
     /// 页面 Loaded **或宿主启动钩子**都会调用（幂等）：恢复配置、刷新会话与证书指纹。
     /// </summary>
+    /// <summary>幂等守卫（🟠-5 审查 v10）：启动钩子与本页 Loaded 都会调 <see cref="Initialize"/>。</summary>
+    private bool _initialized;
+
     public void Initialize()
     {
+        // 🟠-5 审查 v10：注释声称"幂等"，但原先无守卫 —— 第二次调用会重读配置、重设
+        // ShareDirectory（触发 OnShareDirectoryChanged → SaveConfig 写盘一次），并把会话列表
+        // 清空重建（已配对设备会闪一下）。此守卫让声明与实现一致。
+        if (_initialized)
+        {
+            return;
+        }
+
+        _initialized = true;
+
         try
         {
             if (File.Exists(MobileConfigPath))
@@ -403,6 +416,19 @@ public partial class FileTransferMobileViewModel : ObservableObject
             _codeTimer = null;
             _log("[手机] Web 服务已停止");
             RefreshSessions(); // 服务停下 = 全部会话作废，列表与指纹一起归零（不能留着显示成"仍然有效"）
+            RefreshShareDirectoryFreeSpace(); // 🟡-7：服务停了目录可能已被外部删掉，剩余空间要跟着变
+        }
+        catch (OperationCanceledException)
+        {
+            // 取消/超时不伪装成业务失败（与 StartWebAsync 同口径）
+            _log("[手机] ⚠️ 停止 Web 服务已取消。");
+        }
+        catch (Exception ex)
+        {
+            // 🔴-1 审查 v10：原实现只有 try/finally —— `_web.StopAsync()` 抛异常会被
+            // AsyncRelayCommand 吞掉，且 `IsWebRunning` 因赋值在其后而停在 true：
+            // 用户点「停止」看不到任何反馈、服务可能仍在跑。与 `StartWebAsync` 同构补兜底。
+            _log("[手机] ❌ 停止 Web 服务失败：" + ex.Message);
         }
         finally
         {
@@ -421,12 +447,21 @@ public partial class FileTransferMobileViewModel : ObservableObject
     [RelayCommand]
     private void OpenShareDirectory()
     {
-        if (!string.IsNullOrWhiteSpace(ShareDirectory) && Directory.Exists(ShareDirectory))
+        // 🟠-3 审查 v10：同步命令没有 AsyncRelayCommand 的吞异常层，`Process.Start` 抛
+        // Win32Exception（无 explorer / 被策略拦）会直冲 DispatcherUnhandledException 杀进程。
+        try
         {
-            // 审查 v5（🟡-12）：ArgumentList 逐参传递，替代手工引号拼接（尾反斜杠会转义闭引号）
-            var psi = new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = true };
-            psi.ArgumentList.Add(ShareDirectory);
-            System.Diagnostics.Process.Start(psi);
+            if (!string.IsNullOrWhiteSpace(ShareDirectory) && Directory.Exists(ShareDirectory))
+            {
+                // 审查 v5（🟡-12）：ArgumentList 逐参传递，替代手工引号拼接（尾反斜杠会转义闭引号）
+                var psi = new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+                psi.ArgumentList.Add(ShareDirectory);
+                System.Diagnostics.Process.Start(psi);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log("[手机] ⚠️ 打开共享目录失败：" + ex.Message);
         }
     }
 
@@ -460,9 +495,18 @@ public partial class FileTransferMobileViewModel : ObservableObject
             return;
         }
 
-        if (_web.RevokeSession(session.Id))
+        // 🟠-3 审查 v10：同步命令需自兜底——契约未声明 `RevokeSession` 不抛，
+        // 异常会直冲 DispatcherUnhandledException（与 CopyPairCode 的 ExternalException 同款处理）。
+        try
         {
-            _log($"[手机] 已踢出设备：{session.Label}（{session.IpText}）——它需要重新扫码配对");
+            if (_web.RevokeSession(session.Id))
+            {
+                _log($"[手机] 已踢出设备：{session.Label}（{session.IpText}）——它需要重新扫码配对");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log("[手机] ❌ 踢出设备失败：" + ex.Message);
         }
 
         RefreshSessions();
@@ -472,10 +516,19 @@ public partial class FileTransferMobileViewModel : ObservableObject
     [RelayCommand]
     private void KickAllSessions()
     {
-        int count = _web.RevokeAllSessions();
-        _log(count > 0
-            ? $"[手机] 已踢出全部 {count} 台设备——它们都需要重新扫码配对"
-            : "[手机] 当前没有已授权设备");
+        // 🟠-3 审查 v10：同 KickSession，同步命令自兜底
+        try
+        {
+            int count = _web.RevokeAllSessions();
+            _log(count > 0
+                ? $"[手机] 已踢出全部 {count} 台设备——它们都需要重新扫码配对"
+                : "[手机] 当前没有已授权设备");
+        }
+        catch (Exception ex)
+        {
+            _log("[手机] ❌ 踢出全部设备失败：" + ex.Message);
+        }
+
         RefreshSessions();
     }
 
