@@ -66,7 +66,22 @@ public partial class DriverManagerViewModel
     private async Task RunBackupAsync()
     {
         LogTiming timing = _logger.Time("DriverBackup");
-        (IReadOnlyList<string> Names, string DestDir, bool AllThirdParty)? request = BackupWizardRequest?.Invoke();
+        // 🔴 V12-D1：向导回调原先裸露在 try 之外 —— 回调内部要做 Directory.CreateDirectory（View 注入），
+        // 选到不可写目录/只读盘/磁盘满时抛出的异常会直冲 AsyncRelayCommand 的吞异常路径：
+        // 用户零反馈、日志零记录、timing 永不 Complete。此处就地捕获并如实汇报（闸门尚未获取，直接 return）。
+        (IReadOnlyList<string> Names, string DestDir, bool AllThirdParty)? request;
+        try
+        {
+            request = BackupWizardRequest?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AddLog($"❌ 驱动备份向导失败：{ex.Message}");
+            StatusText = "备份向导异常，明细见日志";
+            timing.Complete(LogResult.Failed, LogLevel.Error, "驱动备份向导异常", ex);
+            return;
+        }
+
         if (request is null)
         {
             timing.Complete(LogResult.Cancelled, LogLevel.Info, "驱动备份向导取消，未启动");

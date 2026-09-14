@@ -185,8 +185,24 @@ public partial class FileBackupView : UserControl
         var dragged = (RuleRowVm)e.Data.GetData("RuleRow");
         // 落点索引按指示线同一套算法计算，保证「看到的线 = 实际插入位置」
         int to = InsertIndexAt(e.GetPosition(RuleList).Y);
-        Vm.MoveRuleByDrag(Vm.Rules.IndexOf(dragged), to);
+        try
+        {
+            Vm.MoveRuleByDrag(Vm.Rules.IndexOf(dragged), to);
+        }
+        catch (Exception ex)
+        {
+            // 🔴 V12-F1 兜底（VM 侧已就地捕获排序失败，此处防"拖拽链路本身"的意外异常）：
+            // 事件处理器抛异常会直冲 DispatcherUnhandledException（全局吞 + 熔断），
+            // 用户侧症状是"拖了没反应、也没有任何解释"。
+            Vm.AddLog("❌ 规则拖拽排序失败：" + ex.Message);
+            LogViewError("规则拖拽排序失败", ex);
+        }
     }
+
+    /// <summary>View 侧事件处理器的统一兜底日志（V12-F1，照 <c>FileTransferView.LogViewError</c> 同款）。</summary>
+    private static void LogViewError(string what, Exception ex)
+        => SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Warn, "backup", what + "：" + ex.Message, ex));
 
     /// <summary>按鼠标 Y 计算插入索引（越过某条目中线即插到其后）。</summary>
     private int InsertIndexAt(double y)

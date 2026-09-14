@@ -566,7 +566,20 @@ public partial class FileBackupViewModel : ObservableObject
         }
 
         ordered.Insert(Math.Clamp(newIndex, 0, ordered.Count), movedId);
-        _rules.Reorder(ordered); // 🟡 审查 2026-09-10（🟡-3）：Reorder 内部已 Save，此处不再重复写盘
+        // 🔴 V12-F1：Reorder 内部 Save 失败会**上抛** RuleException（RuleManager 不吞）——
+        // 同步命令没有 AsyncRelayCommand 那层吞异常，异常会直冲 DispatcherUnhandledException。
+        // 就地捕获 + **return**：不继续 ReloadRules，否则界面顺序变了而磁盘没变（UI 与持久化不一致）。
+        try
+        {
+            _rules.Reorder(ordered); // 🟡 审查 2026-09-10（🟡-3）：Reorder 内部已 Save，此处不再重复写盘
+        }
+        catch (Exception ex)
+        {
+            Log($"[备份] ❌ 规则排序失败：{ex.Message}");
+            _logger.Error($"备份规则排序失败：{movedName}", ex);
+            return;
+        }
+
         Log($"[备份] 规则顺序已调整：{movedName}");
         ReloadRules();
         SelectedRule = Rules.FirstOrDefault(r => r.RuleId == movedId);
@@ -580,10 +593,23 @@ public partial class FileBackupViewModel : ObservableObject
             return;
         }
 
+        string ruleId = SelectedRule.RuleId;
+        string ruleName = SelectedRule.RuleName;
         bool newValue = !SelectedRule.Model.Enabled;
-        _rules.SetEnabled(SelectedRule.RuleId, newValue); // 🟡-3：SetEnabled 内部已 Save，不再重复写盘
+        // 🔴 V12-F1：同 MoveRuleByDrag —— SetEnabled 内部 Save 失败即上抛，此处必须就地捕获并 return
+        try
+        {
+            _rules.SetEnabled(ruleId, newValue); // 🟡-3：SetEnabled 内部已 Save，不再重复写盘
+        }
+        catch (Exception ex)
+        {
+            Log($"[备份] ❌ 规则启用/停用保存失败：{ex.Message}");
+            _logger.Error($"备份规则启用状态保存失败：{ruleName}", ex);
+            return;
+        }
+
         ReloadRules();
-        SelectedRule = Rules.FirstOrDefault(r => r.RuleId == SelectedRule.RuleId);
+        SelectedRule = Rules.FirstOrDefault(r => r.RuleId == ruleId);
     }
 
     private bool CanOperateSelected => SelectedRule is not null && !IsBusy;
