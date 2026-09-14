@@ -16,7 +16,6 @@
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Online.cs::LoadPlaylistsAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Online.cs::PlayFromSearchAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Online.cs::RequestLogoutAsync",
-  "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Online.cs::SearchOnlineAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Player.cs::PlayQueueItemAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.Player.cs::SetQualityAsync",
   "src\\SystemToolkit.Modules.MusicManager\\MusicManagerViewModel.cs::NextAsync",
@@ -25,6 +24,5 @@
   "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ApplyDnsAsync",
   "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ApplyIpAsync",
   "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::DeleteSnapshotAsync",
-  "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::RefreshSnapshotsCommandAsync",
   "src\\SystemToolkit.Modules.NetManager\\NetSettingsTabViewModel.cs::ToggleAdapterAsync"
 ]

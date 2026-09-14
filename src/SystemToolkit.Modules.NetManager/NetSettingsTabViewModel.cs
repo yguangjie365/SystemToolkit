@@ -464,8 +464,32 @@ public partial class NetSettingsTabViewModel : ObservableObject
         await RefreshSnapshotsAsync().ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 刷新快照列表（「快照」卡片上的「刷新」按钮）。
+    /// <para>
+    /// 🔴 2026-09-14（v8-🟠-7 守卫扩围后实测抓出）：方法原名为
+    /// <c>RefreshSnapshotsCommandAsync</c> —— CommunityToolkit 生成的命令名是
+    /// <c>RefreshSnapshotsCommandCommand</c>（方法名里那个多余的 "Command" 被保留），
+    /// 而 XAML 绑的是 <c>ReloadSnapshotsCommand</c> ⇒ **两端对不上，按钮点了没反应且零日志**。
+    /// 改名后生成的命令恰为 <c>ReloadSnapshotsCommand</c>，与 XAML 一致。
+    /// </para>
+    /// <para>
+    /// 同时补上方法体顶层的 catch：<see cref="RefreshSnapshotsAsync"/> 本身不吞异常
+    /// （<c>_snapshots.ListAsync()</c> 抛了会直冲 UI 线程），命令壳必须自己兜住并留痕。
+    /// </para>
+    /// </summary>
     [RelayCommand]
-    private async Task RefreshSnapshotsCommandAsync() => await RefreshSnapshotsAsync().ConfigureAwait(true);
+    private async Task ReloadSnapshotsAsync()
+    {
+        try
+        {
+            await RefreshSnapshotsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log($"[快照] ⚠️ 刷新快照列表失败：{ex.Message}");
+        }
+    }
 
     // ── 公共 ──
 
