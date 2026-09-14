@@ -549,7 +549,19 @@ public partial class LanScanTabViewModel : ObservableObject
         {
             IsBusy = false;
             IsScanning = false;
-            _runCts = null;
+            // 🟠 V14-N4：置 null 前先 Cancel + Dispose——Cancel 只是置位，注册句柄（Task.Delay /
+            // 传输层内部 linked source）要 Dispose 才释放；只置 null 会让 CTS 及其注册留在
+            // 终结器队列里，反复扫描逐轮累积（同款纪律见 DriverManagerViewModel 的 V12-D3）。
+            try
+            {
+                runCts.Cancel();
+            }
+            finally
+            {
+                runCts.Dispose();
+                _runCts = null;
+            }
+
             ScanCommand.NotifyCanExecuteChanged();
         }
     }
@@ -577,8 +589,21 @@ public partial class LanScanTabViewModel : ObservableObject
         }
         else
         {
-            _monitorCts?.Cancel();
-            _monitorCts = null;
+            // 🟠 V14-N4：同上——停监控时必须 Cancel **并** Dispose（先 Cancel 让循环尽快退出，
+            // Dispose 释放注册句柄），否则每次「开→关」都留下一个未释放的 CTS。
+            if (_monitorCts is { } cts)
+            {
+                try
+                {
+                    cts.Cancel();
+                }
+                finally
+                {
+                    cts.Dispose();
+                    _monitorCts = null;
+                }
+            }
+
             _log("[局域网] 自动监控已关闭");
         }
     }
@@ -647,8 +672,20 @@ public partial class LanScanTabViewModel : ObservableObject
         }
 
         IsMonitorOn = false;
-        _monitorCts?.Cancel();
-        _monitorCts = null;
+        // 🟠 V14-N4：切走页面即停监控——同样 Cancel + Dispose（页面上再不回来，注册句柄
+        // 若只置 null 就再没人释放它）。
+        if (_monitorCts is { } cts)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            finally
+            {
+                cts.Dispose();
+                _monitorCts = null;
+            }
+        }
     }
 
     [RelayCommand]

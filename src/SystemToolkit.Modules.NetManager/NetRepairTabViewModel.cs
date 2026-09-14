@@ -87,7 +87,17 @@ public partial class NetRepairTabViewModel : ObservableObject
             });
             if (executed.Count > 0)
             {
-                SafeSequenceCompleted?.Invoke();
+                // 🟠 V14-N7：订阅者（组合根 → 自动复诊断联动）异常不得污染修复结果——原先它抛在
+                // 本方法的大 try 里，会被下面的 catch 记成"❌ 安全修复异常"，而修复其实**已经成功**；
+                // 反过来，订阅者失败也不该阻断"修复已完成"这一事实的呈现。单独兜底 + 如实措辞。
+                try
+                {
+                    SafeSequenceCompleted?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    _log("[修复] ⚠ 修复后联动异常（不影响修复结果）：" + ex.Message);
+                }
             }
         }
         catch (Exception ex)

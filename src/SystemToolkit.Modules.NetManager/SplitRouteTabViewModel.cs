@@ -448,8 +448,21 @@ public partial class SplitRouteTabViewModel : ObservableObject
 
     private void StopGuardLoop()
     {
-        _guardCts?.Cancel();
-        _guardCts = null;
+        // 🟠 V14-N4：StopGuardLoop 在 StartGuardLoop 开头**每次**都会被调用（反复开关/重开守护），
+        // 原先只 `Cancel()` + 置 null ⇒ 每轮都留下一个未释放的 CancellationTokenSource。
+        // 先 Cancel（让循环尽快退出）再 Dispose，异常路径也不漏释放（try/finally）。
+        if (_guardCts is { } cts)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            finally
+            {
+                cts.Dispose();
+                _guardCts = null;
+            }
+        }
     }
 
     private bool Confirm(string title, string message)

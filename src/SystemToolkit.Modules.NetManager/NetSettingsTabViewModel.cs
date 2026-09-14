@@ -546,20 +546,28 @@ public partial class NetSettingsTabViewModel : ObservableObject
     /// <summary>修改类操作统一通道：先拍 BeforeChange 快照 → 执行 → 按退出码报结果 → 回读刷新。</summary>
     private async Task SnapshotThenRunAsync(string relatedAction, Func<Task<int>> run)
     {
+        // 🟠 V14-N6：「可用配置快照一键回滚」是对用户的可执行承诺，原先**无条件**写在非零退出码
+        // 分支上，而改前快照到底拍成没拍成从未被记录（同页 ApplyProxyAsync 的 T6 注释警示过
+        // 同款"状态欺骗"）。这里记账，文案按实情分档。
+        // 采集失败会直接落 catch（快照→修改是硬纪律：不拍快照不落地修改），故 catch 文案一并分档。
+        bool snapshotTaken = false;
         IsBusy = true;
         try
         {
             await _snapshots.CaptureAsync(
                 NetworkSnapshotService.ReasonBeforeChange, relatedAction: relatedAction,
                 onLine: _log).ConfigureAwait(true);
+            snapshotTaken = true; // 走到这里 = 快照已落盘（CaptureAsync 要么返回记录，要么抛）
 
             int exit = await run().ConfigureAwait(true);
             // 审查 O6（2026-09-10）：同上，1223 显式识别
             _log(exit == 0
                 ? $"[设置] ✅ {relatedAction} 已执行，正在回读验证……"
                 : exit == 1223
-                    ? $"[设置] ⚠️ {relatedAction}：用户拒绝 UAC 提权，已安全终止（可用配置快照回滚）"
-                    : $"[设置] ❌ {relatedAction} 失败（退出码 {exit}）。可用配置快照一键回滚");
+                    ? $"[设置] ⚠️ {relatedAction}：用户拒绝 UAC 提权，已安全终止"
+                      + (snapshotTaken ? "（可用配置快照回滚）" : "（⚠️ 改前快照采集失败，无法回滚）")
+                    : $"[设置] ❌ {relatedAction} 失败（退出码 {exit}）。"
+                      + (snapshotTaken ? "可用配置快照一键回滚" : "⚠️ 改前快照采集失败，无法回滚"));
             await LoadAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -567,7 +575,9 @@ public partial class NetSettingsTabViewModel : ObservableObject
             // 🔴 V14-N2：本通道原先只有 try/finally（无 catch）—— CaptureAsync / run() / LoadAsync
             // 任一抛出都会外传给 AsyncRelayCommand 吞掉：用户侧"点了应用什么都没发生"，
             // 且快照可能已生成或未生成、状态不一致也无从查起。就地捕获并如实汇报。
-            _log($"[设置] ❌ {relatedAction} 执行异常：{ex.Message}");
+            _log(snapshotTaken
+                ? $"[设置] ❌ {relatedAction} 执行异常：{ex.Message}"
+                : $"[设置] ❌ {relatedAction} 未执行：改前快照采集失败，无法回滚 —— {ex.Message}");
         }
         finally
         {
