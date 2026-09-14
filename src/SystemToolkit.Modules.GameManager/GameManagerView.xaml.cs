@@ -71,6 +71,16 @@ public partial class GameManagerView : UserControl
     {
         try
         {
+            // 🟠 v11~v14 后续批次：存储缺席时原先"窗口照开、保存照点、什么都不发生"。
+            // 在打开输入窗之前就告知，避免用户白填一次 32 位 Key。
+            if (!_vm.CanStoreApiKey)
+            {
+                System.Windows.MessageBox.Show(
+                    "当前启动模式不支持保存 API Key（未接入凭据存储）。", "游戏管理",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
             var window = new SteamApiKeyWindow(_vm.ApiKeyConfigured);
             if (Window.GetWindow(this) is Window owner)
             {

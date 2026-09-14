@@ -397,6 +397,11 @@ public partial class GameManagerViewModel : ObservableObject
     {
         if (_apiKeyStore is null)
         {
+            // 🟠 v11~v14 后续批次：原先直接 return —— 窗口已正常关闭（DialogResult=true），
+            // 用户以为存下了、页头却仍显示"未设置"，且零日志零提示。组合根未注册
+            // ISteamApiKeyStore 时"在线库存整体降级为本地"是**设计支持的路径**，故不算异常，
+            // 但必须留痕 + 由 View 侧 CanStoreApiKey 提前拒绝（见 GameManagerView.OnApiKeyClick）。
+            _logger.Warn("API Key 存储不可用（组合根未注册 ISteamApiKeyStore），保存请求被忽略");
             return;
         }
 
@@ -415,6 +420,10 @@ public partial class GameManagerViewModel : ObservableObject
         ApiKeyConfigured = _apiKeyStore.Get() is not null;
         await LoadCommand.ExecuteAsync(null).ConfigureAwait(true); // 走命令 → 自动尊重 CanExecute（加载中不重入）
     }
+
+    /// <summary>API Key 存储是否可用（组合根是否注册了 <c>ISteamApiKeyStore</c>）。
+    /// View 侧据此在打开输入窗之前就拒绝，避免"窗口正常关闭但什么都没发生"。</summary>
+    public bool CanStoreApiKey => _apiKeyStore is not null;
 
     /// <summary>当前激活账户的 SteamID64（在线库存在线请求按账号查；无则 null 走退化为本地）。</summary>
     private static string? ActiveSteamId64(SteamAllData data) =>
@@ -820,6 +829,15 @@ public partial class GameManagerViewModel : ObservableObject
             StatusText = "Steam 库读取失败：" + ex.Message;
             StatusLevel = 2;
             _logger.Error("Steam 库读取失败", ex);
+
+            // 🟠 v11~v14 后续批次：SteamInstalled 默认 true（"加载完成前不闪空态"），而赋值
+            // 只在 EnhanceInventoryAsync 成功之后 ⇒ 中途抛异常时它仍是 true ⇒ UI 走"游戏卡网格"
+            // 分支并显示空态"未发现任何游戏记录"，而事实可能是**根本没装 Steam**（结论错）。
+            // 未拿到安装信息且此前无任何数据时置 false，让 UI 如实显示"未检测到 Steam"。
+            if (Games.Count == 0)
+            {
+                SteamInstalled = false;
+            }
         }
         finally
         {

@@ -184,7 +184,7 @@
              🔴 所有尺寸一律写在 Style Setter 内：本文件 Width / BorderThickness / StrokeThickness
              裸值已顶满 UiTokenRatchet 基线（width 4 / border 5 / stroke 2 / height 9 / padding 7），
              内联的 Width 数字字面量（如 390）会直接让棘轮变红；写在 Setter 的 Value 里则不匹配该正则。 -->
-        <Style x:Key="DetailPanel" TargetType="Border">
+        <Style x:Key="DetailPanelChrome" TargetType="Border">
             <Setter Property="Width" Value="390"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Stretch"/>
@@ -701,7 +701,7 @@
               Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVis}}">
             <Border Background="{DynamicResource Brush_SurfaceAlt}" Opacity="0.7"
                     MouseLeftButtonDown="OnScrimClick"/>
-            <Border x:Name="DetailPanel" Style="{StaticResource DetailPanel}" Focusable="True">
+            <Border x:Name="DetailPanel" Style="{StaticResource DetailPanelChrome}" Focusable="True">
                 <Grid>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
@@ -879,7 +879,7 @@
                     <Border HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="{DynamicResource Space_XS}" MinWidth="28" MinHeight="28"
                             Background="{DynamicResource Brush_DarkSurface}" CornerRadius="{DynamicResource Radius_Pill}">
-                        <Button Style="{StaticResource AccountChipButton}" Background="Transparent"
+                        <Button Style="{StaticResource AccountChipButton}"
                                 Command="{Binding CloseDetailCommand}"
                                 ToolTip="关闭（Esc）" AutomationProperties.Name="关闭详情"
                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
