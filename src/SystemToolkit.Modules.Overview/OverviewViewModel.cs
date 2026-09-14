@@ -101,9 +101,10 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     /// <summary>已安装软件（表格数据源，受搜索过滤）。</summary>
     public ObservableCollection<InstalledProgram> InstalledPrograms { get; } = new();
 
-    private readonly System.Windows.Data.ListCollectionView? _installedView;
+    /// <summary>搜索过滤视图（构造内**无条件**建立，故下游一律直取，不再逐点判空）。</summary>
+    private readonly System.Windows.Data.ListCollectionView _installedView;
 
-    public System.Windows.Data.ListCollectionView? InstalledAppsView => _installedView;
+    public System.Windows.Data.ListCollectionView InstalledAppsView => _installedView;
 
     /// <summary>导出 Markdown 报告（2026-09-04 实装：SaveFileDialog + OverviewReportBuilder）。</summary>
     public System.Windows.Input.ICommand ExportReportCommand { get; }
@@ -180,15 +181,17 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         {
             if (SetField(ref _filterText, value))
             {
-                InstalledAppsView?.Refresh();
+                // 🟡 V14-O9：原为 `InstalledAppsView?.Refresh()` —— 该字段在构造内无条件赋值，
+                // 可空标注属误标（"可能为 null"会诱导下游写出无意义的判空），已改非可空。
+                InstalledAppsView.Refresh();
                 OnPropertyChanged(nameof(AppCountText));
             }
         }
     }
 
-    public string AppCountText => $"共 {InstalledAppsView?.Count ?? 0} 个应用";
+    public string AppCountText => $"共 {InstalledAppsView.Count} 个应用";
 
-    public int AppCount => InstalledAppsView?.Count ?? 0;
+    public int AppCount => InstalledAppsView.Count;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -389,7 +392,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         ReplaceItems(DetailCards, data.Hardware);
         ReplaceItems(SystemPanels, data.System);
         ReplaceItems(InstalledPrograms, data.InstalledPrograms);
-        InstalledAppsView?.Refresh();
+        InstalledAppsView.Refresh();
         OnPropertyChanged(nameof(AppCountText));
     }
 

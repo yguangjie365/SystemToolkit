@@ -46,13 +46,10 @@ public sealed class StatCardVm : INotifyPropertyChanged
     public int BadgeLevel
     {
         get => _badgeLevel;
-        set
-        {
-            if (SetField(ref _badgeLevel, value))
-            {
-                OnPropertyChanged(nameof(BadgeText));
-            }
-        }
+        // 🟡 V14-O7：原先 setter 内额外通知 BadgeText，但二者**没有派生关系**（各自独立字段，
+        // BadgeText 有自己的 setter 通知），该通知只是让 SetBadge 每次多刷一次绑定——
+        // 绑定的值不变，纯噪音，故删。
+        set => SetField(ref _badgeLevel, value);
     }
 
     /// <summary>使用率百分比（驱动分段条与默认数值）。</summary>
@@ -72,7 +69,9 @@ public sealed class StatCardVm : INotifyPropertyChanged
     /// <summary>分段条分级（用户 2026-09-04：占用也要分级，7% 不应显红）——&lt;60 绿 / 60-85 橙 / ≥85 红。</summary>
     public int SegLevel => _percent switch
     {
-        null or 0 => 0,
+        // 🟡 V14-O6：只留 null 一条——原 `null or 0` 里的 0 是冗余（下一条 `< 60` 已覆盖，
+        // 而 null 不会被关系模式匹配，必须单列）。
+        null => 0,
         < 60 => 0,
         < 85 => 1,
         _ => 2,

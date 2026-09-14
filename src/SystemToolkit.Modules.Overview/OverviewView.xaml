@@ -521,9 +521,12 @@
                             <GridViewColumn Header="版本" Width="150" DisplayMemberBinding="{Binding Version}"/>
                             <GridViewColumn Header="发布商" Width="240" DisplayMemberBinding="{Binding Publisher}"/>
                             <GridViewColumn Header="安装日期" Width="120" DisplayMemberBinding="{Binding InstalledOn}"/>
-                            <!-- 末列宽度由 code-behind OnAppsListSizeChanged 动态填充：
+                            <!-- 末列宽度由本 ListView 上的 controls:GridViewColumnSizing.AutoFillLastColumn 填充
+                                 （附加属性挂 SizeChanged，实现见 UI.Common/Controls/GridViewColumnSizing.cs）：
                                  GridView 在固定列宽不足视口时会自动补一个空白表头列（实测"标题 6 列内容 5 列"），
-                                 让末列吃掉剩余宽度即可消除；MinWidth 防窗口过窄时被压没 -->
+                                 让末列吃掉剩余宽度即可消除；该控件内置最小末列宽，防窗口过窄时被压没。
+                                 ⚠️ 2026-09-14（V14-O8）：原注释称"由 code-behind OnAppsListSizeChanged 动态填充"，
+                                 那是上一版实现，方法早已不存在（全仓 grep 零命中）。 -->
                             <GridViewColumn Header="大小" Width="100" DisplayMemberBinding="{Binding Size}"/>
                         </GridView>
                     </ListView.View>
