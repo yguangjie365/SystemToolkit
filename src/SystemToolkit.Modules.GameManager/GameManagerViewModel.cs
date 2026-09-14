@@ -335,11 +335,32 @@ public partial class GameManagerViewModel : ObservableObject
         System.Windows.Threading.Dispatcher? d = _dispatcher;
         if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive || d.CheckAccess())
         {
-            action();
+            RunGuarded(action);
         }
         else
         {
-            _ = d.BeginInvoke(action);
+            _ = d.BeginInvoke(() => RunGuarded(action));
+        }
+    }
+
+    /// <summary>
+    /// 🟠 V13-G3（2026-09-14 审查）：编组入口的两条执行分支统一兜底（对齐
+    /// <c>MusicManagerViewModel.RunGuarded</c> 同名实现）。原实现两条分支都无 try/catch：
+    /// 后台直执行分支的异常会被 <c>App.xaml.cs</c> 的 <c>TaskScheduler.UnobservedTaskException</c>
+    /// 接住，但该事件**只在 Task 被 GC 终结时触发**（时点不确定，可能直到退出都不触发）且无 AppLog/UI 出口；
+    /// <c>BeginInvoke</c> 分支则直冲 <c>DispatcherUnhandledException</c>。两者应用内都不可见。
+    /// <para>⚠️ 与 Music 同名实现的差异：此处**只落日志不改状态栏**——本方法会被封面补全的后台线程直接调用
+    /// （测试宿主 dispatcher 为 null 时走直执行分支），跨线程写 <c>StatusText</c> 属 UI 线程资源。</para>
+    /// </summary>
+    private void RunGuarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"[游戏] UI 回调异常：{ex.Message}", ex);
         }
     }
 
@@ -915,46 +936,59 @@ public partial class GameManagerViewModel : ObservableObject
         // REVIEW-3 A-2：串行逐张（每张 10s 超时）在缺封面多时补全过慢（50 张 ≈ 8 分钟），改限并发 3
         _ = Task.Run(async () =>
         {
-            var gate = new System.Threading.SemaphoreSlim(3);
-            // 审查 🟠-6 采纳：单张静默改为计数 + 收尾汇总一条日志（逐张记会在断网时刷上百条）
-            int failed = 0;
+            // 🟠 V13-G2（2026-09-14 审查）：fire-and-forget 任务**整体**兜底。原先 lambda 体无外层 catch，
+            // gate.Dispose() 与收尾 _logger.Warn 都裸露在 try 之外——此处任一步抛异常只会走到
+            // App.xaml.cs 的 TaskScheduler.UnobservedTaskException：该事件**只在 Task 被 GC 终结时触发**
+            // （时点不确定，可能直到进程退出都不触发）且无 AppLog/UI 出口（核实记录 v13 §二 🟠-2）。
             try
             {
-                await Task.WhenAll(coverless.Select(async vm =>
+                var gate = new System.Threading.SemaphoreSlim(3);
+                // 审查 🟠-6 采纳：单张静默改为计数 + 收尾汇总一条日志（逐张记会在断网时刷上百条）
+                int failed = 0;
+                try
                 {
-                    try
+                    await Task.WhenAll(coverless.Select(async vm =>
                     {
-                        await gate.WaitAsync().ConfigureAwait(false);
                         try
                         {
-                            string? path = await SteamService.EnsureCoverFromCdnAsync(
-                                    cacheDir, vm.AppId, default, vm.Model.HeaderImage)
-                                .ConfigureAwait(false);
-                            if (path is not null)
+                            await gate.WaitAsync().ConfigureAwait(false);
+                            try
                             {
-                                RunOnUi(() => vm.SetCover(path)); // 审查 🔴-2：后台线程 PropertyChanged 统一编组
+                                string? path = await SteamService.EnsureCoverFromCdnAsync(
+                                        cacheDir, vm.AppId, default, vm.Model.HeaderImage)
+                                    .ConfigureAwait(false);
+                                if (path is not null)
+                                {
+                                    RunOnUi(() => vm.SetCover(path)); // 审查 🔴-2：后台线程 PropertyChanged 统一编组
+                                }
+                            }
+                            finally
+                            {
+                                gate.Release();
                             }
                         }
-                        finally
+                        catch (Exception ex)
                         {
-                            gate.Release();
+                            System.Threading.Interlocked.Increment(ref failed);
+                            System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Threading.Interlocked.Increment(ref failed);
-                        System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
-                    }
-                })).ConfigureAwait(false);
-            }
-            finally
-            {
-                gate.Dispose();
-            }
+                    })).ConfigureAwait(false);
+                }
+                finally
+                {
+                    gate.Dispose();
+                }
 
-            if (failed > 0)
+                if (failed > 0)
+                {
+                    _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
+                }
+            }
+            catch (Exception ex)
             {
-                _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
+                // 兜底只保证"不静默"：⚠️ ILogger.Warn 无异常重载（仅 Warn(string)），故取 Message；
+                // 与同文件既有「封面探测失败…」的 Warn 写法一致。
+                _logger.Warn($"[游戏] CDN 封面补全异常：{ex.Message}");
             }
         });
     }

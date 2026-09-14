@@ -30,8 +30,35 @@ public partial class GameManagerView : UserControl
             return; // 加载中重复触发（页面重入）直接跳过
         }
 
-        _vm.LoadCommand.Execute(null);
+        // 🟠 V13-G4（2026-09-14 审查）：同步事件处理器原无任何兜底——`LoadCommand.Execute` 一旦抛
+        // （AsyncRelayCommand 之外的加载期分支、绑定激活失败等），异常直冲 DispatcherUnhandledException，
+        // 页面看似正常但永远停在"尚未扫描"，且用户零解释。照 AppManagerView / DriverManagerView /
+        // FileBackupView 同款落 AppLog（🔴 不静默）。
+        SafeExecute("游戏页加载", () => _vm.LoadCommand.Execute(null));
     }
+
+    /// <summary>
+    /// View 侧同步事件处理器的统一兜底（🟠 V13-G5，照 <c>FileTransferView</c>/<c>FileBackupView</c>
+    /// 的 <c>LogViewError</c> 同款）：UI 事件处理器抛出的异常**不经过**任何兜底，会直接冲
+    /// <c>DispatcherUnhandledException</c>；而这些处理器要做"弹上下文菜单 / 改选中项 / 移键盘焦点"
+    /// 这类可能抛的动作（元素未挂载、ContextMenu 为 null、焦点元素已失效）。
+    /// </summary>
+    private static void SafeExecute(string what, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            LogViewError(what, ex);
+        }
+    }
+
+    /// <summary>View 侧兜底日志（作用域与 <c>GameManagerModule</c> 的键控日志器同名："gamemanager"）。</summary>
+    private static void LogViewError(string what, Exception ex)
+        => SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+            SystemToolkit.Core.Logging.LogLevel.Warn, "gamemanager", what + "：" + ex.Message, ex));
 
     /// <summary>
     /// 页头「API Key」按钮 → 打开录入小窗（批次 4，2026-09-13）。
@@ -76,17 +103,18 @@ public partial class GameManagerView : UserControl
     /// 各菜单项的命令绑到 <c>SteamAccountVm.SwitchCommand</c>（项自身，不经可视树回溯）。
     /// </summary>
     private void OnAccountMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button || button.ContextMenu is null)
+        => SafeExecute("账户下拉", () =>
         {
-            return;
-        }
+            if (sender is not Button button || button.ContextMenu is null)
+            {
+                return;
+            }
 
-        button.ContextMenu.PlacementTarget = button;
-        // 卡片 ⋯ 菜单用默认（鼠标位）合适；账户下拉必须挂在按钮正下方才是"下拉"语义
-        button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        button.ContextMenu.IsOpen = true;
-    }
+            button.ContextMenu.PlacementTarget = button;
+            // 卡片 ⋯ 菜单用默认（鼠标位）合适；账户下拉必须挂在按钮正下方才是"下拉"语义
+            button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            button.ContextMenu.IsOpen = true;
+        });
 
     /// <summary>
     /// A2 详情面板：卡片封面 / 名称单击 → 打开该游戏详情（2026-09-13）。
@@ -94,19 +122,20 @@ public partial class GameManagerView : UserControl
     /// 打开后把键盘焦点交给面板，使 Esc 立即可用（否则焦点仍留在原处，Esc 收不到）。
     /// </summary>
     private void OnCardOpenDetail(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not FrameworkElement element || element.DataContext is not GameCardVm vm)
+        => SafeExecute("打开游戏详情", () =>
         {
-            return;
-        }
+            if (sender is not FrameworkElement element || element.DataContext is not GameCardVm vm)
+            {
+                return;
+            }
 
-        _vm.OpenDetailCommand.Execute(vm);
-        DetailPanel.Focus();
-    }
+            _vm.OpenDetailCommand.Execute(vm);
+            DetailPanel.Focus();
+        });
 
     /// <summary>点遮罩关闭详情面板。只挂在遮罩上——面板本体不挂，因此点面板内部不会误关。</summary>
     private void OnScrimClick(object sender, MouseButtonEventArgs e)
-        => _vm.CloseDetailCommand.Execute(null);
+        => SafeExecute("关闭详情面板", () => _vm.CloseDetailCommand.Execute(null));
 
     /// <summary>
     /// Esc 关闭详情面板（2026-09-13）。用 <c>PreviewKeyDown</c> 而非 <c>KeyDown</c>：
@@ -114,11 +143,12 @@ public partial class GameManagerView : UserControl
     /// 才能保证「焦点在面板内任何位置按 Esc 都关」。
     /// </summary>
     private void OnDetailPanelPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape && _vm.IsDetailOpen)
+        => SafeExecute("Esc 关闭详情面板", () =>
         {
-            _vm.CloseDetailCommand.Execute(null);
-            e.Handled = true;
-        }
-    }
+            if (e.Key == Key.Escape && _vm.IsDetailOpen)
+            {
+                _vm.CloseDetailCommand.Execute(null);
+                e.Handled = true;
+            }
+        });
 }

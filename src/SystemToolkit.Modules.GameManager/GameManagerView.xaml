@@ -8,7 +8,12 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 封面限宽解码（REVIEW-3 S-4：直绑 string 按原始尺寸解码，1200×1800 竖版 4 倍冗余内存） -->
         <local:CoverImageConverter x:Key="CoverImage"/>
-        <local:InverseBoolConverter x:Key="InverseBool"/>
+        <!-- 🟠 V13-G1（2026-09-14 审查）：此处原有一行「把取反转换器实例化为 XAML 资源」的**死声明**：
+             该转换器构造函数是 private，作为资源一旦被查找就抛 XamlParseException
+             （实测探针输出：「未找到匹配的构造函数」，见核实记录 v13 §二 🔴-1）。
+             之所以长期没炸，是因为 XAML 资源**延迟实例化**，而 4 处使用早已全部改为
+             {x:Static …Instance} ⇒ 该资源键从未被查找。
+             结论：当前零影响、随手一写就炸的定时炸弹 ⇒ 直接删除（不改为 public ctor——那只是把死代码合法化）。 -->
         <!-- 统计行两段之间的横向间隙（A3）。用具名 Thickness 而非 Space_XXS：后者四边 4px，
              会给这一行凭空加 8px 高；这里只要左侧 4px。 -->
         <Thickness x:Key="StatsGap">4,0,0,0</Thickness>
