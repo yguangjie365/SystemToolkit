@@ -31,6 +31,14 @@
     "border": 4,
     "stroke": 0
   },
+  "src/SystemToolkit.Modules.DriverManager/DriverBackupWindow.xaml": {
+    "margin": 8,
+    "padding": 2,
+    "width": 1,
+    "height": 0,
+    "border": 0,
+    "stroke": 0
+  },
   "src/SystemToolkit.Shell/MainWindow.xaml": {
     "margin": 9,
     "padding": 1,
@@ -53,6 +61,14 @@
     "width": 16,
     "height": 1,
     "border": 8,
+    "stroke": 0
+  },
+  "src/SystemToolkit.Modules.NetManager/SplitRoutePanel.xaml": {
+    "margin": 19,
+    "padding": 3,
+    "width": 7,
+    "height": 0,
+    "border": 4,
     "stroke": 0
   },
   "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml": {
@@ -126,6 +142,14 @@
     "height": 0,
     "border": 1,
     "stroke": 0
+  },
+  "src/SystemToolkit.Modules.MusicManager/MiniPlayerWindow.xaml": {
+    "margin": 3,
+    "padding": 0,
+    "width": 6,
+    "height": 5,
+    "border": 1,
+    "stroke": 2
   },
   "src/SystemToolkit.Modules.MusicManager/MusicManagerView.xaml": {
     "margin": 104,

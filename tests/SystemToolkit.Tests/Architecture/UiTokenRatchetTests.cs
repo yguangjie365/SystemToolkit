@@ -12,29 +12,28 @@ namespace SystemToolkit.Tests.Architecture;
 /// </summary>
 public class UiTokenRatchetTests
 {
-    private static readonly string[] ScannedViews =
+    /// <summary>
+    /// 扫描范围 = <c>src</c> 下<b>全部</b> XAML（动态枚举）− 下方显式排除项。
+    /// <para>
+    /// 2026-09-14（B10）由静态白名单改为动态枚举。白名单制的致命缺陷是
+    /// <b>「新 XAML 忘加名单 = 静默不受检测」</b>：本批逐个核对全仓 XAML 后实测抓到
+    /// <b>3 个从未被覆盖</b>的文件（<c>SplitRoutePanel.xaml</c> 已知洞 +
+    /// <c>DriverBackupWindow.xaml</c> / <c>MiniPlayerWindow.xaml</c> 两个此前无任何记录者）——
+    /// 它们在名单制下永远不会变红，改坏了也没人知道。
+    /// 现改为 fail-safe 默认：全扫；要排除必须在此显式登记并写明理由，否则新文件自动进入检测。
+    /// </para>
+    /// </summary>
+    private static readonly (string Path, string Reason)[] ExcludedViews =
     {
-        "src/SystemToolkit.Modules.Overview/OverviewView.xaml",
-        "src/SystemToolkit.Modules.AppManager/AppManagerView.xaml",
-        "src/SystemToolkit.Modules.AppManager/SoftwareEditWindow.xaml",
-        "src/SystemToolkit.Modules.DriverManager/DriverManagerView.xaml",
-        "src/SystemToolkit.Shell/MainWindow.xaml",
-        "src/SystemToolkit.Modules.NetManager/NetManagerView.xaml",
-        // 2026-09-13（B3-②③）补入：本面板此前**不在名单里 = 静默不受令牌守卫约束**（存量洞，
-        // 与"新 XAML 忘加白名单就永不被检测"是同一个坑）。纳入时其裸值基线按当前实测写入：
-        // 37/6/16/1/8 —— 含本批告警区新增的约 13 处；FontSize/CornerRadius 零容忍两条已达标。
-        "src/SystemToolkit.Modules.NetManager/LanScanPanel.xaml",
-        "src/SystemToolkit.Modules.FileTransfer/FileTransferView.xaml",
-        "src/SystemToolkit.Modules.FileTransfer/ReceiveConfirmWindow.xaml",
-        "src/SystemToolkit.Modules.GameManager/GameManagerView.xaml",
-        "src/SystemToolkit.Modules.GameManager/SteamApiKeyWindow.xaml",
-        "src/SystemToolkit.Modules.FileBackup/FileBackupView.xaml",
-        "src/SystemToolkit.Modules.FileBackup/PathInputWindow.xaml",
-        "src/SystemToolkit.Modules.FileBackup/RestoreDialog.xaml",
-        "src/SystemToolkit.Modules.FileBackup/RuleEditWindow.xaml",
-        "src/SystemToolkit.Modules.Settings/SettingsView.xaml",
-        "src/SystemToolkit.Modules.MusicManager/MusicManagerView.xaml",
+        ("src/SystemToolkit.UI.Common/Themes/Packs/Claude/Claude.Light.xaml",
+            "令牌**定义端**：本文件即 FontSize/CornerRadius 等令牌的定义处，而棘轮约束的是消费端（页面布局）；"
+            + "纳入会自我矛盾（零容忍项若在定义端也零容忍，则无法定义任何令牌）。它已有更严的门禁："
+            + "TokenKeys 全量覆盖检查 + ADR-005 对比度纪律"),
+        ("src/SystemToolkit.UI.Common/Themes/Packs/Nvidia/Nvidia.Dark.xaml",
+            "同上（深色令牌包）"),
     };
+
+    private static readonly string[] ScannedViews = EnumerateScannedViews();
 
     private static readonly Regex FontSizeLiteral = new(@"FontSize=""\d", RegexOptions.Compiled);
     private static readonly Regex CornerRadiusLiteral = new(@"CornerRadius=""\d", RegexOptions.Compiled);
@@ -163,6 +162,25 @@ public class UiTokenRatchetTests
         Assert.DoesNotMatch(HeightLiteral, "MaxHeight=\"600\"");
         Assert.DoesNotMatch(BorderThicknessLiteral, "BorderThickness=\"{DynamicResource Border_Card}\"");
     }
+
+    /// <summary>
+    /// 枚举 <c>src</c> 下全部 XAML，剔除 <c>obj/</c>、<c>bin/</c>（WPF 编译产物目录，可能含拷贝的 xaml）
+    /// 与 <see cref="ExcludedViews"/>，按相对路径排序保证输出稳定。
+    /// </summary>
+    private static string[] EnumerateScannedViews()
+    {
+        var excluded = ExcludedViews.Select(e => e.Path).ToHashSet(StringComparer.Ordinal);
+        return Directory
+            .EnumerateFiles(Path.Combine(RepoRoot(), "src"), "*.xaml", SearchOption.AllDirectories)
+            .Where(p => !ViewLoadSmokeGuardTests.IsBuildArtifactPath(p))
+            .Select(Relative)
+            .Where(rel => !excluded.Contains(rel))
+            .OrderBy(rel => rel, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>仓库根相对路径，统一用 <c>/</c> 分隔（Windows 上 <see cref="Path"/> 返回 <c>\</c>）。</summary>
+    private static string Relative(string full) => Path.GetRelativePath(RepoRoot(), full).Replace('\\', '/');
 
     private static string RepoRoot()
     {
