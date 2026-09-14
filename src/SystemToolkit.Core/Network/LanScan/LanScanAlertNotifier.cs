@@ -23,7 +23,7 @@ namespace SystemToolkit.Core.Network.LanScan;
 /// 一次把 200 条灌进去会被截断甚至拒收，那比少发几条更糟。
 /// </para>
 /// </summary>
-public sealed class LanScanAlertNotifier
+public sealed class LanScanAlertNotifier : IDisposable
 {
     /// <summary>单次外呼超时（机器人不可达时不该拖住扫描）。</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
@@ -37,19 +37,49 @@ public sealed class LanScanAlertNotifier
     private readonly HttpClient _http;
     private readonly ILogger _logger;
 
+    /// <summary>本实例创建的 <see cref="HttpClient"/> 是否由本类负责释放（注入 handler 时由调用方负责）。</summary>
+    private readonly bool _ownsHttp;
+
     /// <summary>
     /// 缺省用真 HTTP；测试注入 <see cref="HttpMessageHandler"/> 以便断言"跳过时零调用"。
+    /// <para>
+    /// 🟡 审查 v8-🟡-9：默认 handler 改为 <see cref="SocketsHttpHandler"/> 并**显式**
+    /// <c>AllowAutoRedirect = false</c>。自动跟随发生在 handler 内部、每一跳都不经调用方校验，
+    /// 而这里的 URL 是用户自配的（无法建白名单）——一旦目标域上有开放 302，**带着告警正文的
+    /// POST 就会被带去任意主机**。禁用后 3xx 按非 2xx 处理，如实报"推送失败：HTTP 3xx"。
+    /// ⚠️ 刻意不复用 <see cref="SystemToolkit.Core.Utilities.RedirectFollowingHandler"/>：它要求域白名单，
+    /// 且不复制请求体（本处是带 JSON body 的 POST）。
+    /// </para>
     /// </summary>
     public LanScanAlertNotifier(
         HttpMessageHandler? handler = null,
         TimeSpan? timeout = null,
         ILogger? logger = null)
     {
-        _http = handler is null
-            ? new HttpClient()
-            : new HttpClient(handler, disposeHandler: false);
+        if (handler is null)
+        {
+            _http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true);
+            _ownsHttp = true;
+        }
+        else
+        {
+            _http = new HttpClient(handler, disposeHandler: false);
+        }
+
         _http.Timeout = timeout ?? DefaultTimeout;
         _logger = logger ?? NullLogger.Instance;
+    }
+
+    /// <summary>
+    /// 释放内部 <see cref="HttpClient"/>（🟡 审查 v8-🟡-9：原先类未实现 <see cref="IDisposable"/>，
+    /// 自建的 handler 永不释放）。容器把本类注册为**单例**，关闭时会走这里。
+    /// </summary>
+    public void Dispose()
+    {
+        if (_ownsHttp)
+        {
+            _http.Dispose();
+        }
     }
 
     /// <summary>
