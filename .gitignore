@@ -17,6 +17,8 @@ artifacts/
 .artifacts-bkp/
 .artifacts-ol/
 TestResults/
+# WPF markup compile 的临时工程（MSBuild 加随机后缀，构建偶有残留；v15 批次实测出现）
+*_wpftmp.csproj
 *.user
 *.suo
 *.userosscache

@@ -142,6 +142,7 @@ public partial class AppManagerViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(BatchInstallCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallSearchResultCommand))] // 审查 M1：漏出通知列表的 2 命令补齐
     [NotifyCanExecuteChangedFor(nameof(RestoreEnvironmentCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportInstalledCommand))] // v15 核实：补唯一真漏项（该命令未挂 UI 入口，属一致性加固；两字段须成对补）
     private bool _isRefreshing;
 
     [ObservableProperty]
@@ -173,6 +174,7 @@ public partial class AppManagerViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(BatchInstallCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallSearchResultCommand))] // 审查 M1：漏出通知列表的 2 命令补齐
     [NotifyCanExecuteChangedFor(nameof(RestoreEnvironmentCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportInstalledCommand))] // v15 核实：同上（与 _isRefreshing 成对；漏一处会让"刷新态"或"忙态"单边失灵）
     private bool _isOperating;
 
     // ==================================================================
