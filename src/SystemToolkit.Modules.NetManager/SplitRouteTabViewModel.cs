@@ -65,13 +65,25 @@ public partial class SplitRouteTabViewModel : ObservableObject
     private readonly INetworkInfoService _info;
     private readonly SplitRouteService _split;
     private readonly Action<string> _log;
+
+    /// <summary>
+    /// UI 线程 Dispatcher（组合根注入；测试宿主/无 Application 时为 null = 直执行）。
+    /// 🟡 V14-N5：守护回调经 <see cref="RunOnUi"/> 编组，用到的就是它。
+    /// </summary>
+    private readonly System.Windows.Threading.Dispatcher? _dispatcher;
+
     private CancellationTokenSource? _guardCts;
 
-    public SplitRouteTabViewModel(INetworkInfoService info, SplitRouteService split, Action<string> log)
+    public SplitRouteTabViewModel(
+        INetworkInfoService info,
+        SplitRouteService split,
+        Action<string> log,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         _info = info;
         _split = split;
         _log = log;
+        _dispatcher = dispatcher;
     }
 
     /// <summary>确认对话框回调（组合根转接，Repair 同款）。</summary>
@@ -237,7 +249,7 @@ public partial class SplitRouteTabViewModel : ObservableObject
         }
 
         IsBusy = true;
-        ScanCommand_Notify();
+        RefreshApplyCanExecute();
         try
         {
             IReadOnlyList<SplitOp> preview = await _split.PreviewAsync(request).ConfigureAwait(true);
@@ -294,7 +306,7 @@ public partial class SplitRouteTabViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-            ScanCommand_Notify();
+            RefreshApplyCanExecute();
         }
     }
 
@@ -432,11 +444,21 @@ public partial class SplitRouteTabViewModel : ObservableObject
         {
             try
             {
-                await _split.RunGuardLoopAsync(GuardInterval, async swept =>
+                await _split.RunGuardLoopAsync(GuardInterval, swept =>
                 {
-                    SweepCount += swept;
-                    _log($"[分流] 守护：清退内网卡回潮默认路由 {swept} 条（累计 {SweepCount}）");
-                    await Task.CompletedTask;
+                    // 🟡 V14-N5（由 🟠 降级）：回调编组到 UI 线程。
+                    // 机制：本调用在 Task.Run 内，线程池线程**没有同步上下文** ⇒ Core 侧的
+                    // ConfigureAwait(true) 捕不到 UI 上下文，回调确实在后台线程执行。
+                    // 但原报告的两个后果均不成立（核实记录已推翻）：_log 落 LogFeed，该类自带
+                    // 跨线程封送；SweepCount 是标量属性（非集合），WPF 绑定通常可容忍。
+                    // 仍要编组的理由：本仓纪律是「后台事件一律先回 UI 线程再改状态」
+                    // （Music/FileTransfer 同名 RunOnUi 实现），不必逐处论证"容忍度"。
+                    RunOnUi(() =>
+                    {
+                        SweepCount += swept;
+                        _log($"[分流] 守护：清退内网卡回潮默认路由 {swept} 条（累计 {SweepCount}）");
+                    });
+                    return Task.CompletedTask;
                 }, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -444,6 +466,41 @@ public partial class SplitRouteTabViewModel : ObservableObject
                 _log("[分流] ❌ 守护循环异常终止：" + ex.Message);
             }
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// 后台事件 → UI 线程编组（对齐 <c>MusicManagerViewModel</c> / <c>FileTransferDesktopViewModel</c>：
+    /// Dispatcher 缺失、已停机或其线程已退出时直执行——测试宿主里 Application.Current 可能是
+    /// 已退出的冒烟 STA，BeginInvoke 会永不执行）。
+    /// </summary>
+    private void RunOnUi(Action action)
+    {
+        System.Windows.Threading.Dispatcher? d = _dispatcher;
+        if (d is null || d.HasShutdownStarted || !d.Thread.IsAlive)
+        {
+            RunGuarded(action);
+        }
+        else if (d.CheckAccess())
+        {
+            RunGuarded(action);
+        }
+        else
+        {
+            d.BeginInvoke(() => RunGuarded(action));
+        }
+    }
+
+    /// <summary>UI 更新异常不得反噬调用方（后台循环与命令体都会经此路径）。</summary>
+    private void RunGuarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _log("[分流] ❌ 界面更新异常：" + ex.Message);
+        }
     }
 
     private void StopGuardLoop()
@@ -468,5 +525,9 @@ public partial class SplitRouteTabViewModel : ObservableObject
     private bool Confirm(string title, string message)
         => ConfirmRequest?.Invoke(title, message) == true; // 审查 Y1：确认缺省拒绝（fail-closed）
 
-    private void ScanCommand_Notify() => ApplyCommand.NotifyCanExecuteChanged();
+    /// <summary>
+    /// 🟡 V14-N8：原名 <c>ScanCommand_Notify</c> 名实不符——本 Tab 没有 Scan 命令，
+    /// 它通知的自始至终只有 <see cref="ApplyCommand"/>（判据 <c>CanApply = !IsBusy &amp;&amp; …</c>）。
+    /// </summary>
+    private void RefreshApplyCanExecute() => ApplyCommand.NotifyCanExecuteChanged();
 }

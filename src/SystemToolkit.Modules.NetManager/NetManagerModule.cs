@@ -123,7 +123,10 @@ public sealed class NetManagerModule : ModuleBase
             sp.GetRequiredService<SplitRouteService>(),
             sp.GetRequiredKeyedService<ILogger>("netmanager"),
             alertStore: sp.GetService<ILanScanAlertStore>(),
-            notifier: sp.GetService<LanScanAlertNotifier>()));
+            notifier: sp.GetService<LanScanAlertNotifier>(),
+            // 🟡 V14-N5：分流「守护」回调在 Task.Run（无同步上下文）里触发，
+            // 需在组合根把 UI Dispatcher 显式喂进去（Music/FileTransfer 同款范式）
+            dispatcher: System.Windows.Application.Current?.Dispatcher));
         services.AddSingleton<NetManagerView>();
     }
 }

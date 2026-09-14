@@ -20,11 +20,14 @@ public partial class NetManagerView : UserControl
         DataContext = vm;
         Loaded += OnLoaded;
         // 审查 O7（2026-09-10）：切页卸载/关窗时取消持续 ping（循环与 VM 常驻泄漏）；NET-6 同款收口自动监控
+        // 🟡 V14-N11：直接用构造参数 vm（= 上面刚赋给 DataContext 的同一个实例），
+        // 不再每次触发都做一遍 `DataContext as NetManagerViewModel` 的强制转换
+        // —— 后者在 DataContext 被外部改写/置空时会静默跳过取消（正是本回调要防的泄漏路径）。
         Unloaded += (_, _) =>
         {
-            (DataContext as NetManagerViewModel)?.Diagnostics.CancelPing();
-            (DataContext as NetManagerViewModel)?.Lan.CancelMonitor();
-            (DataContext as NetManagerViewModel)?.Split.CancelGuard();
+            vm.Diagnostics.CancelPing();
+            vm.Lan.CancelMonitor();
+            vm.Split.CancelGuard();
         };
     }
 

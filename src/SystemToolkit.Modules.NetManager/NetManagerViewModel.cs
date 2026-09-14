@@ -51,7 +51,8 @@ public partial class NetManagerViewModel : ObservableObject
         SplitRouteService splitRoute,
         ILogger? logger = null,
         ILanScanAlertStore? alertStore = null,
-        LanScanAlertNotifier? notifier = null)
+        LanScanAlertNotifier? notifier = null,
+        System.Windows.Threading.Dispatcher? dispatcher = null)
     {
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
         void Log(string message) => AddLog(message);
@@ -61,7 +62,9 @@ public partial class NetManagerViewModel : ObservableObject
         Repair = new NetRepairTabViewModel(repairService, diagnosticService, Log);
         Optimize = new NetOptimizeTabViewModel(tuningService, Log);
         Lan = new LanScanTabViewModel(infoService, lanScan, Log, alertStore, notifier);
-        Split = new SplitRouteTabViewModel(infoService, splitRoute, Log);
+        // 🟡 V14-N5：守护回调需回 UI 线程——Dispatcher 由组合根注入并原样下传
+        // （测试/暗启动无 Application 时为 null，VM 侧退化为直执行）
+        Split = new SplitRouteTabViewModel(infoService, splitRoute, Log, dispatcher);
 
         // 跨页联动：一键安全修复成功后自动复诊断（老 UI 行为，用户已习惯）
         Repair.SafeSequenceCompleted += () =>

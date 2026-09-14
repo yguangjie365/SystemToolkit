@@ -327,6 +327,10 @@ public partial class LanScanTabViewModel : ObservableObject
         {
             if (_notifier is null)
             {
+                // 🟡 V14-N10：本分支原先只写共享日志面板，**不**改状态行——而状态行显示的是
+                // "最近一次推送结果"，用户点「发送测试」后看到的是**上一次**的结果（甚至初始空串），
+                // 与刚刚发生的事不符。成功/异常两个分支都写状态行，这里补齐同口径。
+                AlertStatusText = "告警外呼未接入";
                 _log("[局域网] ⚠ 告警外呼未接入（无可用外呼组件）");
                 return;
             }
