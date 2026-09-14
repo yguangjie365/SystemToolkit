@@ -64,6 +64,24 @@ public class ViewLoadSmokeGuardTests
             + string.Join("\n", violations));
     }
 
+    /// <summary>
+    /// 回归锁（2026-09-14 B10 沉淀）：构建产物路径过滤必须识别 Windows 的 <c>\</c> 分隔符。
+    /// 反向验证方式 = 把 <see cref="IsBuildArtifactPath"/> 换回旧的 <c>Contains("/obj/")</c> 写法 → 本用例变红。
+    /// </summary>
+    [Fact]
+    public void XamlGuard_BuildArtifactPathDetection_HandlesWindowsSeparators()
+    {
+        Assert.False(IsBuildArtifactPath(@"D:\repo\src\M\MyView.xaml"));
+        Assert.True(IsBuildArtifactPath(@"D:\repo\src\M\obj\MyView.g.xaml"));
+        Assert.True(IsBuildArtifactPath(@"D:\repo\src\M\bin\Debug\net10.0\MyView.xaml"));
+        Assert.True(IsBuildArtifactPath("D:/repo/src/M/obj/MyView.xaml"));
+        Assert.True(IsBuildArtifactPath("src/SystemToolkit.Modules.Overview/bin/x.xaml"));
+
+        // 段名须精确匹配：objx / binaries 不是 obj / bin，不得误判
+        Assert.False(IsBuildArtifactPath("D:/repo/src/objx/MyView.xaml"));
+        Assert.False(IsBuildArtifactPath(@"D:\repo\src\binary\MyView.xaml"));
+    }
+
     // ================= ② 运行时层 =================
 
     [Fact]
@@ -893,7 +911,23 @@ public class ViewLoadSmokeGuardTests
 
     private static IEnumerable<string> EnumerateModuleXamls()
         => Directory.EnumerateFiles(Path.Combine(RepoRoot(), "src"), "*.xaml", SearchOption.AllDirectories)
-            .Where(p => !p.Contains("/obj/", StringComparison.Ordinal) && !p.Contains("/bin/", StringComparison.Ordinal));
+            .Where(p => !IsBuildArtifactPath(p));
+
+    /// <summary>
+    /// 判定路径是否落在 WPF 构建产物目录（<c>obj</c> / <c>bin</c>）内，供本仓各 XAML 守卫共用。
+    /// <para>
+    /// 2026-09-14（B10 核查时发现并沉淀）：原先用 <c>Contains("/obj/")</c> 判断，而 Windows 上
+    /// <see cref="Directory.EnumerateFiles(string, string, SearchOption)"/> 返回的是 <c>\</c> 分隔路径
+    /// → 该判断<b>恒为 false</b>，过滤形同虚设（同文件 <c>Relative()</c> 已正确用 <c>Replace('\\','/')</c>，
+    /// 可见是笔误而非有意）。改为按路径段判定，跨平台正确；段名必须<b>精确等于</b> <c>obj</c>/<c>bin</c>，
+    /// 故 <c>objx</c> 之类不会被误判。回归锁见
+    /// <see cref="XamlGuard_BuildArtifactPathDetection_HandlesWindowsSeparators"/>。
+    /// </para>
+    /// </summary>
+    internal static bool IsBuildArtifactPath(string path)
+        => path
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(segment => segment is "obj" or "bin");
 
     private static string Relative(string full) => Path.GetRelativePath(RepoRoot(), full).Replace('\\', '/');
 
