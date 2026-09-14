@@ -13,6 +13,9 @@ public partial class OverviewViewModel
     {
         if (_busy)
         {
+            // 🟠 V14-O4：与下方「暂无数据」分支同口径——导出是"点了必须有回应"的操作，
+            // 采集在途时原先是静默 return（用户侧=点了没反应）。
+            NotifyUser?.Invoke("数据采集中，请稍候再导出。", "导出概览报告");
             return;
         }
 
@@ -56,9 +59,11 @@ public partial class OverviewViewModel
 
     private string BuildHeaderSubtitle()
     {
-        OverviewItem? osPanel = SystemPanels.FirstOrDefault(p => p.Label == "操作系统");
-        string? os = osPanel?.Rows.FirstOrDefault(r => r.Key == "操作系统")?.Value;
-        string? uptime = osPanel?.Rows.FirstOrDefault(r => r.Key == "运行时长")?.Value;
+        OverviewItem? osPanel = SystemPanels.FirstOrDefault(p => p.Label == OverviewLabels.OperatingSystem);
+        // 🟠 V14-O5：文案一律取 OverviewLabels（与采集侧 OverviewService 共用常量）——
+        // 此前是裸字面量，上游改文案后这里会静默失配（副标题里 OS/运行时长整段消失，无守卫可抓）。
+        string? os = osPanel?.Rows.FirstOrDefault(r => r.Key == OverviewLabels.OperatingSystem)?.Value;
+        string? uptime = osPanel?.Rows.FirstOrDefault(r => r.Key == OverviewLabels.Uptime)?.Value;
         return string.Join(" · ", new[]
         {
             System.Environment.MachineName,

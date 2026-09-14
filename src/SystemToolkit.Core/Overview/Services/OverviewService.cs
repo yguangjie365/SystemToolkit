@@ -109,7 +109,9 @@ public sealed partial class OverviewService : IOverviewCollector
 
         var rows = new List<OverviewRow>
         {
-            new("操作系统", osName),
+            // 🔴 面板标签与行键走 OverviewLabels（输出契约，V14-O5）——消费侧 OverviewViewModel
+            // 按这些文案定位面板/行，裸字面量会让两侧的约定退化成隐式的。
+            new(OverviewLabels.OperatingSystem, osName),
             new("版本", ReadDisplayVersion()),
             new("安装日期", ReadInstallDate()),
             new("系统类型", $"{(RuntimeInformation.OSArchitecture == Architecture.X64 ? "64 位" : RuntimeInformation.OSArchitecture.ToString())}，{ArchLabel(RuntimeInformation.ProcessArchitecture)} 处理器"),
@@ -119,9 +121,9 @@ public sealed partial class OverviewService : IOverviewCollector
             new("系统目录", System.Environment.SystemDirectory),
             new("启动模式", ReadFirmwareMode()),
             new(".NET 运行时", RuntimeInformation.FrameworkDescription.Trim()),
-            new("运行时长", OverviewFormat.Uptime(TimeSpan.FromMilliseconds(System.Environment.TickCount64))),
+            new(OverviewLabels.Uptime, OverviewFormat.Uptime(TimeSpan.FromMilliseconds(System.Environment.TickCount64))),
         };
-        return new OverviewItem("\uE770", "操作系统", rows: rows);
+        return new OverviewItem("\uE770", OverviewLabels.OperatingSystem, rows: rows);
     }
 
     /// <summary>用户 / 区域面板（当前用户/类型/目录/上次登录/语言/区域/时区/键盘布局）。</summary>

@@ -281,7 +281,11 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
         {
             _logger.Error("概览全量采集失败：" + ex);
             // 审查 🔴-2：失败必须用户可见（🔴 不静默）；下次采集成功会被 BuildHeaderSubtitle 覆盖
-            HeaderSubtitle = "⚠️ 全量采集失败：" + ex.Message;
+            // 🟠 V14-O3：保留快照标注——失败时页面上很可能仍显示着 Activate 秒显进来的**磁盘快照**
+            // （`_showingSnapshot` 只在全量采集成功时清），副标题若只说"采集失败"，用户会把
+            // 快照里的旧数据当成刚采到的实时数据。两条信息同时给。
+            HeaderSubtitle = "⚠️ 全量采集失败：" + ex.Message
+                + (_showingSnapshot ? "（当前显示磁盘快照）" : "");
         }
         finally
         {
