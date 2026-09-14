@@ -277,6 +277,17 @@ public partial class MusicManagerViewModel
             CurrentView = ContentViewMode.OnlineSearch;
             RecordSearchHistory(OnlineSearchText.Trim()); // P3a：成功才记历史
         }
+        catch (OperationCanceledException)
+        {
+            // 🟡 审查 v8-🟡-1（同族）：本方法原**完全没有 catch** —— 超时/取消时用户看不到
+            // 任何反馈（既不报错也不报"已取消"），而兄弟方法都有 OCE 分流。
+            // 补上与 LoadRankSongsAsync **同构**的分支，并同样加代际条件：
+            // 过期代的超时不得覆盖最新状态行。
+            if (seq == _onlineSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
+        }
         finally
         {
             if (seq == _onlineSeq)
@@ -995,12 +1006,24 @@ public partial class MusicManagerViewModel
         }
         catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
         {
-            OnlineStatusText = "操作已取消或网络超时。";
+            // 🟡 审查 v8-🟡-1：**补代际条件**——本方法 finally 与兄弟方法（LoadRankSongs / 歌单详情）
+            // 都有 `seq == _onlineSeq`，唯独这里漏了：过期代（用户已换榜/又搜了一次）的超时
+            // 会把**最新**状态行覆盖成"操作已取消"，界面从此与实际结果不符。
+            // 这正是"同款修复只改一处"的第二次出现，故与兄弟方法**同构**收口。
+            if (seq == _onlineSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
         }
         catch (Exception ex)
         {
-            OnlineStatusText = $"载入榜单失败：{ex.Message}";
-            _log.Error($"[Music] 载入榜单失败（{board.Name}）", ex);
+            // 状态行同样受代际约束（过期代的失败不该覆盖最新结果）；日志无条件记，便于诊断
+            if (seq == _onlineSeq)
+            {
+                OnlineStatusText = $"载入榜单失败：{ex.Message}";
+            }
+
+            _log.Error($"[Music] 载入榜单失败（{board.Name}，代 {seq}）", ex);
         }
         finally
         {
