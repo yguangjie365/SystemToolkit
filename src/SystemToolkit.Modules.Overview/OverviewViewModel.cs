@@ -48,7 +48,8 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             // CommandManager/useCommandManager 各 0 次；实测 InvalidateRequerySuggested()
             // 也刷不动它）⇒ 不显式通知，按钮 IsEnabled 会**双向卡死**：
             // 该禁不禁（采集中仍可点）、该启不启（采集完仍灰着）。
-            (RefreshFullCommand as CommunityToolkit.Mvvm.Input.AsyncRelayCommand)?.NotifyCanExecuteChanged();
+            // 🟡 H-🟡-1：类型已收窄为 AsyncRelayCommand，不再需要 `as` 转换（编译期即可保证）。
+            RefreshFullCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -111,7 +112,12 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
 
     /// <summary>手动全量刷新（审查 M2：页头刷新图标按钮此前无命令绑定，纯死交互；
     /// RefreshFullAsync 内部有 _busy 闸门防重入）。</summary>
-    public System.Windows.Input.ICommand RefreshFullCommand { get; }
+    /// <remarks>🟡 H-🟡-1 v11~v14 后续批次：类型由 <c>ICommand</c> 收窄为 <c>AsyncRelayCommand</c>。
+    /// 原先 Busy setter 需写 `(RefreshFullCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged()`；
+    /// 一旦将来有人把构造换成同步 `RelayCommand`，该 `as` 会**静默返回 null**（`?.` 短路）
+    /// ⇒ 通知失效、按钮 IsEnabled 双向卡死。收窄后编译期即挡住这种替换。
+    /// WPF 绑定在运行时按属性名求值，不依赖静态类型，故对 XAML 无影响。</remarks>
+    public CommunityToolkit.Mvvm.Input.AsyncRelayCommand RefreshFullCommand { get; }
 
     /// <summary>导出保存路径回调（View 注入；审查 🔴-1 采纳：VM 不直接弹对话框）。</summary>
     public Func<string?>? PickSavePath { get; set; }
@@ -218,7 +224,7 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
                     UpdateLiveMetrics();
                     RefreshStoragePanel(snapshot.Data); // 快照里也带传感器读数：先显示，再等全量替换
                     _logger.Info($"已从磁盘快照秒显（采集于 {snapshot.CollectedAt.LocalDateTime:yyyy-MM-dd HH:mm}），后台全量采集中");
-                    _ = RefreshFullAsync(); // 后台补采：完成后自动替换并更新快照
+                    _ = RefreshFullSafeAsync(); // 后台补采：完成后自动替换并更新快照（🟠 H-🟠-2 加兜底）
                 }
                 catch (Exception ex)
                 {
@@ -245,6 +251,29 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
             _timer.Start();
             IsLive = true;
             _logger.Info("概览页刷新已启动（2s 间隔）");
+        }
+    }
+
+    /// <summary>
+    /// fire-and-forget 专用包装（🟠 H-🟠-2 v11~v14 后续批次）。
+    /// <para>
+    /// 为什么需要：调用方是 `_ = RefreshFullAsync()`（**未被观察**的 Task）。而
+    /// <c>RefreshFullAsync</c> 里 <c>Busy = true / false</c> 的 setter 会同步执行
+    /// <c>OnPropertyChanged</c> 与 <c>NotifyCanExecuteChanged</c>（触发全部绑定回调与
+    /// CanExecute 重询），任一回调抛异常都会从 setter 逃逸 —— 落在未观察的 Task 上即
+    /// **完全静默**（§3.1 表第 3 行：既无日志也不影响 UI）。本仓 Music / FileTransfer
+    /// 早有同款 Safe 包装（<c>RefreshStatesSafeAsync</c>），此处对齐。
+    /// </para>
+    /// </summary>
+    private async Task RefreshFullSafeAsync()
+    {
+        try
+        {
+            await RefreshFullAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("概览后台补采异常：" + ex);
         }
     }
 
