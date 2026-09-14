@@ -20,7 +20,11 @@ public static class LogFeed
     {
         if (Application.Current?.Dispatcher is { } app)
         {
-            _fallbackDispatcher ??= app;
+            // 🟡 V14-U5：缓存写入改原子 CAS —— 原 `??=` 是"读→判空→写"，两个线程可同时判定为
+            // null 并各自写入（后者覆盖前者；写入者不同但都是"首个可用 Dispatcher"，覆盖本身无害）。
+            // 收口的是纪律而非已发生的事故：共享静态状态的写一律原子化，免得日后要逐处论证
+            // "实际可达性极低"（本项原报告的定性即如此）。
+            Interlocked.CompareExchange(ref _fallbackDispatcher, app, null);
             return app;
         }
 
@@ -33,7 +37,7 @@ public static class LogFeed
         var current = Dispatcher.FromThread(System.Threading.Thread.CurrentThread);
         if (current is not null)
         {
-            _fallbackDispatcher = current;
+            Interlocked.CompareExchange(ref _fallbackDispatcher, current, null);
             return current;
         }
 

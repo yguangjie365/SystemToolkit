@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using SystemToolkit.Core.Utilities;
+using SystemToolkit.UI.Common.Themes.Tokens;
 
 namespace SystemToolkit.UI.Common;
 
@@ -63,27 +64,14 @@ public static class ThemeManager
     public static void Apply(string? themeId)
     {
         string id = themeId is null ? DefaultThemeId : themeId.Trim().ToLowerInvariant();
-        (string Id, string Label, string PackUri, bool IsDark) match = default;
-        foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
-        {
-            if (t.Id == id)
-            {
-                match = t;
-                break;
-            }
-        }
-
-        if (match.Id is null) // 未知 id → 回退默认
+        // 🟡 V14-U7：判据统一为「查不到 = null」。原实现是**两套**判据——先 `match.Id is null`
+        // 表示"未匹配"，后面又用 `string.IsNullOrEmpty(match.PackUri)` 表示"PackUri 空"；
+        // 同一件事两个标志，任一处漂移就会出现"没匹配却当匹配用"。
+        (string Id, string Label, string PackUri, bool IsDark)? match = FindTheme(id);
+        if (match is null) // 未知 id → 回退默认
         {
             id = DefaultThemeId;
-            foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
-            {
-                if (t.Id == id)
-                {
-                    match = t;
-                    break;
-                }
-            }
+            match = FindTheme(id);
         }
 
         Application app = Application.Current;
@@ -98,10 +86,66 @@ public static class ThemeManager
             throw new InvalidOperationException("App.Resources.MergedDictionaries 为空——App.xaml 须保留一个占位字典");
         }
 
-        string packUri = string.IsNullOrEmpty(match.PackUri) ? Themes[0].PackUri : match.PackUri;
+        // DefaultThemeId 自身未登记（配置/代码错误）时再退到 Themes[0]，保证 packUri 一定有值
+        string packUri = match?.PackUri is { Length: > 0 } uri ? uri : Themes[0].PackUri;
+
+        // 快照 → 替换 → 校验 → 失败回滚（危险操作四步纪律的"字典版"）。
+        // Source 赋值本身会即时加载并对坏包抛异常（探针实证 2026-09-14），赋值不成立时
+        // dicts[0] 保持原样；健康检查失败（加载成功但缺哨兵令牌）则在此显式换回旧字典，
+        // 不留"字典已换、令牌缺失"的半截状态，CurrentThemeId 也不推进。
+        ResourceDictionary previous = dicts[0];
         dicts[0] = new ResourceDictionary { Source = new Uri(packUri) };
+        try
+        {
+            EnsurePackUsable(dicts[0], packUri);
+        }
+        catch
+        {
+            dicts[0] = previous;
+            throw;
+        }
+
         CurrentThemeId = id;
         NotifyThemeChanged(); // 宿主重建视图（BasedOn 派生样式跟随，见事件注释）
+    }
+
+    /// <summary>按 id 查主题登记项；未登记返回 null（"未匹配"的**唯一**判据）。</summary>
+    private static (string Id, string Label, string PackUri, bool IsDark)? FindTheme(string id)
+    {
+        foreach ((string Id, string Label, string PackUri, bool IsDark) t in Themes)
+        {
+            if (t.Id == id)
+            {
+                return t;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 应用后健康检查（🟡 V14-U7）：确认新字典**真的拿到了设计令牌**。
+    /// <para>
+    /// 失败语义（2026-09-14 临时探针实证，结论见变更记录）——**何时抛、何时不抛**：
+    /// ① **不抛**：包 URI 找不到 / XAML 内容坏。原因：`Source` 赋值**当场就抛**
+    ///    （IOException / XamlParseException / WebException）⇒ 根本走不到本检查，
+    ///    由调用方既有兜底处理：启动 `App.xaml.cs` 回退默认主题并留 Warn；
+    ///    切换 `SettingsViewModel` 下拉回退 + ❌ 文案（两处**都已有** try/catch）。
+    /// ② **抛**：字典加载成功却**缺哨兵令牌**（包被改坏 / 键被改名）——这种包不会报任何错，
+    ///    只会让全站 `{DynamicResource}` 静默回退默认值，正是本项要拦的"静默成功"。
+    /// 抛出前调用点已把字典换回上一个主题，故其唯一后果是"主题没换 + 调用方拿到异常"，
+    /// 不会把应用留在半截状态（启动与切换两条路径都不会因它崩，见 ①）。
+    /// </para>
+    /// </summary>
+    private static void EnsurePackUsable(ResourceDictionary dictionary, string packUri)
+    {
+        if (dictionary.Contains(TokenKeys.Brushes.Brush_Background))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"主题包缺少设计令牌哨兵「{TokenKeys.Brushes.Brush_Background}」，已回滚为切换前的主题：{packUri}");
     }
 
     /// <summary>

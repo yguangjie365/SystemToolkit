@@ -28,11 +28,27 @@ public static class ThemeBrush
     /// 未冻结的 <see cref="SolidColorBrush"/> 带线程亲和，跨线程被 WPF 访问即抛
     /// 「调用线程无法访问此对象」；冻结后只读、可自由跨线程。
     /// 返回值是共享的不可变实例，调用方不得改写（要改就自己 Clone）。
+    /// <para>
+    /// 🟡 V14-U8：<see cref="ColorConverter.ConvertFromString(string)"/> 的解析结果**不看保证**——
+    /// 非法 hex / 空串 / 非颜色字符串会抛（FormatException / InvalidCastException / 解箱 null 的
+    /// NullReferenceException）。本方法在日志写入路径上被调用（<c>LogLine.Create</c> → 本方法），
+    /// 为一行日志的配色把异常抛进日志写入路径是本末倒置，故整体兜底为中立灰
+    /// （<see cref="Brushes.Gray"/> 是 WPF 内建冻结笔刷），**绝不抛**。
+    /// </para>
     /// </summary>
     private static Brush FrozenFallback(string fallbackHex)
     {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fallbackHex));
-        brush.Freeze();
+        Brush brush;
+        try
+        {
+            brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fallbackHex));
+        }
+        catch (Exception)
+        {
+            brush = Brushes.Gray;
+        }
+
+        brush.Freeze(); // 内建 Brushes.Gray 已冻结，此处为空操作（Freeze 幂等）
         return brush;
     }
 }

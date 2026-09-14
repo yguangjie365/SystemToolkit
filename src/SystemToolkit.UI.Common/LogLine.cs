@@ -12,6 +12,13 @@ public sealed class LogLine
 {
     private static readonly Regex ZeroFailureCount = new("(?:校验)?失败\\s*0\\s*个?(?:文件?|条|项)?", RegexOptions.Compiled);
 
+    /// <summary>
+    /// 否定式"零失败"表述（🟡 V14-U6 扩充）：`没有失败` / `零失败`（可带量词后缀）。
+    /// 与 <see cref="ZeroFailureCount"/> 同族——判据先剥离这些片段，再查"失败"。
+    /// </summary>
+    private static readonly Regex ZeroFailurePhrase = new(
+        "(?:没有|零)\\s*失败(?:项|个|条|任务|文件)?", RegexOptions.Compiled);
+
     public string Text { get; init; } = "";
 
     public Brush Color { get; init; } = Brushes.Gray;
@@ -19,10 +26,19 @@ public sealed class LogLine
     public static LogLine Create(string text)
         => new() { Text = text, Color = ColorFor(Classify(text)) };
 
-    /// <summary>按日志文本判定行类别；"失败 0 个"这类计数为 0 的表述不算失败。</summary>
+    /// <summary>
+    /// 按日志文本判定行类别；"失败 0 个""没有失败项""零失败任务"这类**否定式表述**不算失败。
+    /// <para>
+    /// 🟡 V14-U6：判据仍是"剥离已知的零失败表述后 Contains(失败/错误/异常)"——这是文本分类的
+    /// **固有局限**，未枚举的否定式（如"未出现失败""不存在异常"）仍会被判 Error；反向地，把
+    /// "没有失败"当修饰语用的句子（如"没有失败重试机制"）会被降级为 Info。两者都只影响日志行的
+    /// **配色**（不影响落盘内容与级别），故按"扩充已知高频表述 + 在此如实注明局限"处置，
+    /// 不引入更重的 NLP 式判定（那会让"为什么这行是红的"变得不可预测）。
+    /// </para>
+    /// </summary>
     public static string Classify(string text)
     {
-        string stripped = ZeroFailureCount.Replace(text ?? "", "");
+        string stripped = ZeroFailurePhrase.Replace(ZeroFailureCount.Replace(text ?? "", ""), "");
         bool isError = stripped.Contains("失败", StringComparison.Ordinal)
             || stripped.Contains("错误", StringComparison.Ordinal)
             || stripped.Contains("异常", StringComparison.Ordinal);
