@@ -41,7 +41,9 @@ public partial class AppManagerViewModel : ObservableObject
 
     private bool _initialized;
 
-    /// <summary>进行中批量安装的取消令牌（BatchInstallAsync 赋值，结束置空；审查 2026-09-04 P2）。</summary>
+    /// <summary>进行中批处理的取消令牌（<c>BatchInstallAsync</c> 与 <c>RestoreEnvironmentAsync</c> 均会赋值，
+    /// 结束置空；由 <c>CancelOperation</c>（界面按钮）与 <c>CancelBatchInstall</c>（关窗钩子）两个入口取消）。
+    /// 审查 2026-09-04 P2；v11~v14 后续批次补注——原注释只提批量安装，与实现（Archives 侧也赋值）不符。</summary>
     private CancellationTokenSource? _batchCts;
 
     public AppManagerViewModel(

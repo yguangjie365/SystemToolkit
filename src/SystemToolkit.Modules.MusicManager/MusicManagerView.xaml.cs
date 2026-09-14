@@ -52,16 +52,15 @@ public partial class MusicManagerView : UserControl
             ImmersionOutgoingText.FontFamily = serif;
             // OM-9 追踪：真机仍报"雅黑样"而测试链路全绿——把应用结果落日志总线供用户侧定位
             SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-                SystemToolkit.Core.Logging.LogLevel.Info, "Music",
+                SystemToolkit.Core.Logging.LogLevel.Info, "music",
                 $"沉浸歌词字体已应用：{serif.Source}", action: "ImmersiveFont",
                 outcome: SystemToolkit.Core.Logging.LogResult.Success));
         }
         catch (Exception ex)
         {
             // 字体资源缺失只降级观感，不影响功能（测试宿主/精简发布场景）
-            System.Diagnostics.Debug.WriteLine($"[Music] 沉浸歌词字体加载失败：{ex.Message}");
             SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-                SystemToolkit.Core.Logging.LogLevel.Error, "Music",
+                SystemToolkit.Core.Logging.LogLevel.Error, "music",
                 "沉浸歌词字体应用失败：" + ex.Message, ex, action: "ImmersiveFont",
                 outcome: SystemToolkit.Core.Logging.LogResult.Failed));
         }
@@ -381,10 +380,16 @@ public partial class MusicManagerView : UserControl
             }
             catch (Exception inner)
             {
-                System.Diagnostics.Debug.WriteLine($"[Music] 登录窗异常且降级通知也失败：{ex.Message} / {inner.Message}");
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "music",
+                    "登录窗异常且降级通知也失败：" + ex.Message + " / " + inner.Message, inner,
+                    action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
             }
 
-            System.Diagnostics.Debug.WriteLine($"[Music] 登录窗异常：{ex.Message}");
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Error, "music",
+                "登录窗异常：" + ex.Message, ex,
+                action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
         }
     }
 

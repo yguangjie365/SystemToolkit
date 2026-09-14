@@ -75,7 +75,10 @@ public sealed class OnlineLoginWindow : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"[Music] 登录窗初始化失败：{ex.Message}");
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Error, "music",
+                "登录窗初始化失败：" + ex.Message, ex,
+                action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
             Content = new System.Windows.Controls.TextBlock
             {
                 Text = "登录组件初始化失败：\n" + ex.Message + "\n\n（请确认已安装 Microsoft Edge WebView2 Runtime）",
@@ -140,7 +143,10 @@ public sealed class OnlineLoginWindow : Window
                         catch (Exception ex)
                         {
                             Complete(null); // 轮询链彻底崩坏：按"未取到 Cookie"收窗，不让窗口悬死
-                            System.Diagnostics.Debug.WriteLine($"[OnlineLogin] 轮询异常终止：{ex.Message}");
+                            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                                SystemToolkit.Core.Logging.LogLevel.Error, "music",
+                                "登录窗轮询异常终止：" + ex.Message, ex,
+                                action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
                         }
                     };
                     _pollTimer.Start();
@@ -150,7 +156,7 @@ public sealed class OnlineLoginWindow : Window
             {
                 Complete(null);
                 SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-                    SystemToolkit.Core.Logging.LogLevel.Warn, "Music",
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "music",
                     "登录窗导航完成回调异常，按未取到 Cookie 收窗：" + ex.Message, ex,
                     action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
             }

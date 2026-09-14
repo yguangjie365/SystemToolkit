@@ -970,7 +970,9 @@ public partial class GameManagerViewModel : ObservableObject
                         catch (Exception ex)
                         {
                             System.Threading.Interlocked.Increment(ref failed);
-                            System.Diagnostics.Debug.WriteLine($"[Game] CDN 封面补全失败（AppId {vm.AppId}）：{ex.Message}");
+                            // v11~v14 后续批次：原为 Debug.WriteLine（Release 下被编译器剪裁 ⇒ 异常零留痕）；
+                            // 改用 {ex} 而非 {ex.Message} —— ILogger.Warn 无异常重载，ToString() 才带类型与堆栈。
+                            _logger.Warn($"[游戏] CDN 封面补全失败（AppId {vm.AppId}）：{ex}");
                         }
                     })).ConfigureAwait(false);
                 }

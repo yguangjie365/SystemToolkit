@@ -6,7 +6,8 @@ namespace SystemToolkit.Modules.DriverManager;
 /// <summary>
 /// 备份向导首步（XAML 版，与 SoftwareEditWindow 同款模式）：范围 + 目标目录 → Show() 返回
 /// (包名列表, 目录) 或 null（取消）。目标目录由主进程创建（无需提权）；pnputil /export-driver 经提权通道执行。
-/// 范围计数由构造参数注入（XAML 无法绑运行时计数）。
+/// 本窗口不设 DataContext（与 SoftwareEditWindow 同款），故范围计数经构造参数注入。
+/// （XAML 本身完全可以绑运行时数据，此处是"没设 DataContext"而非"XAML 做不到"。）
 /// </summary>
 public sealed partial class DriverBackupWindow : Window
 {

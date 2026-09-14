@@ -40,7 +40,9 @@ public partial class OverviewView : UserControl
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Overview] 激活失败：{ex.Message}");
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Error, "overview",
+                    "概览页激活失败：" + ex.Message, ex));
                 System.Windows.MessageBox.Show(
                     $"概览页启动失败：{ex.Message}", "本机概览",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);

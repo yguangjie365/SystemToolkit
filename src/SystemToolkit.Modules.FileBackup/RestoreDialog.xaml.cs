@@ -10,7 +10,8 @@ namespace SystemToolkit.Modules.FileBackup;
 public sealed record RestoreChoice(string? TargetRoot, ConflictPolicy Policy);
 
 /// <summary>
-/// 恢复对话框（2026-09-07 补齐旧版能力）：恢复目标二选一 + 冲突策略四选一。
+/// 恢复对话框（2026-09-07 补齐旧版能力）：恢复目标二选一 + 冲突策略**三选一**
+/// （Core 的 <c>ConflictPolicy.Ask</c> 未在 UI 暴露；如需"逐条询问"由后续迭代补 RadioButton）。
 /// 只收集选择，不执行预演与恢复（由 VM 负责）。
 /// </summary>
 public partial class RestoreDialog : Window

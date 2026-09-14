@@ -213,7 +213,7 @@ public partial class FileBackupView : UserControl
     /// <summary>View 侧事件处理器的统一兜底日志（V12-F1，照 <c>FileTransferView.LogViewError</c> 同款）。</summary>
     private static void LogViewError(string what, Exception ex)
         => SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
-            SystemToolkit.Core.Logging.LogLevel.Warn, "backup", what + "：" + ex.Message, ex));
+            SystemToolkit.Core.Logging.LogLevel.Warn, "filebackup", what + "：" + ex.Message, ex));
 
     /// <summary>按鼠标 Y 计算插入索引（越过某条目中线即插到其后）。</summary>
     private int InsertIndexAt(double y)
