@@ -114,28 +114,42 @@ public sealed class OnlineLoginWindow : Window
 
         webView.NavigationCompleted += async (_, _) =>
         {
-            // 登录页就绪后开始轮询目标 Cookie
-            if (_pollTimer is null)
+            // 🔴 V13-M1：本 lambda 是 async void 且**由 WebView2 触发** —— 它的异常不会被 OnLoaded 的
+            // try 接住（那只覆盖 `await InitLoginWebViewAsync()`），会直冲 DispatcherUnhandledException。
+            // 整体兜底：失败按"未取到 Cookie"收窗（不让窗口悬停在"正在加载…"/永不捕获 Cookie），并留痕。
+            try
             {
-                _pollTimer = new System.Windows.Threading.DispatcherTimer
+                // 登录页就绪后开始轮询目标 Cookie
+                if (_pollTimer is null)
                 {
-                    Interval = TimeSpan.FromMilliseconds(PollIntervalMs),
-                };
-                _pollTimer.Tick += async (_, _) =>
-                {
-                    // 🟡 v10-1（§7.6 async void lambda 整体兜底）：PollCookiesAsync 内部已 catch，
-                    // 但 lambda 调度层再包一层——异常走本窗可见路径而非 Dispatcher 全局兜底
-                    try
+                    _pollTimer = new System.Windows.Threading.DispatcherTimer
                     {
-                        await PollCookiesAsync(cookieUri, targetCookies);
-                    }
-                    catch (Exception ex)
+                        Interval = TimeSpan.FromMilliseconds(PollIntervalMs),
+                    };
+                    _pollTimer.Tick += async (_, _) =>
                     {
-                        Complete(null); // 轮询链彻底崩坏：按"未取到 Cookie"收窗，不让窗口悬死
-                        System.Diagnostics.Debug.WriteLine($"[OnlineLogin] 轮询异常终止：{ex.Message}");
-                    }
-                };
-                _pollTimer.Start();
+                        // 🟡 v10-1（§7.6 async void lambda 整体兜底）：PollCookiesAsync 内部已 catch，
+                        // 但 lambda 调度层再包一层——异常走本窗可见路径而非 Dispatcher 全局兜底
+                        try
+                        {
+                            await PollCookiesAsync(cookieUri, targetCookies);
+                        }
+                        catch (Exception ex)
+                        {
+                            Complete(null); // 轮询链彻底崩坏：按"未取到 Cookie"收窗，不让窗口悬死
+                            System.Diagnostics.Debug.WriteLine($"[OnlineLogin] 轮询异常终止：{ex.Message}");
+                        }
+                    };
+                    _pollTimer.Start();
+                }
+            }
+            catch (Exception ex)
+            {
+                Complete(null);
+                SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                    SystemToolkit.Core.Logging.LogLevel.Warn, "Music",
+                    "登录窗导航完成回调异常，按未取到 Cookie 收窗：" + ex.Message, ex,
+                    action: "OnlineLogin", outcome: SystemToolkit.Core.Logging.LogResult.Failed));
             }
         };
 

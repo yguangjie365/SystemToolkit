@@ -76,9 +76,13 @@ public sealed class TcpTuningService : ITcpTuningService
     /// 新位置已有数据则不动，旧文件保留不删。
     /// </summary>
     /// <remarks>
-    /// 刻意不抛：本类构造期没有日志出口（<c>onLine</c> 是方法参数），而迁移失败只意味着
-    /// 「本次会话看不到历史快照」——<see cref="HasSnapshot"/> 会如实返回 false，UI 显示
-    /// 「无可还原快照」，不构成假成功；调优功能本身完全不受影响。
+    /// 🔴 刻意不抛：迁移失败只意味着「本次会话看不到历史快照」——<see cref="HasSnapshot"/> 会如实返回
+    /// false，UI 显示「无可还原快照」，不构成假成功；调优功能本身完全不受影响。
+    /// <para>
+    /// 2026-09-14（Q-021 口径）：原 remarks 写「本类构造期没有日志出口（<c>onLine</c> 是方法参数）」——
+    /// <c>_logger</c> 字段加入后该说法已过时（本方法在 <c>_logger</c> 赋值**之后**调用），
+    /// 故按"禁止静默失败"补一条日志。失败仍不阻断构造。
+    /// </para>
     /// </remarks>
     private void MigrateLegacySnapshot()
     {
@@ -97,9 +101,12 @@ public sealed class TcpTuningService : ITcpTuningService
 
             File.Copy(LegacySnapshotPath, _snapshotPath);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 见 remarks：失败退化为"无历史快照"，不阻断构造
+            // Q-021（2026-09-14 用户裁定）：迁移类"失败不阻断"的 catch 一律**必须留一条日志**
+            // —— 空 catch 会连"本次会话看不到历史快照"这件事都无从查起（原为空 catch）。
+            _logger.Warn("旧调优快照迁移失败（退化为「无历史快照」，不影响调优功能，旧文件仍在 Roaming 原处）："
+                + ex.Message);
         }
     }
 

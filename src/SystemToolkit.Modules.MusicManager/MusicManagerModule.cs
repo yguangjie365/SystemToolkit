@@ -31,11 +31,13 @@ public sealed class MusicManagerModule : ModuleBase
 
     public override void RegisterServices(IServiceCollection services)
     {
-        services.AddKeyedSingleton<ILogger>("musicmanager", new FileLogger("musicmanager"));
+        var moduleLogger = new FileLogger("musicmanager");
+        services.AddKeyedSingleton<ILogger>("musicmanager", moduleLogger);
 
         // 02 §六：旧 Roaming 位置一次性迁移（曲库 + 搜索历史），保留老用户数据
-        MigrateLegacyDataFile("music-library.json");
-        MigrateLegacyDataFile("music-search-history.json");
+        // Q-021（2026-09-14 用户裁定）：迁移类"失败不阻断"的 catch 必须留日志 → 迁移需要日志出口
+        MigrateLegacyDataFile("music-library.json", moduleLogger);
+        MigrateLegacyDataFile("music-search-history.json", moduleLogger);
 
         // 标签读取器（MUSIC-2，构造要非 keyed ILogger——工厂注入本模块 keyed 实例）
         services.AddSingleton<IMusicTagReader>(sp => new TagLibMusicTagReader(
@@ -95,7 +97,7 @@ public sealed class MusicManagerModule : ModuleBase
     /// 新位置在 LOCALAPPDATA 的同结构下。新位置缺失且旧位置存在才复制
     /// （范式对齐 <c>RuleManager.MigrateLegacyRulesFile</c>）；旧文件保留不删。
     /// </summary>
-    private static void MigrateLegacyDataFile(string fileName)
+    private static void MigrateLegacyDataFile(string fileName, ILogger logger)
     {
         try
         {
@@ -116,9 +118,11 @@ public sealed class MusicManagerModule : ModuleBase
 
             File.Copy(legacy, target);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 迁移失败不阻断模块注册：退化为「新库 / 无搜索历史」，旧数据仍在原处
+            // Q-021（2026-09-14 用户裁定）：迁移失败仍不阻断模块注册（退化为「新库 / 无搜索历史」，
+            // 旧数据仍在原处），但**必须留一条日志** —— 空 catch 时"用户看不到曲库"无从查起（原为空 catch）。
+            logger.Warn($"音乐数据迁移失败（{fileName}：退化为新库/无搜索历史，旧数据仍在 Roaming 原处）：{ex.Message}");
         }
     }
 }
