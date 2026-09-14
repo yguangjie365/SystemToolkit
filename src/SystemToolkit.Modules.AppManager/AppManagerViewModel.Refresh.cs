@@ -26,8 +26,14 @@ public partial class AppManagerViewModel
             return;
         }
 
-        // winget 有进程级互斥锁：写操作进行中禁止并发刷新
-        if (IsOperating)
+        // winget 有进程级互斥锁：写操作进行中禁止并发刷新。
+        // 🟠 A-🟠-4（v11~v14 后续批次）：原判据是布尔 `IsOperating`——check-then-act，
+        // 与真正的闸门 `_wingetGate` **不同步**：若上一次写操作刚 ExitOperation 释放闸门、
+        // 而另一次写操作尚未 Acquire，本检查会漏过 ⇒ 刷新与写操作并发调用 winget
+        //（winget 有**进程级互斥锁**，并发调用互相报错 = 正是 _wingetGate 存在的理由）。
+        // 改为直接尝试占用同一把闸门：谁持闸谁独占，判据与保护对象是同一个东西。
+        // 注：`WaitAsync(0)` 与下面的 `Release()` 严格成对（try 内所有 return 都经 finally）。
+        if (!await _wingetGate.WaitAsync(0)) // 非阻塞重载（本仓有 sync-over-async 源码守卫）
         {
             RefreshStatus = "winget 操作进行中，完成后请手动刷新状态";
             return;
@@ -153,6 +159,7 @@ public partial class AppManagerViewModel
         finally
         {
             IsRefreshing = false;
+            _wingetGate.Release(); // 🟠 A-🟠-4：与进入时的 `Wait(0)` 严格成对
         }
     }
 

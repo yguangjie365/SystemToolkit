@@ -288,8 +288,20 @@ public partial class AppManagerViewModel
         }
     }
 
-    /// <summary>取消进行中的批量安装（窗口关闭时由 View 调用；审查 2026-09-04 P2：兑现"关闭窗口即停"）。</summary>
-    public void CancelBatchInstall() => _batchCts?.Cancel();
+    /// <summary>取消**进行中的操作**（窗口关闭时由 View 的 Closed 钩子调用）。
+    /// <para>
+    /// 🟠 A-🟠-3（v11~v14 后续批次）：原先只 `_batchCts?.Cancel()`，而界面上的
+    /// "取消当前操作"按钮走的是 <c>CancelOperation</c>（同时取消 `_opCts` 与 `_batchCts`）
+    /// ⇒ 用户点单条"安装"后直接关窗时，winget 子进程会继续跑完 —— **关闭窗口 ≠ 停止单条**，
+    /// 与界面按钮给出的语义不一致。此处对齐 `CancelOperation` 的两条取消通道。
+    /// </para>
+    /// <para>原名保留（View 侧已按此名接线），仅扩展行为。</para>
+    /// </summary>
+    public void CancelBatchInstall()
+    {
+        _opCts?.Cancel();    // 单条安装/升级/卸载
+        _batchCts?.Cancel(); // 批量安装
+    }
 
     // ==================================================================
     // 手动软件（第三方）：下载 / 打开安装包

@@ -56,7 +56,16 @@ public partial class AppManagerViewModel
 
         // 🟠 V11-A3：IsSearchPopupOpen / _opCts 赋值原先裸露在 try 之外——任一步抛出都会绕过
         // finally，导致 winget 闸门与忙态（IsOperating）**永久不释放**（此后安装/升级/卸载恒被拒）。
-        // 两句连同其后的执行段全部移入 try；Acquire 本身仍在 try 外（其失败由 V11-A2 的兜底负责）。
+        // 两句连同其后的执行段全部移入 try。
+        //
+        // 🟠 A-🟠-1（v11~v14 后续批次订正注释）：本行原写"Acquire 本身仍在 try 外（其失败由
+        // V11-A2 的兜底负责）"——**那句话是错的**：V11-A2 的 `try { await Acquire } catch {
+        // ExitOperationOnFailure }` 只存在于 Refresh.cs 的 4 处调用点，本入口（及 Manual /
+        // Sources / Archives 共 6 处）**并没有**。真实情况就是 Acquire 裸露在 try 之外。
+        // 之所以定级为"注释与实现不符"而非独立缺陷：`SemaphoreSlim.WaitAsync()` 的**无参重载
+        // 不接收 CancellationToken，实测不会抛**（抛只可能来自 OOM 等极端情形）。
+        // 本批按"如实陈述"订正注释，不在此新增 catch —— 避免与已包的 4 处形成两套写法；
+        // 若要统一，应一次性给 6 处同补（另开批次评估）。
         try
         {
             IsSearchPopupOpen = false;
