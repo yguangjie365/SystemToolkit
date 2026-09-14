@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- 列宽计算纯函数（ComputeColumnWidths）对测试程序集开放：B-🟡-2 的「总宽 == viewport」不变量需要单测钉住 -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
   </ItemGroup>
 
   <ItemGroup>
