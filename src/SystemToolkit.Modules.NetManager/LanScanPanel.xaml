@@ -405,7 +405,7 @@
                             <Grid Grid.Column="2">
                                 <TextBox Style="{DynamicResource FieldInput}"
                                          Text="{Binding AlertWebhookUrl}"
-                                         ToolTip="钉钉 / 企业微信机器人地址；以 DPAPI 加密后存本机"/>
+                                         ToolTip="钉钉 / 企业微信机器人地址；以 DPAPI 加密后存本机。⚠ 请用 https 地址——http 明文信道下 access_token 可能被内网嗅探（🟡 v10-2）"/>
                                 <TextBlock Text="https://oapi.dingtalk.com/robot/send?access_token=…"
                                            IsHitTestVisible="False" Margin="8,0,0,0"
                                            VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeMicro}"

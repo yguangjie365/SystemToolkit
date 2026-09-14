@@ -121,7 +121,20 @@ public sealed class OnlineLoginWindow : Window
                 {
                     Interval = TimeSpan.FromMilliseconds(PollIntervalMs),
                 };
-                _pollTimer.Tick += async (_, _) => await PollCookiesAsync(cookieUri, targetCookies);
+                _pollTimer.Tick += async (_, _) =>
+                {
+                    // 🟡 v10-1（§7.6 async void lambda 整体兜底）：PollCookiesAsync 内部已 catch，
+                    // 但 lambda 调度层再包一层——异常走本窗可见路径而非 Dispatcher 全局兜底
+                    try
+                    {
+                        await PollCookiesAsync(cookieUri, targetCookies);
+                    }
+                    catch (Exception ex)
+                    {
+                        Complete(null); // 轮询链彻底崩坏：按"未取到 Cookie"收窗，不让窗口悬死
+                        System.Diagnostics.Debug.WriteLine($"[OnlineLogin] 轮询异常终止：{ex.Message}");
+                    }
+                };
                 _pollTimer.Start();
             }
         };

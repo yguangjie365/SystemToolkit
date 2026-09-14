@@ -76,12 +76,8 @@ public static class LanEventCsv
     };
 
     /// <summary>
-    /// 单字段转义：含逗号 / 引号 / 换行时用双引号包裹，内部引号翻倍（RFC 4180）。
+    /// 单字段转义：委托 <see cref="SystemToolkit.Core.Utilities.CsvField"/>（RFC 4180 + 公式注入前缀处置）。
+    /// 🟠 v10-2：主机名/厂商等字段为对端可控输入，"=" 开头会被 Excel/WPS 当公式执行。
     /// </summary>
-    private static string Escape(string? value)
-    {
-        string text = value ?? string.Empty;
-        bool needsQuote = text.Contains(',') || text.Contains('"') || text.Contains('\n') || text.Contains('\r');
-        return needsQuote ? '"' + text.Replace("\"", "\"\"") + '"' : text;
-    }
+    private static string Escape(string? value) => SystemToolkit.Core.Utilities.CsvField.Escape(value);
 }

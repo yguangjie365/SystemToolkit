@@ -43,16 +43,8 @@ public static class TransferHistoryCsv
     }
 
     /// <summary>
-    /// 单个字段的转义：含逗号 / 引号 / 换行时用双引号包裹，内部引号翻倍（RFC 4180）。
-    /// <para>
-    /// 🔴 不做这一步的后果很具体：文件名里一个逗号就会让整行错列，
-    /// 用户导出的表格看着"像乱码"，却以为是软件坏了。
-    /// </para>
+    /// 单个字段的转义：委托 <see cref="SystemToolkit.Core.Utilities.CsvField"/>（RFC 4180 + 公式注入前缀处置）。
+    /// 🟠 v10-2：文件名等字段为对端可控输入，"=" 开头会被 Excel/WPS 当公式执行。
     /// </summary>
-    private static string Escape(string? value)
-    {
-        string text = value ?? string.Empty;
-        bool needsQuote = text.Contains(',') || text.Contains('"') || text.Contains('\n') || text.Contains('\r');
-        return needsQuote ? '"' + text.Replace("\"", "\"\"") + '"' : text;
-    }
+    private static string Escape(string? value) => SystemToolkit.Core.Utilities.CsvField.Escape(value);
 }

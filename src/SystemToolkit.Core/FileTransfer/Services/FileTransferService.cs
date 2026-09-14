@@ -86,6 +86,9 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// <summary>发送方等待握手确认的超时（含接收端确认门等待 + 人工点击延迟，2026-09-06 由 20s 放宽）。</summary>
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(120);
 
+    /// <summary>控制消息（暂停/恢复/取消/错误/踢出）发送上界（🟠 v10-1，反模式 ㉖）。</summary>
+    internal static readonly TimeSpan ControlSendTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// 报文头（metadata）字节预算，**收发两侧都必须显式设置**。
     /// <para>
@@ -1023,9 +1026,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     {
         if (client is null)
             return;
+        // 🟠 v10-1（反模式 ㉖）：WatsonTcp 异步写无内置超时——对端 TCP 窗口满且不读取时
+        // SendAsync 无限挂起（catch 接不住挂起）。控制消息语义=尽力通知，5s 上界后放弃。
+        using var cts = new CancellationTokenSource(ControlSendTimeout);
         try
-        { await client.SendAsync(string.Empty, BuildMetadata(tm), CancellationToken.None).ConfigureAwait(false); }
-        catch { /* 控制消息发送失败忽略，对端会因超时/断开而失败 */ }
+        { await client.SendAsync(string.Empty, BuildMetadata(tm), cts.Token).ConfigureAwait(false); }
+        catch { /* 发送失败/超时忽略：对端会因超时/断开而失败 */ }
     }
 
     // ===================== 接收侧（作为 WatsonTcp 服务端） =====================
@@ -2183,11 +2189,13 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         WatsonTcpServer? server = _server;
         if (server is null)
             return;
+        // 🟠 v10-1 同款：服务端侧控制消息同样带上界
+        using var cts = new CancellationTokenSource(ControlSendTimeout);
         try
         {
-            await server.SendAsync(guid, string.Empty, BuildMetadata(tm), 0, CancellationToken.None).ConfigureAwait(false);
+            await server.SendAsync(guid, string.Empty, BuildMetadata(tm), 0, cts.Token).ConfigureAwait(false);
         }
-        catch { /* 控制消息发送失败忽略 */ }
+        catch { /* 控制消息发送失败/超时忽略 */ }
     }
 
     // ===================== 工具方法 =====================

@@ -219,6 +219,36 @@ public class LanScanAlertTests
         Assert.Contains("\"含,逗号 \"\"引号\"\" 与\n换行\"", csv, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 🟠 v10-2 公式注入前缀锁：主机名来自 NBSTAT/DNS 反查（对端可控），"=" 开头必须被
+    /// 前置单引号处置——否则 Excel/WPS 打开导出件即执行公式。
+    /// </summary>
+    [Fact]
+    public void Csv_FormulaPrefix_IsNeutralized()
+    {
+        string csv = LanEventCsv.Build(new[] { Conflict() },
+            new Dictionary<string, LanDevice>(StringComparer.Ordinal)
+            {
+                ["192.168.1.7"] = new LanDevice("192.168.1.7", "9A:00:00:00:00:04",
+                    "=cmd|'/c calc'!A0", "海康威视 Hikvision", DateTimeOffset.Now, DateTimeOffset.Now),
+            });
+
+        Assert.Contains("'=cmd|'/c calc'!A0", csv, StringComparison.Ordinal);   // 前置 ' 处置
+        Assert.DoesNotContain(",=cmd", csv, StringComparison.Ordinal);          // 不得出现裸 = 开头字段
+    }
+
+    /// <summary>🟠 v10-2 共享口径直测：CsvField 的前缀集与 RFC4180 兼容。</summary>
+    [Theory]
+    [InlineData("=1+1", "'=1+1")]
+    [InlineData("+SUM(A1)", "'+SUM(A1)")]
+    [InlineData("-2", "'-2")]
+    [InlineData("@weibo()", "'@weibo()")]
+    [InlineData("普通文本", "普通文本")]
+    [InlineData("a=b", "a=b")]           // 非首字符不处置
+    [InlineData("", "")]
+    public void CsvField_PrefixGate(string input, string expected) =>
+        Assert.Equal(expected, SystemToolkit.Core.Utilities.CsvField.Escape(input));
+
     // ═══════════════ 配置存储（DPAPI） ═══════════════
 
     [Fact]
