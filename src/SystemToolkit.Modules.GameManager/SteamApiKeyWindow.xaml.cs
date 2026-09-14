@@ -53,8 +53,9 @@ public partial class SteamApiKeyWindow : Window
         }
     }
 
-    /// <summary>取消 / ✕ 关闭（Esc 由「取消」按钮的 IsCancel 触发）。</summary>
-    private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
+    // 🟡 V13-G8（2026-09-14）：原 OnCancelClick（`DialogResult = false`）已删 —— 「取消」与「✕」
+    // 都改由 XAML 的 IsCancel="True" 承担（WPF 在 Command 为空时执行 Window.DialogCancelCommand，
+    // 结果同为 DialogResult=false）；Esc 亦然，故处理器是纯冗余接线。
 
     private void OnClearClick(object sender, RoutedEventArgs e)
     {

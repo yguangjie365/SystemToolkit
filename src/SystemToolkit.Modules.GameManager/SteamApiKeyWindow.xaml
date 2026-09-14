@@ -73,10 +73,13 @@
                     <TextBlock Text="Steam Web API Key" FontSize="{DynamicResource Font_SizeBodyLg}"
                                FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"
                                VerticalAlignment="Center"/>
+                    <!-- 🟡 V13-G8（2026-09-14）：本窗「取消」与「✕」共用原 OnCancelClick（= DialogResult=false）。
+                         两者都无 Command ⇒ 直接给 IsCancel="True" 即可：WPF Button.OnClick 在
+                         Command 为空时会执行 Window.DialogCancelCommand，语义与原来的处理器逐字相同
+                         （无边框窗必须自绘 ✕，故不能只留「取消」那一处）。 -->
                     <Button x:Name="CloseButton" Style="{StaticResource TitleBarCloseButton}"
                             Content="✕" HorizontalAlignment="Right"
-                            AutomationProperties.Name="关闭"
-                            Click="OnCancelClick"/>
+                            AutomationProperties.Name="关闭" IsCancel="True"/>
                 </Grid>
             </Border>
 
@@ -123,7 +126,7 @@
                                 AutomationProperties.Name="清除 API Key"/>
                         <Button Style="{StaticResource DialogButton}"
                                 Margin="{DynamicResource Space_XS}"
-                                Content="取消" Click="OnCancelClick" IsCancel="True"
+                                Content="取消" IsCancel="True"
                                 AutomationProperties.Name="取消"/>
                         <Button Style="{StaticResource DialogPrimaryButton}"
                                 Content="保存" Click="OnSaveClick" IsDefault="True"

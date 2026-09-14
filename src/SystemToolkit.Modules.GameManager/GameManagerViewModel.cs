@@ -1089,7 +1089,10 @@ public partial class GameManagerViewModel : ObservableObject
                 }
 
                 // 实测进程态，而不是凭"我们刚启动过"下断言
-                SteamRunning = _steam.IsClientRunning();
+                // 🟡 V13-G7（2026-09-14）：`IsClientRunning()` 内部是
+                // `Process.GetProcessesByName("steam")`（枚举全进程并物化 Process 对象）——
+                // 同步跑在 UI 线程上会卡住界面，故与上文 SwitchAccount 同款下移后台。
+                SteamRunning = await Task.Run(() => _steam.IsClientRunning()).ConfigureAwait(true);
                 StatusText = $"已切换到 {target.DisplayName}，Steam 正在以该账户启动";
                 StatusLevel = 1;
             }
