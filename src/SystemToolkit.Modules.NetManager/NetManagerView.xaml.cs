@@ -50,24 +50,30 @@ public partial class NetManagerView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // 🟠 V16-1（2026-09-15）：先按**用户意图**恢复「因卸载而暂停」的后台循环。
-        // 批② 把 View 改 Transient 后，主题切换会重建视图并触发 Unloaded（三条 Cancel），
-        // 新实例的 OnLoaded 若不恢复，用户主动启动的 ping / 自动监控就被永久停掉。
-        // 🔴 判据在 **VM（单例）** 的意图位上、与视图实例无关，故必须放在 `_loaded` 早退**之前**
-        // —— 与 FileTransferView.ResumeTimer 同口径（那里同样必须在早退前）。
-        // 注意：Split 的守护不在其列 —— 它由 LoadAsync 的「台账在位」判据恢复（见 CancelGuard 裁定注释）。
-        Vm.Diagnostics.ResumePingIfIntended();
-        Vm.Lan.ResumeMonitorIfIntended();
-
-        if (_loaded)
-        {
-            return;
-        }
-
-        _loaded = true;
-        // 审查 O9（2026-09-10）：async void 不受命令 catch 守卫覆盖，异常会直冲 Dispatcher → 整体兜底并落日志
+        // 审查 O9（2026-09-10）：async void 不受命令 catch 守卫覆盖，异常会直冲 Dispatcher。
+        // 🟠 V17-1（2026-09-16）：故**整个初始化都必须落在 try 之内** —— 含下面的 V16-1 循环恢复。
+        // 恢复调用若留在 try 外，它抛异常时会连带跳过 `_loaded` 置位与 `LoadAsync()`
+        // ⇒ 该次首屏数据不加载，且异常只在日志里留一条（用户无提示）。
         try
         {
+            // 🟠 V16-1（2026-09-15）：先按**用户意图**恢复「因卸载而暂停」的后台循环。
+            // 批② 把 View 改 Transient 后，主题切换会重建视图并触发 Unloaded（三条 Cancel），
+            // 新实例的 OnLoaded 若不恢复，用户主动启动的 ping / 自动监控就被永久停掉。
+            // 🔴 **实测**（2026-09-16 探针）：ContentControl.Content 替换的事件顺序是
+            // `OLD-Unloaded → NEW-Loaded`，且新视图是**新实例**（`_loaded` 随之复位）
+            // ⇒ 本场景放 `_loaded` 早退**前后都能工作**；此处放早退前，是**与
+            // FileTransferView.ResumeTimer 同口径的防御** —— 防同一视图实例再次 Loaded 时漏恢复。
+            // （不是"判据与视图实例无关"推出来的 —— 那条论证不成立，v17-🟡-1 已订正。）
+            // 注意：Split 的守护不在其列 —— 它由 LoadAsync 的「台账在位」判据恢复（见 CancelGuard 裁定注释）。
+            Vm.Diagnostics.ResumePingIfIntended();
+            Vm.Lan.ResumeMonitorIfIntended();
+
+            if (_loaded)
+            {
+                return;
+            }
+
+            _loaded = true;
             Vm.ConfirmRequest = (title, message) =>
                 System.Windows.MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning)
                 == MessageBoxResult.OK;

@@ -175,6 +175,42 @@ public class NetManagerBackgroundLoopResumeTests
     }
 
     /// <summary>
+    /// 🟠 V17-1：`OnLoaded` 的两个恢复调用必须位于 `try { }` **之内**。
+    /// <para>
+    /// 落在 try 外时：它们抛异常会连带跳过 `_loaded` 置位与 `LoadAsync()` ⇒ 该次首屏数据不加载；
+    /// 且 `async void` 的异常不受命令 catch 守卫覆盖，会直冲 Dispatcher（只剩一条错误日志、无用户提示）。
+    /// </para>
+    /// <para>
+    /// 🔴 锚点必须用**带缩进与换行**的 `"\n        try\n"` —— 注释正文里同样写着"try 内"三个字，
+    /// 用裸 `IndexOf("try")` 会命中注释 ⇒ 把调用移出 try 时判据**照样通过**（反模式 ㊿ 的第一形态）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void View_MustCallResumeInsideTry()
+    {
+        string path = Path.Combine(RepoRoot(), "src/SystemToolkit.Modules.NetManager", "NetManagerView.xaml.cs");
+        string text = File.ReadAllText(path);
+
+        int methodAt = text.IndexOf("private async void OnLoaded", StringComparison.Ordinal);
+        Assert.True(methodAt >= 0, "未找到 OnLoaded —— 结构已变，本锁需同步修订");
+
+        int tryAt = text.IndexOf("\n        try\n", methodAt, StringComparison.Ordinal);
+        int catchAt = text.IndexOf("\n        catch", methodAt, StringComparison.Ordinal);
+        Assert.True(tryAt > methodAt, "OnLoaded 内未找到 try 块 —— 结构已变，本锁需同步修订");
+        Assert.True(catchAt > tryAt, "OnLoaded 的 try 之后未找到 catch —— 结构已变，本锁需同步修订");
+
+        foreach (string call in new[] { "ResumePingIfIntended()", "ResumeMonitorIfIntended()" })
+        {
+            int at = text.IndexOf(call, methodAt, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"OnLoaded 未调用 {call} —— 恢复接线被移除或改名，本锁需同步修订");
+            Assert.True(at > tryAt && at < catchAt,
+                $"{call} 必须位于 OnLoaded 的 try 之内（v17-🟠-1）：落在 try 外时，"
+                + "它抛异常会连带跳过 `_loaded` 置位与 `LoadAsync()` ⇒ 该次首屏数据不加载，"
+                + "且 async void 的异常不受命令 catch 守卫覆盖（只剩一条错误日志、无用户提示）");
+        }
+    }
+
+    /// <summary>
     /// Split 守护**有意**不设意图位：它的恢复由 <c>LoadAsync</c> 的「台账在位」外部判据承担。
     /// 本锁钉住这条裁定的两侧 —— 若有人删掉台账自恢复、又不补意图位，此处会红。
     /// </summary>
