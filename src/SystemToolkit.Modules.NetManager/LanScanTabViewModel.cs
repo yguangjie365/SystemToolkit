@@ -170,6 +170,10 @@ public partial class LanScanTabViewModel : ObservableObject
     [ObservableProperty]
     private bool _isMonitorOn;
 
+    /// <summary>🟠 V16-1：用户意图位 —— 打开监控置 true、关闭置 false。
+    /// 「页面卸载取消」（<see cref="CancelMonitor"/>）**不改**它（反模式 ㊷ 双重翻转）。</summary>
+    private bool _monitorUserWantsOn;
+
     /// <summary>精确 OS 识别开关（NET-6 增强）：开启后每轮扫描对 Windows 候选发起一次批量
     /// 远程 WMI（经 ElevatedHelper，一轮一次 UAC）；关闭/拒绝时保留 TTL 推断值。</summary>
     [ObservableProperty]
@@ -615,6 +619,7 @@ public partial class LanScanTabViewModel : ObservableObject
     {
         if (IsMonitorOn)
         {
+            _monitorUserWantsOn = true; // 🟠 V16-1：用户意图（卸载取消不改它）
             _monitorCts = new CancellationTokenSource();
             _log($"[局域网] 自动监控已开启（每 {MonitorInterval.TotalMinutes:0} 分钟一轮，可取消）");
             _ = MonitorLoopAsync(_monitorCts.Token);
@@ -636,6 +641,7 @@ public partial class LanScanTabViewModel : ObservableObject
                 }
             }
 
+            _monitorUserWantsOn = false; // 🟠 V16-1：用户主动关闭 ⇒ 意图随之作废
             _log("[局域网] 自动监控已关闭");
         }
     }
@@ -695,7 +701,13 @@ public partial class LanScanTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>页面卸载/切走时停监控（Diagnostics.CancelPing 同款纪律，审查 O7）。</summary>
+    /// <summary>页面卸载/切走时停监控（Diagnostics.CancelPing 同款纪律，审查 O7）。
+    /// <para>
+    /// 🟠 V16-1（2026-09-15）：批② 把 View 改 Transient 后**主题切换也会重建视图并触发 Unloaded**
+    /// ⇒ 本方法被复用为两种语义，后者会把用户开的自动监控永久停掉。
+    /// 处置**不是删本方法**（O7 防泄漏是正确纪律），而是**不动用户意图位**，
+    /// 由 <see cref="ResumeMonitorIfIntended"/> 按意图恢复。
+    /// </para></summary>
     public void CancelMonitor()
     {
         if (!IsMonitorOn)
@@ -718,6 +730,19 @@ public partial class LanScanTabViewModel : ObservableObject
                 _monitorCts = null;
             }
         }
+    }
+
+    /// <summary>🟠 V16-1：视图重新加载（含主题切换重建）时按**用户意图**恢复自动监控。
+    /// 判据两条：用户想让监控开（<c>_monitorUserWantsOn</c>）**且**当前没在开（<c>!IsMonitorOn</c>）。</summary>
+    public void ResumeMonitorIfIntended()
+    {
+        if (!_monitorUserWantsOn || IsMonitorOn)
+        {
+            return;
+        }
+
+        IsMonitorOn = true;                 // 先复位开关：ToggleButton 双向绑定随之回到「开」
+        ToggleMonitorCommand.Execute(null); // 走既有命令，不复制启动逻辑
     }
 
     [RelayCommand]

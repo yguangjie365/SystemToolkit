@@ -50,6 +50,15 @@ public partial class NetManagerView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 🟠 V16-1（2026-09-15）：先按**用户意图**恢复「因卸载而暂停」的后台循环。
+        // 批② 把 View 改 Transient 后，主题切换会重建视图并触发 Unloaded（三条 Cancel），
+        // 新实例的 OnLoaded 若不恢复，用户主动启动的 ping / 自动监控就被永久停掉。
+        // 🔴 判据在 **VM（单例）** 的意图位上、与视图实例无关，故必须放在 `_loaded` 早退**之前**
+        // —— 与 FileTransferView.ResumeTimer 同口径（那里同样必须在早退前）。
+        // 注意：Split 的守护不在其列 —— 它由 LoadAsync 的「台账在位」判据恢复（见 CancelGuard 裁定注释）。
+        Vm.Diagnostics.ResumePingIfIntended();
+        Vm.Lan.ResumeMonitorIfIntended();
+
         if (_loaded)
         {
             return;

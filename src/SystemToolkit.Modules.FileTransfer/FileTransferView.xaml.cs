@@ -29,7 +29,10 @@ public partial class FileTransferView : UserControl
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         // 🟡 审查 v8-🟡-6：把 1s 配对码节拍接回去。**必须放在 _loaded 早退之前**——
-        // VM 是 DI 单例，下面的初始化只跑一次，而"停表"在 Unloaded 里每次离开页面都会发生。
+        // 停表在 Unloaded 里每次离开页面都会发生，恢复就必须每次 Loaded 都跑（早退会把它挡掉）。
+        // 🟡 V16-2（2026-09-15 订正）：原注释写「VM 是 DI 单例，下面的初始化只跑一次」，该结论在
+        // 批②（9 模块 View 改 `AddTransient`）之后**已不成立** —— 主题切换会重建视图 ⇒ `_loaded`
+        // 随新实例复位，下面的初始化实为「**每个视图实例跑一次**（主题切换重建即重跑）」。
         Vm.Mobile.ResumeTimer();
 
         if (_loaded)

@@ -340,6 +340,11 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
 
     private CancellationTokenSource? _pingCts;
 
+    /// <summary>🟠 V16-1：用户意图位 —— 点「开始 ping」置 true、点「停止」置 false。
+    /// 「页面卸载取消」（<see cref="CancelPing"/>）**不改**它，视图重建后才能区分
+    /// 「用户想让它跑」与「用户已主动停」（反模式 ㊷ 双重翻转）。</summary>
+    private bool _pingUserWantsRunning;
+
     [RelayCommand(CanExecute = nameof(CanStartPing))]
     private void StartPing()
     {
@@ -350,11 +355,14 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
         }
 
         IsPinging = true;
+        _pingUserWantsRunning = true;
         PingSent = 0;
         PingReceived = 0;
         PingStatsText = "开始持续探测…";
-        _pingCts = new CancellationTokenSource();
-        CancellationToken token = _pingCts.Token;
+        // 🟠 V16-1：CTS 以**局部变量**持有并传进循环 —— 循环收尾要靠它做身份判定
+        var cts = new CancellationTokenSource();
+        _pingCts = cts;
+        CancellationToken token = cts.Token;
         var progress = new Progress<PingSample>(s =>
         {
             PingSent++;
@@ -367,13 +375,14 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
                 + (s.Success ? $"，最新 {s.LatencyMs} ms" : $"，最新失败（{s.Error}）");
         });
         _log($"[诊断] 开始持续 ping {target}（间隔 1s，点「停止」结束）");
-        _ = RunPingLoopAsync(target, progress, token);
+        _ = RunPingLoopAsync(target, progress, cts);
     }
 
     private bool CanStartPing => !IsPinging;
 
-    private async Task RunPingLoopAsync(string target, IProgress<PingSample> progress, CancellationToken token)
+    private async Task RunPingLoopAsync(string target, IProgress<PingSample> progress, CancellationTokenSource cts)
     {
+        CancellationToken token = cts.Token;
         try
         {
             await _continuousPing.RunAsync(target, intervalMs: 1000, progress, token).ConfigureAwait(true);
@@ -389,21 +398,46 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
         }
         finally
         {
-            IsPinging = false;
-            _pingCts?.Dispose();
-            _pingCts = null;
+            // 🟠 V16-1：**身份判定**（V12-D3 同款）—— 只有「当前登记的仍是本次」才复位状态。
+            // 没有它时：卸载取消的旧循环若在新循环启动**之后**才收尾，会无条件把 IsPinging 抹成 false
+            // （UI 显示"未运行"而循环其实在跑），并把 _pingCts 置 null（新 CTS 变孤儿、永不释放）。
+            if (ReferenceEquals(_pingCts, cts))
+            {
+                IsPinging = false;
+                _pingCts = null;
+            }
+
+            cts.Dispose();
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanStopPing))]
     private void StopPing()
     {
+        _pingUserWantsRunning = false; // 🟠 V16-1：用户主动停止 ⇒「卸载可恢复」语义随之作废
         _pingCts?.Cancel();
         _log("[诊断] 正在停止持续 ping…");
     }
 
-    /// <summary>审查 O7（2026-09-10）：切页/关窗时取消持续 ping，防循环与 VM 常驻泄漏。</summary>
+    /// <summary>审查 O7（2026-09-10）：切页/关窗时取消持续 ping，防循环与 VM 常驻泄漏。
+    /// <para>
+    /// 🟠 V16-1（2026-09-15）：批② 把 View 改成 Transient 后，**主题切换同样会重建视图并触发 Unloaded**
+    /// ⇒ 本方法被复用为「真正离开页面」与「仅视图重建」两种语义，后者会把用户的 ping 永久停掉。
+    /// 处置**不是删这里**（O7 防泄漏是正确纪律，删了会引入循环泄漏），而是**不动用户意图位**，
+    /// 由 <see cref="ResumePingIfIntended"/> 在视图重新加载时按意图恢复。
+    /// </para></summary>
     public void CancelPing() => _pingCts?.Cancel();
+
+    /// <summary>🟠 V16-1：视图重新加载（含主题切换重建）时按**用户意图**恢复持续 ping。
+    /// 两条判据缺一不可：用户想让它跑（<c>_pingUserWantsRunning</c>）**且**当前没在跑（<c>!IsPinging</c>）。
+    /// 后者排除「上一轮循环的 finally 尚未收口」时的重复启动。</summary>
+    public void ResumePingIfIntended()
+    {
+        if (_pingUserWantsRunning && !IsPinging)
+        {
+            StartPingCommand.Execute(null); // 走既有命令：沿用 PingTarget，含 CanExecute 刷新与日志
+        }
+    }
 
     private bool CanStopPing => IsPinging;
 

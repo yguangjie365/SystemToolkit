@@ -381,7 +381,14 @@ public partial class SplitRouteTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>页面卸载收口（O7 同款：切页/关窗必停后台循环）。</summary>
+    /// <summary>页面卸载收口（O7 同款：切页/关窗必停后台循环）。
+    /// <para>
+    /// 🟠 V16-1（2026-09-15）**裁定：本处不需要「用户意图位」** —— 与 ping / 自动监控**有意不同**。
+    /// 依据：守护的恢复由 <c>LoadAsync</c> 的**外部持久判据**承担 ——「台账在位」即自动
+    /// <c>StartGuardLoop()</c>（见 LoadAsync 内「台账在位默认起守护」）；而守护的业务意义本就是
+    /// 「防已应用的分流被 DHCP 悄悄回潮」⇒ 无台账时守护无对象，也就没有「用户意图」需要记忆。
+    /// 🔴 适用边界：若将来允许「无台账也能开守护」，须回来补意图位（与 ping / 自动监控同口径）。
+    /// </para></summary>
     public void CancelGuard()
     {
         StopGuardLoop();

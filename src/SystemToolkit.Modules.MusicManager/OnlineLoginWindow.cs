@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using SystemToolkit.Core.Music.Online;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.MusicManager;
 
@@ -31,6 +32,9 @@ public sealed class OnlineLoginWindow : Window
     {
         _provider = provider;
         Title = provider == OnlineProvider.NetEase ? "网易云音乐登录" : "QQ 音乐登录";
+        // 🟡 V16-1（2026-09-15）：深色主题下本窗标题栏仍是系统浅色 —— 全仓 10 个窗口里**唯一漏接线**的一处
+        // （其余 9 个已接）。契约见 TitleBarThemeWiring：窗口**构造期**调用一次即可，句柄无需就绪。
+        TitleBarThemeWiring.Attach(this);
         Width = 960;
         Height = 760;
         MinWidth = 780;
