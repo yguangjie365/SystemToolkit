@@ -115,17 +115,20 @@ public partial class DriverManagerViewModel
             return; // 用户取消向导
         }
 
-        (IReadOnlyList<string> names, string destDir, _) = request.Value;
+        (IReadOnlyList<string> names, string destDir, bool allThirdParty) = request.Value;
 
-        // 🟡 B-🟡-3（2026-09-15 收口；P0 已核该参数**只进 manifest 元数据**，不参与导出内容筛选）：
+        // 🟡 B-🟡-3（2026-09-15 收口 + 补 Selected 档；P0 已核该参数**只进 manifest 元数据**，
+        // 不参与导出内容筛选，故改档位不影响导出内容，只修正元数据语义）。
         // 本向导两条路径**都只备份第三方驱动**——View 回调两个分支都 `Where(p => p.IsThirdParty)`，
-        // 且选项文案明写"收件箱驱动不在导出范围"。故原式里的 `All`（枚举注释 =「全部驱动包」）
-        // 在本场景**恒为假**：会给一份"只含 3 个勾选包"的备份标上"全部驱动包"，
-        // 未来恢复向导若按 scope 判断"这份备份是否覆盖全量"就会被误导。
-        // 枚举只有 All / ThirdPartyOnly 两档、没有"所选子集"；勾选粒度的权威信息在 manifest 的
-        // `PackageCount` + `Packages` 数组里 ⇒ 此处恒用 ThirdPartyOnly（如实且更保守）。
-        // 🔴 若将来 UI 增加"全部驱动包（含收件箱）"选项，须同步给 Core 枚举补语义并回到此处。
-        DriverBackupScope scope = DriverBackupScope.ThirdPartyOnly;
+        // 且选项文案明写「收件箱驱动不在导出范围」。因此：
+        //   allThirdParty = true  →「全部第三方驱动（N 个）」 ⇒ ThirdPartyOnly（全量）
+        //   allThirdParty = false →「仅勾选的驱动包（N 个）」 ⇒ Selected（真子集）
+        // 🔴 原实现把这两个分支一律写成 ThirdPartyOnly（更早的版本写 `All`）——两份语义不同的备份
+        // 会拿到同一个 scope，未来恢复向导若按 scope 判断「这份备份是否覆盖全量第三方」就会被误导。
+        // 注意 `All` 档在本场景**仍恒不可达**（含收件箱驱动，UI 不提供该选项），故不使用。
+        DriverBackupScope scope = allThirdParty
+            ? DriverBackupScope.ThirdPartyOnly
+            : DriverBackupScope.Selected;
         IsOperating = true;
         IsBackupRunning = true; // v6 O-1b：遮罩/取消按钮只跟随可取消的备份
         _backupCts = new CancellationTokenSource();

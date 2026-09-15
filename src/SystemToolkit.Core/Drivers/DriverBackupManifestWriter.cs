@@ -11,8 +11,12 @@ public enum DriverBackupScope
     /// <summary>全部驱动包。</summary>
     All = 0,
 
-    /// <summary>仅第三方（oem 前缀）驱动包。</summary>
+    /// <summary>仅第三方（oem 前缀）驱动包——全量，用户未做勾选筛选。</summary>
     ThirdPartyOnly = 1,
+
+    /// <summary>第三方驱动包中的用户所选子集（向导「仅勾选的驱动包」分支）；
+    /// 收件箱驱动同样不在范围内，故它是 ThirdPartyOnly 的真子集。</summary>
+    Selected = 2,
 }
 
 /// <summary>
