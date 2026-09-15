@@ -241,18 +241,27 @@ public sealed class OnlineLoginWindow : Window
                     .WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 清理尽力而为：超时/WebView 已销毁/Runtime 异常时直接关窗
+            // 清理尽力而为：超时/WebView 已销毁/Runtime 异常时直接关窗。
+            // 但"失败不阻断"≠"可以不记录"（本仓 P0-B 口径）——浏览数据没清干净会让
+            // 下次登录复用旧 Cookie，症状是"换了账号仍显示旧登录态"。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn, "music",
+                "登录窗清理浏览数据失败（不影响关闭）：" + ex.Message, ex));
         }
 
         try
         {
             Close();
         }
-        catch
+        catch (Exception ex)
         {
-            // 关闭过程中的布局回调异常无需处理（窗口已标记完成）
+            // 关闭过程中的布局回调异常无需处理（窗口已标记完成）——但同样留痕：
+            // 本方法由 `_ = CloseWithCleanupAsync()` fire-and-forget 触发，不留痕即完全静默。
+            SystemToolkit.Core.Logging.AppLog.Write(SystemToolkit.Core.Logging.LogEntry.Create(
+                SystemToolkit.Core.Logging.LogLevel.Warn, "music",
+                "登录窗关闭回调异常（窗口可能未关闭）：" + ex.Message, ex));
         }
     }
 }

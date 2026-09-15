@@ -558,6 +558,10 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     {
         _busy = true;
         RefreshToggleCanExecute();
+        // 🟡 D-🟡-2（2026-09-15）：内层两个 catch 已用**具体阶段 + 具体端口**的文案报过 UI，
+        // 外层只兜"内层未覆盖的语句"——避免同一次失败在日志面板里出现两条。
+        // ⚠️ 文件日志（`_logger.Error`）两条都保留：内层记阶段、外层记整体，排查时各有用途。
+        bool startFailureReported = false;
         try
         {
             if (!string.IsNullOrEmpty(PortErrorText))
@@ -593,6 +597,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             {
                 _log($"[互传] ❌ 传输服务启动失败（TCP {TcpPort} 可能被占用）：{ex.Message}");
                 _logger.Error("传输服务启动失败", ex);
+                startFailureReported = true;
                 throw;
             }
 
@@ -617,6 +622,7 @@ public partial class FileTransferDesktopViewModel : ObservableObject
             {
                 _log($"[互传] ❌ 设备发现服务启动失败（UDP {DiscoveryPort} 可能被占用）：{ex.Message}");
                 _logger.Error("设备发现服务启动失败", ex);
+                startFailureReported = true;
 
                 // 传输服务已起来但发现服务没起来：不回滚会留下"停止按钮不可用、服务却在跑"的僵局
                 // （审查 🟠-3 的状态不一致）——这里做清理属于防御，不是新功能
@@ -652,7 +658,12 @@ public partial class FileTransferDesktopViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _log("[互传] ❌ 服务启动失败：" + ex.Message + "（端口被占用？）");
+            // 🟡 D-🟡-2：内层已报过具体阶段时不再重复（信息一条不少，只去掉 UI 面板的重复行）
+            if (!startFailureReported)
+            {
+                _log("[互传] ❌ 服务启动失败：" + ex.Message + "（端口被占用？）");
+            }
+
             _logger.Error("互传服务启动失败", ex);
         }
         finally
