@@ -486,6 +486,24 @@ public partial class GameManagerViewModel : ObservableObject
     [ObservableProperty]
     private string _statusText = "尚未扫描——进入本页自动读取 Steam 库";
 
+    /// <summary>
+    /// 封面补全进度（底部状态栏第二行；空串 → 整行隐藏）。
+    /// <para>
+    /// 🟠 E-🟠-4（2026-09-15）：单轮上限 <see cref="MaxCoverFetchPerPass"/> 触顶时，
+    /// "另有 N 张待下次刷新继续"此前**只写 FileLogger**，界面无任何出口 —— 用户看到大片字母占位
+    /// 会以为封面全挂了。此处把待补数量暴露到界面。
+    /// </para>
+    /// <para>
+    /// 与 <see cref="StatusText"/> **分离**成独立属性（不共享状态栏文案）—— 避免补全进度覆盖业务状态。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCoverFetchProgress))]
+    private string _coverFetchProgressText = string.Empty;
+
+    /// <summary>是否有封面补全进度可显示（空串 = 无 → XAML 整行 Collapsed）。</summary>
+    public bool HasCoverFetchProgress => !string.IsNullOrEmpty(CoverFetchProgressText);
+
     /// <summary>Steam 库数量（页头副标题用；LoadAsync 完成后赋值）。</summary>
     public int LibraryCount { get; private set; }
 
@@ -710,6 +728,7 @@ public partial class GameManagerViewModel : ObservableObject
         IsLoading = true;
         StatusText = "正在读取 Steam 库…";
         StatusLevel = 0;
+        CoverFetchProgressText = string.Empty;   // E-🟠-4：新一轮加载清掉上一轮补全进度
         try
         {
             SteamAllData data = await Task.Run(_steam.GetAllData).ConfigureAwait(true);
@@ -945,8 +964,15 @@ public partial class GameManagerViewModel : ObservableObject
         int deferred = candidates.Count - coverless.Count;
         if (coverless.Count == 0)
         {
+            CoverFetchProgressText = string.Empty;   // 无待补项 → 清空（E-🟠-4）
             return;
         }
+
+        // 🟠 E-🟠-4：待补数量除 FileLogger 外**同时**暴露到状态栏第二行 —— 上限触顶时
+        // 用户必须能看出"还有 N 张、下次刷新继续"，否则大片字母占位会被读成"封面全挂了"。
+        CoverFetchProgressText = deferred > 0
+            ? $"封面补全中：本轮 {coverless.Count} 张，另有 {deferred} 张待下次刷新继续（单轮上限 {MaxCoverFetchPerPass}）"
+            : $"封面补全中：本轮 {coverless.Count} 张";
 
         if (deferred > 0)
         {
@@ -1010,12 +1036,23 @@ public partial class GameManagerViewModel : ObservableObject
                 {
                     _logger.Warn($"[游戏] CDN 封面补全失败 {failed}/{coverless.Count} 张（无网或超时），已保留占位图");
                 }
+
+                // E-🟠-4：本轮结束落"完成态"（后台线程 → 必须经 RunOnUi 编组回 UI 线程）
+                RunOnUi(() =>
+                {
+                    string failedTail = failed > 0 ? $"，{failed} 张失败（已保留占位图）" : "";
+                    CoverFetchProgressText = deferred > 0
+                        ? $"封面补全完成：本轮 {coverless.Count} 张{failedTail}，另有 {deferred} 张待下次刷新继续"
+                        : $"封面补全完成：{coverless.Count} 张{failedTail}";
+                });
             }
             catch (Exception ex)
             {
                 // 兜底只保证"不静默"：⚠️ ILogger.Warn 无异常重载（仅 Warn(string)），故取 Message；
                 // 与同文件既有「封面探测失败…」的 Warn 写法一致。
                 _logger.Warn($"[游戏] CDN 封面补全异常：{ex.Message}");
+                // E-🟠-4：异常也要如实收口，不能让第二行永远停在"补全中…"
+                RunOnUi(() => CoverFetchProgressText = "封面补全异常中断（详见日志）");
             }
         });
     }

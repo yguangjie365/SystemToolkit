@@ -208,7 +208,18 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            // （本方法另有 BatchInstall 计时器：一并收口，避免"已启动"的记录缺口）
+            timing.Complete(LogResult.Failed, LogLevel.Error, $"获取 winget 操作闸门失败（批量安装）：{ex.Message}");
+            ExitOperationOnFailure("批量安装", ex);
+            return;
+        }
 
         // 审查 2026-09-04（P2）：批量安装接入取消令牌——承诺的"关闭窗口即停"由此兑现
         using CancellationTokenSource batchCts = new();

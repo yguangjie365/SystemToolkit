@@ -52,20 +52,28 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("搜索安装", ex);
+            return;
+        }
 
         // 🟠 V11-A3：IsSearchPopupOpen / _opCts 赋值原先裸露在 try 之外——任一步抛出都会绕过
         // finally，导致 winget 闸门与忙态（IsOperating）**永久不释放**（此后安装/升级/卸载恒被拒）。
         // 两句连同其后的执行段全部移入 try。
         //
-        // 🟠 A-🟠-1（v11~v14 后续批次订正注释）：本行原写"Acquire 本身仍在 try 外（其失败由
-        // V11-A2 的兜底负责）"——**那句话是错的**：V11-A2 的 `try { await Acquire } catch {
-        // ExitOperationOnFailure }` 只存在于 Refresh.cs 的 4 处调用点，本入口（及 Manual /
-        // Sources / Archives 共 6 处）**并没有**。真实情况就是 Acquire 裸露在 try 之外。
-        // 之所以定级为"注释与实现不符"而非独立缺陷：`SemaphoreSlim.WaitAsync()` 的**无参重载
-        // 不接收 CancellationToken，实测不会抛**（抛只可能来自 OOM 等极端情形）。
-        // 本批按"如实陈述"订正注释，不在此新增 catch —— 避免与已包的 4 处形成两套写法；
-        // 若要统一，应一次性给 6 处同补（另开批次评估）。
+        // 🟠 A-🟠-1（2026-09-15 收口）：本行原先裸露在 try 之外，且原注释称
+        // "Acquire 本身仍在 try 外（其失败由 V11-A2 的兜底负责）"——**那句话当时是错的**：
+        // V11-A2 的 `try { await Acquire } catch { ExitOperationOnFailure }` 当时只存在于
+        // Refresh.cs 的 4 处调用点，本入口与 Manual / Sources×3 / Archives 共 6 处并没有。
+        // 现已把同款兜底一次性补到全部 6 处，全仓 AcquireOperationAsync 调用点写法统一。
+        // 备注：`SemaphoreSlim.WaitAsync()` 无参重载实测不抛，故该兜底现实的触发概率极低——
+        // 补它的意义是让"闸门与忙态的进入/释放严格成对"这一不变量不再依赖"底层恰好不抛"。
         try
         {
             IsSearchPopupOpen = false;

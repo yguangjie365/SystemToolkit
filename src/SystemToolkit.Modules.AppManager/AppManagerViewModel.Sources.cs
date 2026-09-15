@@ -12,7 +12,16 @@ public partial class AppManagerViewModel
     [RelayCommand(CanExecute = nameof(CanOperate))]
     private async Task UpdateSourceAsync()
     {
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("更新软件源", ex);
+            return;
+        }
 
         AddLog("正在更新软件源（winget source update）…");
         try
@@ -48,7 +57,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("切换镜像源", ex);
+            return;
+        }
 
         AddLog("正在切换软件源到中科大镜像…");
         try
@@ -103,7 +121,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("恢复官方源", ex);
+            return;
+        }
 
         AddLog("正在恢复官方软件源…");
         try

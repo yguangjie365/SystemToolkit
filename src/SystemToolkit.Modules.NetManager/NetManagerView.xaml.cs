@@ -12,12 +12,29 @@ public partial class NetManagerView : UserControl
 {
     private NetManagerViewModel Vm => (NetManagerViewModel)DataContext;
 
+    /// <summary>🟠 G-🟠-4（2026-09-15）：构造参数直存字段 —— Tab 切换不再依赖
+    /// <c>DataContext</c> 强转（后者在 DataContext 被外部改写/置空时会静默跳过）。</summary>
+    private readonly NetManagerViewModel _vm;
+
     private bool _loaded;
+
+    /// <summary>XAML 解析是否已完成（<c>InitializeComponent</c> 返回后置位）。
+    /// <para>
+    /// <c>IsChecked="True"</c> 会在**解析期**就触发 <c>OnTabChecked</c> —— 此时各 <c>x:Name</c>
+    /// 面板字段尚未赋值，<c>ShowPanel</c> 必须跳过（初始可见性由 XAML 的默认 <c>Visibility</c> 承担）。
+    /// 与 <see cref="OnLogToggleChanged"/> 是同一个时序陷阱。
+    /// </para>
+    /// </summary>
+    private readonly bool _initialized;
 
     public NetManagerView(NetManagerViewModel vm)
     {
+        // 🔴 顺序不可换：`_vm` 必须在 InitializeComponent **之前**赋值（XAML 里 IsChecked="True"
+        // 会在解析期触发 OnTabChecked，那时就只能靠 `_initialized` 拦住 ShowPanel）。
+        _vm = vm;
         InitializeComponent();
         DataContext = vm;
+        _initialized = true;
         Loaded += OnLoaded;
         // 审查 O7（2026-09-10）：切页卸载/关窗时取消持续 ping（循环与 VM 常驻泄漏）；NET-6 同款收口自动监控
         // 🟡 V14-N11：直接用构造参数 vm（= 上面刚赋给 DataContext 的同一个实例），
@@ -66,13 +83,21 @@ public partial class NetManagerView : UserControl
 
     private SplitRouteTabViewModel Split => Vm.Split;
 
+    /// <summary>Tab 切换：改选中索引 + 切面板可见性（不动布局结构）。
+    /// 🟠 G-🟠-4：改用构造参数字段 <c>_vm</c>，不再做 <c>DataContext as NetManagerViewModel</c>
+    /// —— 后者在 DataContext 被外部改写/置空时会**静默跳过**（点 Tab 无反应且无日志），
+    /// 正是 V14-N11 在 Unloaded 回调上修掉的同一个问题。</summary>
     private void OnTabChecked(object sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { Tag: string tag }
-            && int.TryParse(tag, out int index)
-            && DataContext is NetManagerViewModel vm)
+        // 解析期触发（XAML 里 IsChecked="True"）：面板字段未就绪 → 跳过，初始可见性由 XAML 默认值承担。
+        if (!_initialized)
         {
-            vm.SelectedTabIndex = index;
+            return;
+        }
+
+        if (sender is RadioButton { Tag: string tag } && int.TryParse(tag, out int index))
+        {
+            _vm.SelectedTabIndex = index;
             ShowPanel(index);
         }
     }

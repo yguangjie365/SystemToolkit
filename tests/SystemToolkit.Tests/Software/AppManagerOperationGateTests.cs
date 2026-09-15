@@ -23,14 +23,27 @@ public class AppManagerOperationGateTests
 
     private static readonly Regex CommandSignature = new(@"private\s+async\s+Task\s+(\w+)\s*\(", RegexOptions.Compiled);
 
-    /// <summary>期望的进闸点清单——改动此表即等于改动契约，必须同步审视兜底位置。</summary>
+    /// <summary>期望的进闸点清单——改动此表即等于改动契约，必须同步审视兜底位置。
+    /// <para>
+    /// 🔴 2026-09-15（A-🟠-1 收口）：**本表当时只列了 5 处，而模块内实有 10 处** ⇒ 未入表的 6 处
+    /// （<c>Manual.BatchInstallAsync</c> / <c>Sources×3</c> / <c>Archives.RestoreEnvironmentAsync</c>）
+    /// 从来不在检测面内，缺陷因此长期存活且全绿。这与 B10 的 XAML 棘轮「白名单制 = 忘加名单即
+    /// 静默不受检测」是**同一缺陷模式**。现已补全为 10 处，并另加
+    /// <see cref="EveryAcquireCallInModule_FailSafeSweep"/> 做 fail-safe 全扫。
+    /// </para>
+    /// </summary>
     private static readonly (string File, string Method)[] ExpectedAcquireCallers =
     [
         ("AppManagerViewModel.Refresh.cs", "InstallAsync"),
         ("AppManagerViewModel.Refresh.cs", "UpgradeAsync"),
         ("AppManagerViewModel.Refresh.cs", "UninstallAsync"),
         ("AppManagerViewModel.Search.cs", "InstallSearchResultAsync"),
+        ("AppManagerViewModel.Manual.cs", "BatchInstallAsync"),
         ("AppManagerViewModel.Manual.cs", "ExportInstalledAsync"),
+        ("AppManagerViewModel.Sources.cs", "UpdateSourceAsync"),
+        ("AppManagerViewModel.Sources.cs", "SwitchToMirrorAsync"),
+        ("AppManagerViewModel.Sources.cs", "RestoreOfficialSourceAsync"),
+        ("AppManagerViewModel.Archives.cs", "RestoreEnvironmentAsync"),
     ];
 
     [Fact]
@@ -125,7 +138,70 @@ public class AppManagerOperationGateTests
         Assert.True(HasTopLevelCatch(guarded, 0, guarded.Length - 1, afterLine: 4));
     }
 
+    /// <summary>
+    /// 🔴 fail-safe 全扫（2026-09-15，A-🟠-1 收口）：**不依赖任何清单**——模块内每一个
+    /// <c>await AcquireOperationAsync();</c> 之后，都必须在**方法体顶层**（花括号深度=1）出现 catch。
+    /// <para>
+    /// 为什么必须另加这一条：<see cref="ExpectedAcquireCallers"/> 是白名单制，靠"人记得往表里加"
+    /// —— 它当时漏了 6 处，那 6 处就永远不被检测。本用例改为默认全扫：**新增进闸点自动进入检测面**。
+    /// 另用总数断言（10）兜住"进闸点被悄悄增删"。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryAcquireCallInModule_FailSafeSweep()
+    {
+        const int ExpectedTotal = 10;
+        var violations = new List<string>();
+        int total = 0;
+
+        foreach (string path in Directory.EnumerateFiles(ModuleDir(), "AppManagerViewModel*.cs").OrderBy(p => p, StringComparer.Ordinal))
+        {
+            string[] lines = File.ReadAllLines(path);
+            string file = Path.GetFileName(path);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!AcquireCall.IsMatch(lines[i]) || lines[i].TrimStart().StartsWith("//", StringComparison.Ordinal))
+                {
+                    continue;   // 注释里引用的字面不算进闸点
+                }
+
+                total++;
+                int sigLine = FindEnclosingMethodSignature(lines, i);
+                if (sigLine < 0)
+                {
+                    violations.Add($"{file}:{i + 1}：进闸点不在任何 async Task 方法体内 —— 本锁无法判定，请人工确认");
+                    continue;
+                }
+
+                int bodyEnd = FindBodyEnd(lines, sigLine);
+                if (!HasTopLevelCatch(lines, sigLine, bodyEnd, afterLine: i))
+                {
+                    violations.Add($"{file}:{i + 1}：进闸点之后没有方法体顶层 catch —— "
+                        + "异常路径上闸门/忙态会永久不释放（A-🟠-1 回归）");
+                }
+            }
+        }
+
+        Assert.True(total == ExpectedTotal,
+            $"进闸点总数 = {total}（期望 {ExpectedTotal}）—— 新增/删除进闸点必须同步审查兜底并更新期望值");
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
     // ── 判据助手（抽成静态方法：反向验证直接喂文本，无需真实文件） ──
+
+    /// <summary>自下而上找最近的 <c>private async Task X(</c> 签名行（进闸点必落在命令体内）。</summary>
+    private static int FindEnclosingMethodSignature(string[] lines, int line)
+    {
+        for (int i = line; i >= 0; i--)
+        {
+            if (CommandSignature.IsMatch(lines[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>方法体末尾行（花括号深度配对；找不到闭合则取文件末行）。</summary>
     private static int FindBodyEnd(string[] lines, int sigLine)

@@ -51,7 +51,16 @@ public partial class AppManagerViewModel
             return;
         }
 
-        await AcquireOperationAsync();
+        try
+        {
+            await AcquireOperationAsync();
+        }
+        catch (Exception ex)
+        {
+            // A-🟠-1 收口：闸门未获取（或获取中途取消）→ 就地兜底，不留半开状态
+            ExitOperationOnFailure("恢复环境", ex);
+            return;
+        }
 
         AddLog($"开始恢复环境「{archive.Name}」（待安装 {targets.Count} 项）…");
         int ok = 0, fail = 0, skip = 0;

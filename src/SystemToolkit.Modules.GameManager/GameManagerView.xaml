@@ -678,21 +678,30 @@
              M-UI-2：按 StatusLevel 语义着色——0 信息/1 成功/2 失败，深色底用 400 档亮色变体） ============ -->
         <Border Grid.Row="4" Margin="0,12,0,0" Background="{DynamicResource Brush_DarkSurface}"
                 CornerRadius="{DynamicResource Radius_LG}" Padding="{DynamicResource Space_SM}">
-            <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush_OnDarkMuted}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding StatusLevel}" Value="1">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessOnDark}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding StatusLevel}" Value="2">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush_DangerOnDark}"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+            <StackPanel>
+                <TextBlock Text="{Binding StatusText}" FontSize="{DynamicResource Font_SizeBodySm}"
+                           Margin="{DynamicResource Space_XXS}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush_OnDarkMuted}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StatusLevel}" Value="1">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessOnDark}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding StatusLevel}" Value="2">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush_DangerOnDark}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <!-- 🟠 E-🟠-4（2026-09-15）：封面补全进度（第二行，弱色；空串 → 整行隐藏）。
+                     上限触顶时「另有 N 张待下次刷新继续」此前只写 FileLogger，界面无出口。 -->
+                <TextBlock Text="{Binding CoverFetchProgressText}" FontSize="{DynamicResource Font_SizeTiny}"
+                           Margin="{DynamicResource Space_XXS}"
+                           Visibility="{Binding HasCoverFetchProgress, Converter={StaticResource BoolToVis}}"
+                           Foreground="{DynamicResource Brush_OnDarkMuted}"/>
+            </StackPanel>
         </Border>
 
         <!-- ============ A2 详情面板（2026-09-13，形态主人裁定：右侧滑出 + 遮罩） ============
