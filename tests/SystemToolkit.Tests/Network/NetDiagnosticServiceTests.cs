@@ -32,8 +32,8 @@ public class NetDiagnosticServiceTests
         IPv4WithMask: new[] { "192.168.1.10/24" }, Gateways: gateway.Length == 0 ? Array.Empty<string>() : new[] { gateway },
         DnsServers: new[] { "192.168.1.1" });
 
-    private static DiagStatus StatusOf(IReadOnlyList<DiagStepResult> steps, string step)
-        => steps.First(s => s.Step == step).Status;
+    private static DiagStatus StatusOf(IReadOnlyList<DiagStepResult> steps, string stepId)
+        => steps.First(s => s.Step == stepId).Status;
 
     [Fact]
     public async Task RunAsync_NoConnectedAdapter_FiveStepsNeverShortCircuit()
@@ -45,8 +45,8 @@ public class NetDiagnosticServiceTests
 
         // 不短路：即使首步失败，公网与 DNS 仍会探测，一次跑完能看清整条链路（含丢包量化共 5 步）
         Assert.Equal(5, steps.Count);
-        Assert.Equal(DiagStatus.Failed, StatusOf(steps, "适配器"));
-        Assert.Equal(DiagStatus.Skipped, StatusOf(steps, "网关"));
+        Assert.Equal(DiagStatus.Failed, StatusOf(steps, DiagStep.Adapter));
+        Assert.Equal(DiagStatus.Skipped, StatusOf(steps, DiagStep.Gateway));
         Assert.Contains("未检测到", Create().BuildConclusion(steps));
     }
 
@@ -78,7 +78,7 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        Assert.Equal(DiagStatus.Failed, StatusOf(steps, "网关"));
+        Assert.Equal(DiagStatus.Failed, StatusOf(steps, DiagStep.Gateway));
         Assert.Contains("本地链路故障", Create().BuildConclusion(steps));
     }
 
@@ -130,10 +130,10 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        Assert.Equal(DiagStatus.Success, StatusOf(steps, "适配器"));
-        Assert.Equal(DiagStatus.Success, StatusOf(steps, "网关"));
-        Assert.Equal(DiagStatus.Success, StatusOf(steps, "公网"));
-        Assert.Equal(DiagStatus.Success, StatusOf(steps, "DNS 解析"));
+        Assert.Equal(DiagStatus.Success, StatusOf(steps, DiagStep.Adapter));
+        Assert.Equal(DiagStatus.Success, StatusOf(steps, DiagStep.Gateway));
+        Assert.Equal(DiagStatus.Success, StatusOf(steps, DiagStep.PublicNet));
+        Assert.Equal(DiagStatus.Success, StatusOf(steps, DiagStep.Dns));
         Assert.Contains("网络正常", Create().BuildConclusion(steps));
     }
 
@@ -144,7 +144,7 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        DiagStepResult step = steps.First(s => s.Step == "丢包量化");
+        DiagStepResult step = steps.First(s => s.Step == DiagStep.Quantify);
         Assert.Equal(DiagStatus.Success, step.Status);
         Assert.Contains("网关：丢包 0%，延迟 5/5/5 ms", step.Detail);
         Assert.Contains("公网：丢包 0%，延迟 5/5/5 ms", step.Detail);
@@ -158,7 +158,7 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        DiagStepResult step = steps.First(s => s.Step == "丢包量化");
+        DiagStepResult step = steps.First(s => s.Step == DiagStep.Quantify);
         Assert.Equal(DiagStatus.Failed, step.Status);
         Assert.Contains("丢包 30%", step.Detail);
     }
@@ -173,7 +173,7 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        DiagStepResult step = steps.First(s => s.Step == "丢包量化");
+        DiagStepResult step = steps.First(s => s.Step == DiagStep.Quantify);
         Assert.Contains("公网：无法量化", step.Detail);
         Assert.DoesNotContain("公网：丢包", step.Detail);
     }
@@ -269,7 +269,7 @@ public class NetDiagnosticServiceTests
 
         IReadOnlyList<DiagStepResult> steps = await Create().RunAsync();
 
-        Assert.Equal(DiagStatus.Success, StatusOf(steps, "网关"));
+        Assert.Equal(DiagStatus.Success, StatusOf(steps, DiagStep.Gateway));
         // 两个网关都被探测过（任一可达即通过，但仍全部记录）
         Assert.Contains("10.0.0.1", _probe.PingTargets);
     }

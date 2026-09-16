@@ -120,6 +120,18 @@ public partial class FileTransferMobileViewModel : ObservableObject
     /// <summary>幂等守卫（🟠-5 审查 v10）：启动钩子与本页 Loaded 都会调 <see cref="Initialize"/>。</summary>
     private bool _initialized;
 
+    /// <summary>
+    /// 加载期（<see cref="Initialize"/>）抑制"端口回写 → 配置落盘"的连锁写。
+    /// <para>
+    /// 🔴 2026-09-16 核实补：桌面侧早已有本守卫（<c>FileTransferDesktopViewModel._loadingConfig</c>，
+    /// 注释标 D-🟡-5），手机侧**漏了** —— 两侧 VM 结构对称，却只有桌面侧抑制。
+    /// 后果：<see cref="Initialize"/> 给 <see cref="WebPortText"/> / <see cref="HttpsPortText"/> 赋值
+    /// 会触发 <c>On*TextChanged</c> → <see cref="SaveAndValidatePorts"/> → 合法即 <see cref="SaveConfig"/>，
+    /// 于是**每次进页面/主题重建都多写一次配置文件**（AtomicFile 原子写，无损坏风险，纯无谓 IO）。
+    /// </para>
+    /// </summary>
+    private bool _loadingConfig;
+
     public void Initialize()
     {
         // 🟠-5 审查 v10：注释声称"幂等"，但原先无守卫 —— 第二次调用会重读配置、重设
@@ -132,6 +144,7 @@ public partial class FileTransferMobileViewModel : ObservableObject
 
         _initialized = true;
 
+        _loadingConfig = true; // 与桌面侧同构：下方给端口赋值会触发 SaveAndValidatePorts ⇒ 加载期不该写盘
         try
         {
             if (File.Exists(MobileConfigPath))
@@ -161,6 +174,10 @@ public partial class FileTransferMobileViewModel : ObservableObject
         catch (Exception ex)
         {
             _log("[手机] ⚠️ 配置读取失败（使用默认值）：" + ex.Message);
+        }
+        finally
+        {
+            _loadingConfig = false;
         }
 
         RefreshShareDirectoryFreeSpace();
@@ -279,12 +296,22 @@ public partial class FileTransferMobileViewModel : ObservableObject
 
     partial void OnAutoStartWithAppChanged(bool value)
     {
-        SaveConfig();
-        _log($"[手机] 随应用启动：{(value ? "已开启（应用启动即拉起 Web 服务；关闭应用则服务停止）" : "已关闭")}");
+        // 🟠-2 核实 v20：本钩子**不走** SaveAndValidatePorts，故必须自带加载期守卫 ——
+        // Initialize 会给 AutoStartWithApp 赋值，不挡的话"加载期不写盘"仍会漏一次。
+        if (!_loadingConfig)
+        {
+            SaveConfig();
+            _log($"[手机] 随应用启动：{(value ? "已开启（应用启动即拉起 Web 服务；关闭应用则服务停止）" : "已关闭")}");
+        }
     }
 
     private void SaveAndValidatePorts()
     {
+        if (_loadingConfig)
+        {
+            return; // 🟠-2 核实 v20：加载期不写盘（与桌面侧 D-🟡-5 同口径；原先手机侧漏了本守卫）
+        }
+
         PortErrorText = PortValidator.Validate(
             ("Web 端口", WebPort), ("HTTPS 端口", HttpsPort)) ?? string.Empty;
         OnPropertyChanged(nameof(WebPort));
@@ -324,7 +351,12 @@ public partial class FileTransferMobileViewModel : ObservableObject
     partial void OnShareDirectoryChanged(string value)
     {
         RefreshShareDirectoryFreeSpace();
-        SaveConfig();
+        // 🟠-2 核实 v20：同 OnAutoStartWithAppChanged —— 本钩子不走 SaveAndValidatePorts，
+        // 必须自带加载期守卫（Initialize 会给 ShareDirectory 赋值）。
+        if (!_loadingConfig)
+        {
+            SaveConfig();
+        }
     }
 
     [ObservableProperty]
@@ -515,6 +547,11 @@ public partial class FileTransferMobileViewModel : ObservableObject
             {
                 _log("[手机通道] ⚠ 剪贴板占用中，配对码复制失败（可稍后重试）");
             }
+            catch (Exception ex) // 🟡 核实 v20：同步命令无 AsyncRelayCommand 吞异常层，兜住其余异常
+            {
+                _log("[手机通道] ❌ 配对码复制失败：" + ex.Message);
+                _logger?.Error("[手机通道] 配对码复制失败", ex);
+            }
         }
     }
 
@@ -579,6 +616,11 @@ public partial class FileTransferMobileViewModel : ObservableObject
             catch (System.Runtime.InteropServices.ExternalException)
             {
                 _log("[手机] ⚠ 剪贴板占用中，证书指纹复制失败（可稍后重试）");
+            }
+            catch (Exception ex) // 🟡 核实 v20：同 CopyPairCode，兜住剪贴板占用以外的异常
+            {
+                _log("[手机] ❌ 证书指纹复制失败：" + ex.Message);
+                _logger?.Error("[手机] 证书指纹复制失败", ex);
             }
         }
     }

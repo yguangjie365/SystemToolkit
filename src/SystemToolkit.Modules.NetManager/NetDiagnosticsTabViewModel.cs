@@ -7,12 +7,27 @@ using SystemToolkit.Core.Network.Services;
 
 namespace SystemToolkit.Modules.NetManager;
 
-/// <summary>诊断链单行 VM（步骤名固定，按行对位刷新——Running 快照与终态同名）。</summary>
+/// <summary>
+/// 诊断链单行 VM（按 <see cref="StepId"/> 与 Core 上报的步骤**标识**对位刷新——Running 快照与终态同标识）。
+/// <para>
+/// 🔴 v20-NM-🟠-1（2026-09-16 修复）：<see cref="Step"/> 由"标识"改为"展示文案"（供界面直显），
+/// 另增 <see cref="StepId"/> 承载对位用的机器可读标识（<see cref="DiagStep"/> 常量）——
+/// 两者分离后，改文案不会破坏 Core↔UI 的对位契约。
+/// </para>
+/// </summary>
 public partial class DiagRowVm : ObservableObject
 {
+    /// <summary>机器可读标识（<see cref="DiagStep"/> 常量；用于与 Core 上报结果对位）。</summary>
+    public string StepId { get; }
+
+    /// <summary>展示文案（界面直显；由 <see cref="NetDiagnosticsTabViewModel"/> 注入）。</summary>
     public string Step { get; }
 
-    public DiagRowVm(string step) => Step = step;
+    public DiagRowVm(string stepId, string label)
+    {
+        StepId = stepId;
+        Step = label;
+    }
 
     // 🔴 V14-N1：StatusText 是 Status 的 switch 派生属性，而 [ObservableProperty] 只通知 Status 本身
     // ⇒ 无此特性时「待检测 → 检测中 → 正常/异常」的迁移**全不显示**（XAML NetManagerView.xaml:342
@@ -44,14 +59,26 @@ public partial class DiagRowVm : ObservableObject
 /// </summary>
 public partial class NetDiagnosticsTabViewModel : ObservableObject
 {
-    // 🟡 G-🟡-1（两批审查，经评估**保持现状**）：本数组必须与 Core 侧 DiagStepResult.Step 的取值
-    // **逐字一致**（P0 已核：Core 里同为 "适配器"/"网关"/"公网"/"DNS 解析"/"丢包量化"）。
-    // 失配时的真实症状：进度回调里 `Steps.First(s => s.Step == r.Step)` 抛 InvalidOperationException，
+    // 🔴 v20-NM-🟠-1（2026-09-16 修复）：此前的本数组是**中文文案**，靠注释与 Core 约定"逐字一致"——
+    // 任一侧改字都会让 `Steps.First(s => s.Step == r.Step)` 抛 InvalidOperationException，
     // 经 Progress<T>.Report 冒泡到本 VM 的 catch ⇒ 用户看到面向开发者的
     // “Sequence contains no matching element”，而不是“诊断失败”。
-    // 不改成 FirstOrDefault 的原因：那会让失配**静默跳过**进度更新（比抛异常更难发现）。
-    // ⇒ 正解是让 Core 的 Step 用机器可读标识（如枚举/常量），属跨层契约改造，本批不做。
-    private static readonly string[] StepNames = ["适配器", "网关", "公网", "DNS 解析", "丢包量化"];
+    //（不改成 FirstOrDefault 的原因：那会让失配**静默跳过**进度更新，比抛异常更难发现。）
+    //
+    // 现改为：左边是 Core 侧的**机器可读标识**（DiagStep 常量，跨层唯一真源、编译期防错），
+    // 右边是本层展示文案——改文案与改契约彻底解耦。对位一律用 StepId（见进度回调）。
+    /// <summary>
+    /// 诊断步登记表：<b>左=Core 侧标识</b>（<see cref="DiagStep"/> 常量，跨层唯一真源）、
+    /// <b>右=本层展示文案</b>。顺序即界面行序。
+    /// </summary>
+    internal static readonly (string Id, string Label)[] StepDefs =
+    [
+        (DiagStep.Adapter, "适配器"),
+        (DiagStep.Gateway, "网关"),
+        (DiagStep.PublicNet, "公网"),
+        (DiagStep.Dns, "DNS 解析"),
+        (DiagStep.Quantify, "丢包量化"),
+    ];
 
     private readonly INetDiagnosticService _diagnostic;
     private readonly DnsProbeService _dnsProbe;
@@ -68,12 +95,13 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
         _dnsProbe = dnsProbe;
         _continuousPing = continuousPing;
         _log = log;
-        foreach (string step in StepNames)
+        foreach ((string id, string label) in StepDefs)
         {
-            Steps.Add(new DiagRowVm(step));
+            Steps.Add(new DiagRowVm(id, label));
         }
     }
 
+    /// <summary>诊断链各行（行序即 <see cref="StepDefs"/> 顺序；对位一律用 <see cref="DiagRowVm.StepId"/>）。</summary>
     public ObservableCollection<DiagRowVm> Steps { get; } = new();
 
     [ObservableProperty]
@@ -136,7 +164,7 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
             // Progress<T> 封送到 UI 线程（RunAsync 内部 ConfigureAwait(false)，报告可能来自线程池）
             var progress = new Progress<DiagStepResult>(r =>
             {
-                DiagRowVm row = Steps.First(s => s.Step == r.Step);
+                DiagRowVm row = Steps.First(s => s.StepId == r.Step);
                 row.Status = r.Status;
                 row.Detail = r.Detail;
                 row.ElapsedMs = r.ElapsedMs;

@@ -162,6 +162,11 @@ public partial class MusicManagerViewModel : ObservableObject
         // （浅色字压黑底），直到用户切歌或切风格才刷新。
         // 注：ThemeManager.ThemeChanged 事件本就存在（宿主 MainWindow 也订阅它重建视图），
         // 此处是 VM 侧补齐消费；VM 为单例、生命周期与进程同长，故不做退订。
+        // 🟠 v20-🟠-2（2026-09-16 核实）：补全"为何不退订"的判据（此前只写了现象、没写理由）——
+        // 静态事件退订的真实理由是"静态事件 → 闭包 → 长命对象"，但本 VM 本就是与进程同寿的 DI 单例，
+        // 不退订不会多留任何一个"早该回收"的对象；容器在 App.OnExit 的 `_services?.Dispose()` 随进程消失，
+        // 此时退订不释放任何内存。真正必须退订的是持有**可反复创建销毁**对象的订阅者
+        // （TitleBarThemeWiring：静态事件 → 闭包 → Window，见 UI.Common 该类摘要）。
         SystemToolkit.UI.Common.ThemeManager.ThemeChanged += OnThemeChangedRefreshBrushes;
 
         Songs.CollectionChanged += (_, _) =>

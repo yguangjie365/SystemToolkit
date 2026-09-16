@@ -58,6 +58,35 @@ public sealed class NetDiagnosticService : INetDiagnosticService
     /// <summary>最近一次诊断的结论；未诊断过为空串。</summary>
     public string Conclusion { get; private set; } = "";
 
+    /// <summary>
+    /// 步骤标识的全集（顺序即执行序）。v20-NM-🟠-1：本表是 **Core↔UI 对位契约的唯一真源**——
+    /// UI 侧的 <c>StepDefs</c> 必须与它逐项对应（由 <c>DiagStepContractTests</c> 钉死）。
+    /// </summary>
+    public static readonly string[] StepIds =
+    [
+        DiagStep.Adapter,
+        DiagStep.Gateway,
+        DiagStep.PublicNet,
+        DiagStep.Dns,
+        DiagStep.Quantify,
+    ];
+
+    static NetDiagnosticService()
+    {
+        // 🔴 自证常量表本身无重名/空值：标识一旦撞值（如复制粘贴时忘改），
+        // UI 侧 First(s => s.StepId == …) 会对错行 —— 这类错误在编译期看不出来，
+        // 故在类型初始化时当场抛出，绝不静默。
+        if (StepIds.Any(string.IsNullOrEmpty))
+        {
+            throw new InvalidOperationException("DiagStep 标识不得为空。");
+        }
+
+        if (StepIds.Distinct(StringComparer.Ordinal).Count() != StepIds.Length)
+        {
+            throw new InvalidOperationException("DiagStep 标识存在重名（对位会错行）：" + string.Join(", ", StepIds));
+        }
+    }
+
     /// <inheritdoc cref="INetDiagnosticService.RunAsync"/>
     public Task<IReadOnlyList<DiagStepResult>> RunAsync(CancellationToken ct = default)
         => RunWithProgressAsync(progress: null, ct);
@@ -78,13 +107,13 @@ public sealed class NetDiagnosticService : INetDiagnosticService
         }
 
         // ① 适配器
-        ReportRunning(progress, "适配器");
+        ReportRunning(progress, DiagStep.Adapter);
         var clock = Stopwatch.StartNew();
         IReadOnlyList<NetAdapterInfo> adapters = await _info.GetAdaptersAsync().ConfigureAwait(false);
         var upAdapters = adapters.Where(a => a.Status == OperStatus.Up).ToList();
         clock.Stop();
         Add(new DiagStepResult(
-            "适配器",
+            DiagStep.Adapter,
             upAdapters.Count > 0 ? DiagStatus.Success : DiagStatus.Failed,
             upAdapters.Count > 0
                 ? $"检测到 {upAdapters.Count} 个已连接：{string.Join("、", upAdapters.Select(a => a.Name))}"
@@ -92,14 +121,14 @@ public sealed class NetDiagnosticService : INetDiagnosticService
             clock.ElapsedMilliseconds));
 
         // ② 网关：Up 适配器的每个网关都探测（任一可达即通过，但全部记录——多宿主环境要看全貌）
-        ReportRunning(progress, "网关");
+        ReportRunning(progress, DiagStep.Gateway);
         clock.Restart();
         string[] gateways = upAdapters.SelectMany(a => a.Gateways).Distinct().ToArray();
         var reachable = new List<string>();
         bool gatewayOk = false;
         if (gateways.Length == 0)
         {
-            Add(new DiagStepResult("网关", DiagStatus.Skipped, "无网关可测（未检测到已连接适配器或未配置默认网关）", clock.ElapsedMilliseconds));
+            Add(new DiagStepResult(DiagStep.Gateway, DiagStatus.Skipped, "无网关可测（未检测到已连接适配器或未配置默认网关）", clock.ElapsedMilliseconds));
         }
         else
         {
@@ -121,7 +150,7 @@ public sealed class NetDiagnosticService : INetDiagnosticService
             }
 
             Add(new DiagStepResult(
-                "网关",
+                DiagStep.Gateway,
                 gatewayOk ? DiagStatus.Success : DiagStatus.Failed,
                 gatewayOk
                     ? $"网关可达：{string.Join("、", gatewayDetails)}"
@@ -131,21 +160,21 @@ public sealed class NetDiagnosticService : INetDiagnosticService
 
         // ③④ 公网 Ping 与 DNS 解析相互独立——【核实报告 N4】并行执行（断网时最坏耗时 ↓ 约 40%）；
         // 各自完成后立即上报（真实增量：断网时公网行先出结果，DNS 行不必陪跑假动画）
-        ReportRunning(progress, "公网");
-        ReportRunning(progress, "DNS 解析");
+        ReportRunning(progress, DiagStep.PublicNet);
+        ReportRunning(progress, DiagStep.Dns);
         clock.Restart();
         Task<bool> publicTask = _probe.PingAsync(PublicProbeAddress, PingTimeoutMs, ct);
         Task<bool> dnsTask = _probe.ResolveAsync(DnsProbeHost, ct);
         bool publicOk = await publicTask.ConfigureAwait(false);
         Add(new DiagStepResult(
-            "公网",
+            DiagStep.PublicNet,
             publicOk ? DiagStatus.Success : DiagStatus.Failed,
             publicOk ? $"{PublicProbeAddress} 可达" : $"{PublicProbeAddress} 不可达（对方禁 ICMP 也会如此）",
             clock.ElapsedMilliseconds));
         bool dnsOk = await dnsTask.ConfigureAwait(false);
         clock.Stop();
         Add(new DiagStepResult(
-            "DNS 解析",
+            DiagStep.Dns,
             dnsOk ? DiagStatus.Success : DiagStatus.Failed,
             dnsOk ? $"{DnsProbeHost} 解析成功" : $"{DnsProbeHost} 解析失败",
             clock.ElapsedMilliseconds));
@@ -153,7 +182,7 @@ public sealed class NetDiagnosticService : INetDiagnosticService
         // ⑤ 丢包量化（M6a P0-1）：把「断网」与「网烂」区分开。
         // 目标裁剪（评审 Q2）：仅对可达目标量化——不可达侧结论已足够，避免 10 包全超时的无谓等待；
         // ICMP 过滤场景（公网 Ping 不通但 DNS 正常）显式「无法量化」而非 0% 丢包。
-        ReportRunning(progress, "丢包量化");
+        ReportRunning(progress, DiagStep.Quantify);
         clock.Restart();
         Add(await QuantifyStepAsync(gatewayOk ? gateways.First(g => reachable.Contains(g)) : null, publicOk, clock, ct).ConfigureAwait(false));
 
@@ -164,8 +193,8 @@ public sealed class NetDiagnosticService : INetDiagnosticService
     }
 
     /// <summary>步骤开始快照：Running 状态、零耗时、空明细（VM 显示进行中样式）。</summary>
-    private static void ReportRunning(IProgress<DiagStepResult>? progress, string step)
-        => progress?.Report(new DiagStepResult(step, DiagStatus.Running, "检测中…", 0));
+    private static void ReportRunning(IProgress<DiagStepResult>? progress, string stepId)
+        => progress?.Report(new DiagStepResult(stepId, DiagStatus.Running, "检测中…", 0));
 
     private async Task<DiagStepResult> QuantifyStepAsync(string? gatewayTarget, bool publicOk, Stopwatch clock, CancellationToken ct)
     {
@@ -198,7 +227,7 @@ public sealed class NetDiagnosticService : INetDiagnosticService
         DiagStatus status = statuses.Count > 0 && statuses.All(s => s == DiagStatus.Success)
             ? DiagStatus.Success
             : statuses.Contains(DiagStatus.Failed) ? DiagStatus.Failed : DiagStatus.Skipped;
-        return new DiagStepResult("丢包量化", status, string.Join("；", parts), clock.ElapsedMilliseconds);
+        return new DiagStepResult(DiagStep.Quantify, status, string.Join("；", parts), clock.ElapsedMilliseconds);
     }
 
     private static string DescribeQuantify(string label, PingQuantifyResult r)
@@ -267,11 +296,11 @@ public sealed class NetDiagnosticService : INetDiagnosticService
     /// </summary>
     public string BuildConclusion(IReadOnlyList<DiagStepResult> steps)
     {
-        bool hasUpAdapter = StatusOf(steps, "适配器") == DiagStatus.Success;
-        bool gatewayTested = StatusOf(steps, "网关") != DiagStatus.Skipped;
-        bool gatewayOk = StatusOf(steps, "网关") == DiagStatus.Success;
-        bool publicOk = StatusOf(steps, "公网") == DiagStatus.Success;
-        bool dnsOk = StatusOf(steps, "DNS 解析") == DiagStatus.Success;
+        bool hasUpAdapter = StatusOf(steps, DiagStep.Adapter) == DiagStatus.Success;
+        bool gatewayTested = StatusOf(steps, DiagStep.Gateway) != DiagStatus.Skipped;
+        bool gatewayOk = StatusOf(steps, DiagStep.Gateway) == DiagStatus.Success;
+        bool publicOk = StatusOf(steps, DiagStep.PublicNet) == DiagStatus.Success;
+        bool dnsOk = StatusOf(steps, DiagStep.Dns) == DiagStatus.Success;
         bool proxyEnabled = _info.GetSystemProxy().Enabled;
 
         string conclusion;
@@ -306,6 +335,6 @@ public sealed class NetDiagnosticService : INetDiagnosticService
             : conclusion;
     }
 
-    private static DiagStatus StatusOf(IReadOnlyList<DiagStepResult> steps, string step)
-        => steps.FirstOrDefault(s => s.Step == step)?.Status ?? DiagStatus.Skipped;
+    private static DiagStatus StatusOf(IReadOnlyList<DiagStepResult> steps, string stepId)
+        => steps.FirstOrDefault(s => s.Step == stepId)?.Status ?? DiagStatus.Skipped;
 }

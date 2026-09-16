@@ -43,23 +43,35 @@ public partial class FileBackupViewModel
             return;
         }
 
-        // 按 SnapshotId 定位快照目录（目录名是时间戳，与 Id 不同名）
-        string? dir = manager.AllSnapshotDirs()
-            .FirstOrDefault(d => manager.ReadSnapshotLight(d)?.SnapshotId == SelectedSnapshot.SnapshotId);
-        if (dir is null)
+        // 🟠 v20-🟠-1（2026-09-16 核实）：同步命令没有 AsyncRelayCommand 的吞异常层，
+        // 而本方法体有三类可抛操作 —— `AllSnapshotDirs()` / `ReadSnapshotLight()`（IO）、
+        // `SnapshotPathOpener().Open()`（内部 `Process.Start`，explorer 被策略拦时抛 Win32Exception）。
+        // 与同文件 DeleteSnapshot 的同构处置（🟠 v18-🟡-2）对齐：try 从第一条可抛语句之前开始。
+        try
         {
-            Log("[备份] ❌ 未找到该快照的目录（可能已被手动删除）");
-            return;
-        }
+            // 按 SnapshotId 定位快照目录（目录名是时间戳，与 Id 不同名）
+            string? dir = manager.AllSnapshotDirs()
+                .FirstOrDefault(d => manager.ReadSnapshotLight(d)?.SnapshotId == SelectedSnapshot.SnapshotId);
+            if (dir is null)
+            {
+                Log("[备份] ❌ 未找到该快照的目录（可能已被手动删除）");
+                return;
+            }
 
-        SnapshotOpenResult result = new SnapshotPathOpener().Open(dir, manager.IsSnapshotDirAllowed);
-        Log(result.Kind switch
+            SnapshotOpenResult result = new SnapshotPathOpener().Open(dir, manager.IsSnapshotDirAllowed);
+            Log(result.Kind switch
+            {
+                SnapshotOpenResultKind.Opened => $"[备份] 已打开：{result.FullPath}",
+                SnapshotOpenResultKind.Denied => "[备份] ❌ 路径越界，拒绝打开（非本规则快照目录）",
+                SnapshotOpenResultKind.NotFound => "[备份] ❌ 快照目录不存在",
+                _ => "[备份] ❌ 路径非法，拒绝打开",
+            });
+        }
+        catch (Exception ex)
         {
-            SnapshotOpenResultKind.Opened => $"[备份] 已打开：{result.FullPath}",
-            SnapshotOpenResultKind.Denied => "[备份] ❌ 路径越界，拒绝打开（非本规则快照目录）",
-            SnapshotOpenResultKind.NotFound => "[备份] ❌ 快照目录不存在",
-            _ => "[备份] ❌ 路径非法，拒绝打开",
-        });
+            Log("[备份] ❌ 打开快照目录失败：" + ex.Message);
+            _logger.Error("打开快照目录失败", ex);
+        }
     }
 
     // ── 快照校验（2026-09-07 补齐旧版「校验」命令；Core SnapshotVerifier 重算哈希比对） ──

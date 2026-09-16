@@ -7,6 +7,9 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- 步骤登记表等 internal 契约对测试程序集开放（DiagStepContractTests 钉 Core↔UI 对位），
+         对齐 Core / FileBackup / MusicManager 等 7 处先例（2026-09-16 补：此前本模块是唯一漏网的） -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
   </ItemGroup>
 
   <ItemGroup>

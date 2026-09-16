@@ -120,6 +120,16 @@ public partial class FileBackupViewModel : ObservableObject
         // 而本 VM 是 DI 单例（FileBackupModule.AddSingleton）、主题切换只重建视图不重建 VM——
         // 不订阅就会让状态点停在旧主题配色（深色主题下浅色的绿/黄/红压在近黑底上）。
         // 重跑检查即可重取颜色（CheckVssAvailability 幂等，不做副作用）。
+        //
+        // 🟠 v20-🟠-2（2026-09-16 核实）：**本订阅有意不写退订**，理由与 MusicManagerViewModel 同口径：
+        // ① ThemeManager.ThemeChanged 是静态事件，退订的真实理由是"静态事件 → 闭包 → 长命对象被钉住"；
+        // ② 但本 VM 注册为 DI 单例（FileBackupModule.AddSingleton），生命周期与进程同长——
+        //    即使不退订，进程存活期间订阅者本就该在，**没有产生任何"早该被回收却没被回收"的对象**；
+        // ③ 进程退出时容器会在 App.OnExit（App.xaml.cs 的 `_services?.Dispose()`）随进程一起消失，
+        //    此刻退订不放回任何内存，收益为零，反倒引入"Dispose 中做什么"的额外约定。
+        // 真正必须退订的是**持有短命对象**的订阅者：TitleBarThemeWiring（静态事件 → 闭包 → Window，
+        // 迷你窗可反复开关，不退订即累积泄漏）—— 见 SystemToolkit.UI.Common/TitleBarThemeWiring.cs。
+        // 判据：凡订阅静态事件，先问「被闭包钉住的是长命单例，还是可反复创建销毁的对象」。
         ThemeManager.ThemeChanged += CheckVssAvailability;
     }
 
@@ -346,6 +356,7 @@ public partial class FileBackupViewModel : ObservableObject
         DailyTimeInput = string.IsNullOrWhiteSpace(value.Model.DailyTime) ? "03:00" : value.Model.DailyTime;
         UseVssInput = value.Model.UseVss;
         UseGlobalBackupRoot = value.Model.UseGlobalBackupRoot;
+        // fire-and-forget：不阻塞选中交互；受控子类可用 IsSchedulerQueryEnabled 关闭该查询。
         _ = RefreshScheduleRegisteredAsync();
         BackupRootInput = value.Model.BackupRoot;
         MaxSnapshotsInput = value.Model.MaxSnapshots.ToString();
@@ -868,10 +879,24 @@ public partial class FileBackupViewModel : ObservableObject
         await RefreshScheduleRegisteredAsync().ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 是否允许向系统查询「定时任务是否已注册」（默认 true，生产行为不变）。
+    /// <para>
+    /// 🔴 2026-09-16 新增：<see cref="OnSelectedRuleChanged"/> 会在**选中规则时自动**调用
+    /// <see cref="RefreshScheduleRegisteredAsync"/>，其下游是 <c>schtasks /query</c> —— 也就是说
+    /// 任何"选中一条规则"的单测都会去启动一个真实外部进程。
+    /// </para>
+    /// <para>
+    /// 实证：本沙箱里 <c>schtasks.exe</c> 被安全策略拦截 ⇒ 整轮 <c>dotnet test</c> 被 SIGTERM 打断，
+    /// 表现为"全量测试跑不完"而**不是**某条用例变红——极难定位。测试侧覆写为 false 即可隔离。
+    /// </para>
+    /// </summary>
+    protected virtual bool IsSchedulerQueryEnabled => true;
+
     /// <summary>查询当前选中规则的定时任务注册状态。</summary>
     private async Task RefreshScheduleRegisteredAsync()
     {
-        if (SelectedRule is null)
+        if (SelectedRule is null || !IsSchedulerQueryEnabled)
         {
             ScheduleRegistered = false;
             return;

@@ -15,6 +15,30 @@ namespace SystemToolkit.Tests.Backup;
 /// </summary>
 public class FileBackupViewModelCommandTests
 {
+    /// <summary>
+    /// 🔴 2026-09-16 新增：关掉"选中规则时自动查 schtasks"的受控子类。
+    /// <para>
+    /// 起因：<c>OnSelectedRuleChanged</c> 会 fire-and-forget 调 <c>schtasks /query</c>，
+    /// 使本文件每个 <c>vm.SelectedRule = …</c> 的用例都去启动真实外部进程。
+    /// 本沙箱里 schtasks.exe 被安全策略拦截 ⇒ 整轮 <c>dotnet test</c> 被 SIGTERM 打断，
+    /// 表象是"全量测试跑不完"而非某条用例红灯——定位代价极高。
+    /// </para>
+    /// <para>
+    /// 隔离后本文件**不再依赖**外部进程；定时任务注册查询本身由
+    /// <c>IsSchedulerQueryEnabled</c> 保持 production 默认 true，故生产行为零变化。
+    /// </para>
+    /// </summary>
+    private sealed class TestableVm : FileBackupViewModel
+    {
+        public TestableVm(BackupConfigService config, RuleManager rules)
+            : base(config, rules, new BackupService(config), new RestoreService(config),
+                   new RestoreService(config), new BackupTaskSchedulerService(new CommandRunner()))
+        {
+        }
+
+        protected override bool IsSchedulerQueryEnabled => false;
+    }
+
     private static FileBackupViewModel CreateVm()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"fb-vm-{Guid.NewGuid():N}");
@@ -27,8 +51,7 @@ public class FileBackupViewModelCommandTests
 
     /// <summary>用外部传入的 config/rules 构造 VM（供需要预置状态的用例共享实例）。</summary>
     private static FileBackupViewModel CreateVm(BackupConfigService config, RuleManager rules)
-        => new(config, rules, new BackupService(config), new RestoreService(config),
-            new RestoreService(config), new BackupTaskSchedulerService(new CommandRunner()));
+        => new TestableVm(config, rules);
 
     private static RuleRowVm Rule(string name = "T", bool enabled = true)
         => new(new BackupRule { RuleName = name, Enabled = enabled });
