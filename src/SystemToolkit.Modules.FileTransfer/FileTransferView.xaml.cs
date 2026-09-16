@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,7 +23,15 @@ public partial class FileTransferView : UserControl
         DataContext = vm;
         Loaded += OnLoaded;
         // 🟡 审查 v8-🟡-6：页面卸载（切 Tab / 主题切换重建视图）时停掉手机通道的 1s 配对码节拍
-        Unloaded += (_, _) => Vm.Mobile.PauseTimer();
+        // 🔴 v18：与 OnTabChecked 同一纪律——`Unloaded` 若在极端时序下早于 DataContext 赋值到达，
+        // 裸解引用会 NRE；判空后跳过（该场景下本就没有"正在跑的节拍"需要停）。
+        Unloaded += (_, _) =>
+        {
+            if (DataContext is FileTransferViewModel vm)
+            {
+                vm.Mobile.PauseTimer();
+            }
+        };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -220,12 +228,41 @@ public partial class FileTransferView : UserControl
 
     private void OnTabChecked(object sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { Tag: string tag }
-            && int.TryParse(tag, out int index))
+        // 🔴 v18 加固（与 AppManagerView/DriverManagerView/FileBackupView 同款解析期守卫）：
+        // `IsChecked="True"` 的 Checked 事件原则上可能在 XAML 解析期就派发，此刻 DataContext
+        // 尚未赋值、x:Name 字段也可能未就绪。
+        // 实测（2026-09-16 探针）：当前这版 XAML 的 `Checked` **并未**在 `InitializeComponent()`
+        // 期间派发（观测到 ALT-INIT-BEGIN → ALT-INIT-END → ALT-DC-ASSIGNED，全程无 OnTabChecked），
+        // 故现状不会 NRE；但一旦解析期真的派发（改 XAML 写法、子树挂载顺序变化等），
+        // 下面的 `Vm` 解引用**必然**抛 NullReferenceException（同轮反向验证已实证）。
+        // 属防御性加固：代价 1 次类型判断，换掉一整类"页面打不开"的隐患。
+        if (sender is not RadioButton { Tag: string tag }
+            || DataContext is not FileTransferViewModel vm
+            || DesktopPanel is null || MobilePanel is null
+            || !int.TryParse(tag, out int index))
         {
-            Vm.SelectedTabIndex = index;
-            DesktopPanel.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
-            MobilePanel.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
+
+        vm.SelectedTabIndex = index;
+        DesktopPanel.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
+        MobilePanel.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// 操作日志折叠开关（🟠 v18-🟠-3 采纳：此前 ToggleButton 只有视觉态、无处理器，是 no-op 按钮）。
+    /// <para>
+    /// ⚠️ <c>IsChecked="True"</c> 会在 <c>InitializeComponent</c> 解析期触发 <c>Checked</c>——
+    /// 此时 <c>LogHost</c> 尚未赋值，必须判空（XAML 构建期事件坑，与 FileBackupView 同款守卫）。
+    /// </para>
+    /// </summary>
+    private void OnLogToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Primitives.ToggleButton toggle && LogHost is not null)
+        {
+            bool expanded = toggle.IsChecked == true;
+            LogHost.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            toggle.Content = expanded ? "▾ 操作日志" : "▸ 操作日志";
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Windows;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.FileBackup;
 
@@ -8,6 +9,8 @@ public partial class PathInputWindow : Window
     internal PathInputWindow(string title, string defaultValue)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）
+        TitleBarThemeWiring.Attach(this);
         Title = title;
         InputBox.Text = defaultValue;
         Loaded += (_, _) => InputBox.Focus();

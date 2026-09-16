@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.DriverManager;
 
@@ -14,6 +15,8 @@ public sealed partial class DriverBackupWindow : Window
     private DriverBackupWindow(int thirdPartyCount, int selectedCount)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）
+        TitleBarThemeWiring.Attach(this);
 
         ScopeAllRadio.Content = $"全部第三方驱动（{thirdPartyCount} 个）——收件箱驱动不在导出范围";
         ScopeAllRadio.IsChecked = thirdPartyCount > 0;

@@ -143,8 +143,20 @@ public partial class MainWindow : Window
         // 令牌引用已全部 DynamicResource（自动刷新），但 BasedOn 不支持 DynamicResource
         // （WPF 硬限制，实测抛 XamlParseException）——这些派生样式需重建视图才会按新包解析。
         // 视图由模块 CreateView 产生、VM 为 DI 单例 → 重建只重置 UI 局部状态，业务状态保留。
+        // 🔴 2026-09-15 修正：上面这句"重建"在实现上曾是空操作——9 个模块的 View 全部注册为
+        //    **DI 单例**，CreateView 恒返回同一实例，而 `Content = 同一对象` 是 WPF 空操作
+        //    （依赖属性比较同值直接短路）⇒ 派生样式从未按新包重新解析，实机症状"切到浅色后
+        //    行文字白字压白底不可见"。两处修正：① 模块 View 注册改 Transient（见各 Module.cs）；
+        //    ② 宿主侧引入按主题作废的视图缓存（见 _viewCache 注释），重建才真正发生。
         ThemeManager.ThemeChanged += OnThemeChanged;
         Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
+
+        // 2026-09-15 深色主题加固：标题栏（非客户区）明暗跟随收敛到**共享接线器**——
+        // 与 8 个模块级弹窗走同一机制（此前这里是唯一一份手写接线，弹窗全没有）。
+        // 接线器负责三步：SourceInitialized 套一次 / ThemeChanged 跟随 / Closed 退订。
+        // 🔴 它与上面那条 OnThemeChanged 订阅**职责不同、互不替代**：上面那条管"重建当前视图"，
+        // 接线器只管"非客户区明暗"。两条都留，不要合并。
+        TitleBarThemeWiring.Attach(this);
 
         // 2026-09-12（v4 用户反馈）：内嵌迷你播放条整体移除——它悬浮时遮挡页面顶栏，
         // 且在所有页面常显。迷你控制改由音乐模块的**独立迷你窗**承载（主窗口外、置顶，
@@ -164,9 +176,38 @@ public partial class MainWindow : Window
     }
 
     private readonly IPlaybackBarSource? _playbackSource;
+
+    /// <summary>
+    /// 已装载过的模块视图缓存（模块 → 视图实例），生命周期 = 当前主题包。
+    /// <para>
+    /// <b>为什么要缓存</b>：模块 VM 是 DI 单例、视图只是无状态外壳（DataContext 由 VM 提供），
+    /// <see cref="SystemToolkit.Abstractions.IModule.CreateView"/> 的契约是「导航到该模块时创建一次、
+    /// 之后由宿主缓存」。缓存让「离开再回来」保留视图局部状态（滚动位置 / 选中行 / 展开态），
+    /// 与视图注册为 DI 单例时期的行为一致（否则每次导航都新建，等于顺手改掉了导航手感）。
+    /// </para>
+    /// <para>
+    /// 🔴 <b>为什么按主题 id 整批作废</b>：模块 XAML 以 <c>{StaticResource}</c> 引用的派生样式
+    /// （如 <c>Style BasedOn="{StaticResource ListItemRowTallStyle}"</c>）在<b>解析期</b>就绑定了
+    /// 主题包里的样式/画刷对象，而 <c>Style.BasedOn</c> 不支持 <c>DynamicResource</c>（WPF 硬限制）——
+    /// 只有**重新创建视图**（重新解析 XAML）才会按新主题包解析。不这么做时：切到浅色后行前景仍是
+    /// 深色包的白色（白字压白底不可见）、选中态仍是深色包的底色，且**此前访问过的页面**会永久停在
+    /// 旧包（2026-09-15 实机截图事故；同类站点共 63 处，清单见该轮变更记录）。
+    /// </para>
+    /// <para>
+    /// 启动期无需作废：App 在任何视图解析前就替换了令牌字典（<c>ThemeManager.ApplyCurrentForStartup</c>）。
+    /// 回归守卫：<c>tests/SystemToolkit.Tests/Architecture/ThemeSwitchViewRebuildGuardTests.cs</c>。
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<IModule, object> _viewCache = new();
+
+    /// <summary>缓存建立时的主题 id；与当前主题不一致即整批作废（见 <see cref="_viewCache"/>）。</summary>
+    private string? _viewCacheThemeId;
+
     /// <summary>主题切换 → 重新装载当前模块视图（继承主题包样式的控件随之刷新）。</summary>
     private void OnThemeChanged()
     {
+        // 标题栏的明暗跟随**不在这里**做了（2026-09-15 收敛到 TitleBarThemeWiring，见构造期注释）：
+        // 接线器自己订阅 ThemeManager.ThemeChanged，宿主这条订阅只负责重建视图。
         if (!IsLoaded)
         {
             return; // 启动期应用主题（App 在窗口之前调用）无需重建
@@ -208,7 +249,25 @@ public partial class MainWindow : Window
         // 🔴 F-1（审查 2026-09-06）：视图由模块自己创建，宿主不再按 Id 硬编码分派。
         //   旧实现是一串按模块 Id 字符串逐个比对的分支，新增/改名模块必须同步改这里，
         //   且漏改会静默退化成"建设中"占位页——三套架构守卫全都拦不住。
-        object? view = nav.Module.CreateView(_provider);
+        //
+        // 🔴 2026-09-15：先按主题作废缓存，再取（命中即复用）。
+        //   视图里的 {StaticResource} 派生样式绑定的是**解析期**的主题包对象，切主题后
+        //   只有重新创建视图才会按新包解析（why 见 _viewCache 注释）。
+        if (!string.Equals(_viewCacheThemeId, ThemeManager.CurrentThemeId, StringComparison.Ordinal))
+        {
+            _viewCache.Clear();
+            _viewCacheThemeId = ThemeManager.CurrentThemeId;
+        }
+
+        if (!_viewCache.TryGetValue(nav.Module, out object? view))
+        {
+            view = nav.Module.CreateView(_provider);
+            if (view is not null)
+            {
+                _viewCache[nav.Module] = view;
+            }
+        }
+
         if (view is null)
         {
             PageHost.Content = BuildUnderConstruction(nav.Module.DisplayName);

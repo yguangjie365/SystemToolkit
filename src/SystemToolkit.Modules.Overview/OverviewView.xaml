@@ -6,7 +6,11 @@
              Background="{DynamicResource Brush_Background}">
 
     <UserControl.Resources>
-        <FontFamily x:Key="IconFont">Segoe MDL2 Assets</FontFamily>
+        <!-- 🟡 v19 O-3（2026-09-16）：补 `Segoe Fluent Icons` 备选链 —— 此前只有 MDL2，
+             而本文件第 119 行的内联写法已带备选（`Segoe Fluent Icons, Segoe MDL2 Assets`），
+             说明规范已知、仅资源行漏了；`AppManagerView.xaml:11` 同款写法亦带备选。
+             Win11 起 Fluent 字形更全（新增图标只在 Fluent 里有），MDL2 留作降级。 -->
+        <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <Style x:Key="SectionHeader" TargetType="StackPanel">
             <Setter Property="Margin" Value="0,22,0,14"/>
         </Style>
@@ -194,7 +198,8 @@
                                                             <Setter Property="Foreground" Value="{DynamicResource Brush_Warning}"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding BadgeLevel}" Value="2">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+                                                            <!-- 2026-09-15 深色主题加固：小号危险文字走语义键（基色深包压卡片底 3.78 < 4.5） -->
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -493,27 +498,22 @@
                                   VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                                   controls:GridViewColumnSizing.AutoFillLastColumn="True">
                     <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Padding" Value="10,9"/>
-                            <Setter Property="MinHeight" Value="52"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="{DynamicResource Brush_TextPrimary}"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListViewItem">
-                                        <Border x:Name="Row" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush_Track}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
-                                            <GridViewRowPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
+                        <!-- 🟠 v19 O-1（2026-09-16）：改为 BasedOn 共享样式 —— 此前是**手写拷贝**，
+                             与 `AppManagerView` / `LanScanPanel` 的口径不一致，且丢了两个语义：
+                               ① **选中态完全丢失**：共享模板有 `IsSelected` 触发器
+                                  （`Brush_Selection` 底 + 左缘 3px `SelBar` 指示条，见
+                                  `Claude.Light.xaml:834-838`，含 🟠-4 审查的对比度修复），
+                                  手写版只复刻了 `IsMouseOver`；因是全量 `ControlTemplate` 替换
+                                  （非 `BasedOn`），WPF 默认主题的选中高亮也被一并丢弃
+                                  ⇒ **点行无任何视觉反馈**。
+                               ② **双内边距**：手写版给 `Border.Padding` 与 `GridViewRowPresenter.Margin`
+                                  都绑了 `TemplateBinding Padding`（`10,9` 被加两次 ⇒ 有效 `20,18`）；
+                                  共享模板只在后者用一次。
+                             ⚠️ 共享样式的 `Padding` 是 `10,10`（原手写版 `10,9`）⇒ 行高 +1px，
+                             这是恢复一致性的必要代价（字号/圆角零容忍，行高不在此列）。
+                             该样式来自主题包（`Claude.Light.xaml` / `Nvidia.Dark.xaml` 各一份），
+                             主题切换时随 `MergedDictionaries[0]` 整体重建 ⇒ `{StaticResource}` 会刷新，无静态失效问题。 -->
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource ListItemRowTallStyle}"/>
                     </ListView.ItemContainerStyle>
                     <ListView.View>
                         <GridView ColumnHeaderContainerStyle="{StaticResource AppListHeader}">

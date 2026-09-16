@@ -93,6 +93,9 @@
     <SolidColorBrush x:Key="Brush_OnAccent" Color="{StaticResource Color_OnDark}"/>
     <SolidColorBrush x:Key="Brush_SuccessText" Color="{StaticResource Color_Success}"/>
     <SolidColorBrush x:Key="Brush_DangerText" Color="{StaticResource Color_Danger}"/>
+    <!-- 实色危险填充上的前景（2026-09-15 深色主题加固）：与 Brush_OnDark 同值——浅包原本就是
+         它，取值不动即**零视觉变化**；该键存在的意义是把这个语义角色显式化（深包取值不同，见 Nvidia.Dark）。 -->
+    <SolidColorBrush x:Key="Brush_OnDanger" Color="{StaticResource Color_OnDark}"/>
     <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="#9CA3AF"/>
     <!-- 卡片封面遮罩（M-UI-2 游戏页审查处置：原在 GameManagerView 页面资源裸写 ARGB，
          违反「页面禁止裸写颜色」契约——收编进主题；游戏卡片封面模式可跨模块复用） -->
@@ -416,11 +419,14 @@
     <Style x:Key="RowDangerButton" TargetType="Button" BasedOn="{StaticResource RowActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 2026-09-15：文字改走语义键 Brush_DangerText——浅包该键与基色同值（#B91C1C），**零视觉变化**；
+             改的是接线而非颜色（深包同键为 #FF5C5C，基色不足 4.5，详见 Nvidia.Dark）。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource Brush_Danger}"/>
-                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                <!-- hover 切实色底：前景走 Brush_OnDanger（浅包与 Brush_OnDark 同值，零视觉变化） -->
+                <Setter Property="Foreground" Value="{StaticResource Brush_OnDanger}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -455,10 +461,10 @@
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
-    <!-- 表单错误提示 -->
+    <!-- 表单错误提示（2026-09-15：文字走语义键 Brush_DangerText，浅包同值零视觉变化） -->
     <Style x:Key="FieldError" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
@@ -685,11 +691,12 @@
     <Style x:Key="CompactDangerButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 同 RowDangerButton（2026-09-15）：文字走 DangerText、hover 前景走 OnDanger；浅包两键均与旧值同值，零视觉变化 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource Brush_Danger}"/>
-                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush_OnDanger}"/>
                 <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
             </Trigger>
         </Style.Triggers>
@@ -915,10 +922,12 @@
         </Setter>
     </Style>
     <Style x:Key="ToolkitMenuItemDanger" TargetType="MenuItem" BasedOn="{StaticResource ToolkitMenuItem}">
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 2026-09-15：文字走语义键 Brush_DangerText（浅包同值零视觉变化）；hover 底为 Brush_SurfaceAlt，
+             DangerText #B91C1C 在其上 5.82:1 达标（深包同键 6.09，详见 Nvidia.Dark） -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsHighlighted" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
             </Trigger>
         </Style.Triggers>
     </Style>

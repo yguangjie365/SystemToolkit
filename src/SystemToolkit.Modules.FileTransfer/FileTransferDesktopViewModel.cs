@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -1031,21 +1031,24 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [RelayCommand]
     private async Task SendToSelectedDeviceAsync()
     {
-        if (SelectedDevice is null)
-        {
-            _log("[互传] ⚠️ 请先选择目标设备");
-            return;
-        }
-
-        IReadOnlyList<string>? files = PickFiles?.Invoke();
-        if (files is not { Count: > 0 })
-        {
-            return;
-        }
-
-        // 🟡-9 审查 v10：命令体缺顶层 catch
+        // 🟠 v18-🟠-1（2026-09-16）：try 起点上移到方法体开头——`PickFiles?.Invoke()` 是 View 注入的
+        // 对话框回调，壳层异常（owner 已关闭 / 对话框初始化失败）会抛；原先裸在 try 之外 ⇒ 绕过命令体
+        // catch 直冲 AsyncRelayCommand 的吞异常路径 ⇒ **用户零反馈、日志零记录**。
+        // 与 DriverManagerViewModel.AddDriversAsync 的 V12-D2 修复同款（同类只修一处）。
         try
         {
+            if (SelectedDevice is null)
+            {
+                _log("[互传] ⚠️ 请先选择目标设备");
+                return;
+            }
+
+            IReadOnlyList<string>? files = PickFiles?.Invoke();
+            if (files is not { Count: > 0 })
+            {
+                return;
+            }
+
             await SendFilesToAsync(SelectedDevice.Model.IPAddress.ToString(), SelectedDevice.Model.TransferPort, files).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -1061,28 +1064,28 @@ public partial class FileTransferDesktopViewModel : ObservableObject
     [RelayCommand]
     private async Task SendToKnownPeerAsync()
     {
-        if (SelectedKnownPeer is null)
-        {
-            _log("[互传] ⚠️ 请先选择已知设备");
-            return;
-        }
-
-        if (!System.Net.IPAddress.TryParse(SelectedKnownPeer.Ip, out _)
-            || SelectedKnownPeer.Port is < 1 or > 65535)
-        {
-            _log("[互传] ⚠️ 已知设备的 IP/端口不合法");
-            return;
-        }
-
-        IReadOnlyList<string>? files = PickFiles?.Invoke();
-        if (files is not { Count: > 0 })
-        {
-            return;
-        }
-
-        // 🟡-9 审查 v10：命令体缺顶层 catch
+        // 🟠 v18-🟠-1（2026-09-16）：同 SendToSelectedDeviceAsync——`PickFiles?.Invoke()` 纳入 try。
         try
         {
+            if (SelectedKnownPeer is null)
+            {
+                _log("[互传] ⚠️ 请先选择已知设备");
+                return;
+            }
+
+            if (!System.Net.IPAddress.TryParse(SelectedKnownPeer.Ip, out _)
+                || SelectedKnownPeer.Port is < 1 or > 65535)
+            {
+                _log("[互传] ⚠️ 已知设备的 IP/端口不合法");
+                return;
+            }
+
+            IReadOnlyList<string>? files = PickFiles?.Invoke();
+            if (files is not { Count: > 0 })
+            {
+                return;
+            }
+
             await SendFilesToAsync(SelectedKnownPeer.Ip, SelectedKnownPeer.Port, files).ConfigureAwait(true);
         }
         catch (OperationCanceledException)

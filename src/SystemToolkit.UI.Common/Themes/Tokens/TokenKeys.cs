@@ -93,6 +93,12 @@ public static class TokenKeys
         public const string Brush_CoverFade = "Brush_CoverFade";
         public const string Brush_CoverOverlay = "Brush_CoverOverlay";
         public const string Brush_OnAccent = "Brush_OnAccent";
+        // ── 语义前景（2026-09-15 深色主题加固）：**实色危险填充上的前景**。
+        //    与 Brush_OnAccent 同族、同理由：危险按钮 hover 时底变为实色 Brush_Danger，
+        //    其上沿用 Brush_OnDark 在深包只有 4.22:1（< 正文 4.5）——"深色容器主文字"这个语义
+        //    本就不是"危险填充上的前景"，故显式建键，而不是把 OnDark 的取值往白里调
+        //    （后者会连带改动深色内容容器——日志/命令输出底——的文字观感）。
+        public const string Brush_OnDanger = "Brush_OnDanger";
         public const string Brush_SuccessText = "Brush_SuccessText";
         public const string Brush_DangerText = "Brush_DangerText";
         public const string Brush_SuccessOnDark = "Brush_SuccessOnDark";

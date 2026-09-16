@@ -54,9 +54,18 @@ public sealed class LogLine
     // 且 MainWindow 重建视图也不会让 static 构造函数重跑）。改为每次调用时查找
     // （TryFindResource 是字典查找，开销可忽略），与 ADR-005「全站跟随主题」一致。
     // fallback 硬编码值与主色板保持同步（M-UI-1）。
+    // 🟠 2026-09-15 深色主题加固（**危险色族**）：Error 档由基色改为语义键 Brush_DangerText。
+    // 原来是 Brush_Danger——它是本仓**最后一处**把危险基色当文字用的地方（四处主题包样式改走
+    // DangerText 之后仅剩此处），深包压卡片底仅 3.78、压深色容器底 4.10，均 < 正文 4.5；
+    // 换键后 5.75 / 6.24，浅包取值与基色同值故**零视觉变化**。不换的话，配对表里
+    // 「Brush_Danger 从此只作非文字」这条收窄就没有依据（grep 证据会漏掉本处）。
+    // ⚠️ 同档的 Success 仍走基色 Brush_Success——它属**另一族**（本轮的 3 条未达标项只涉及危险色族），
+    // 现状：深包压卡片底 3.78、压深色容器底 4.11（同样 < 4.5），整改路线与 Error 档完全相同
+    // （换 Brush_SuccessText）。此处**有意不动**，已写入本轮报告作为独立待办，避免"顺手改无关模块"。
+    // 注：`_` 档保持 Brush_TextMuted——它是"次要说明"语义（阈值 3:1），其配对已在守卫中登记。
     private static Brush ColorFor(string category) => category switch
     {
-        "Error" => ThemeBrush.Find("Brush_Danger", "#EF4444"),
+        "Error" => ThemeBrush.Find("Brush_DangerText", "#EF4444"),
         "Success" => ThemeBrush.Find("Brush_Success", "#10B981"),
         _ => ThemeBrush.Find("Brush_TextMuted", "#6B7280"),
     };

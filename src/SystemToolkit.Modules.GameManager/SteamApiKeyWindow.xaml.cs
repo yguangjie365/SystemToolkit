@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.GameManager;
 
@@ -23,6 +24,10 @@ public partial class SteamApiKeyWindow : Window
     public SteamApiKeyWindow(bool currentKeyConfigured)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）。
+        // 本窗是 WindowStyle=None + AllowsTransparency=True（自绘标题行），**不特判**——
+        // 无非客户区时 DWM 调用自然成为空操作，详见 TitleBarThemeWiring 类摘要。
+        TitleBarThemeWiring.Attach(this);
         // 没有可清的东西就不显示「清除」：禁用态在本主题下是文字几乎不可见的白框（实机截图确认），
         // 比隐藏更让人困惑（"这里有个空按钮"）。
         ClearButton.Visibility = currentKeyConfigured ? Visibility.Visible : Visibility.Collapsed;

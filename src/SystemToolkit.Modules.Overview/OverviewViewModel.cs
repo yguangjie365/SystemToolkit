@@ -56,9 +56,26 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     /// <summary>当前展示内容来自磁盘快照（副标题标注"采集中"，全量采集完成后清除）。</summary>
     private bool _showingSnapshot;
 
-    private static readonly string[] StatLabels = ["处理器", "显卡", "内存", "存储"];
-    private static readonly string[] StatNameEn = ["CPU", "GPU", "RAM", "DISK"];
-    private static readonly string[] StatUsageLabels = ["使用率", "使用率", "内存使用", "存储已用"];
+    /// <summary>
+    /// 概览卡的四项定义（🟠 v19 O-2，2026-09-16）。
+    /// <para>
+    /// 原先拆成三个**平行数组**（<c>StatLabels</c> / <c>StatNameEn</c> / <c>StatUsageLabels</c>），
+    /// 在 <see cref="RebuildFromData"/> 里靠**同一个下标 i** 隐式对齐 —— 任一处插删/换序都会让
+    /// 中英文名与用量标签**静默错位**（且三者都是字面量，编译器看不出）。合并为一个数组后，
+    /// 顺序唯一、增删只能在同一处发生。
+    /// </para>
+    /// <para>
+    /// ⚠️ 顺序即展示顺序，且 `Label` 是回 <c>data.HardwareStats</c> 捞数据的**匹配键**
+    /// （Core 侧按这些中文标签产出），**不得改动**。
+    /// </para>
+    /// </summary>
+    private static readonly (string Label, string NameEn, string UsageLabel)[] StatDefs =
+    [
+        ("处理器", "CPU", "使用率"),
+        ("显卡", "GPU", "使用率"),
+        ("内存", "RAM", "内存使用"),
+        ("存储", "DISK", "存储已用"),
+    ];
 
     /// <summary>「实时占用进程」卡每个榜单的行数（行数恒定 = 卡片高度不随排序跳动）。</summary>
     private const int TopRowCount = TopProcessSampler.DefaultTopCount;
@@ -381,11 +398,12 @@ public sealed partial class OverviewViewModel : INotifyPropertyChanged, IPausabl
     private void RebuildFromData(OverviewData data)
     {
         StatCards.Clear();
-        for (int i = 0; i < StatLabels.Length; i++)
+        for (int i = 0; i < StatDefs.Length; i++)
         {
-            string label = StatLabels[i];
+            // 🟠 v19 O-2：三数组并行改为单一定义元组，下标不再跨数组对齐
+            string label = StatDefs[i].Label;
             OverviewItem? stat = data.HardwareStats.FirstOrDefault(s => s.Label == label);
-            var card = new StatCardVm(IconFor(label), label, StatNameEn[i], StatUsageLabels[i])
+            var card = new StatCardVm(IconFor(label), label, StatDefs[i].NameEn, StatDefs[i].UsageLabel)
             {
                 Percent = stat?.Percent,
             };

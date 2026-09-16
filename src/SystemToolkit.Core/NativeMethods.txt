@@ -23,3 +23,15 @@ ADDRESS_FAMILY
 // 且旧快照被保留策略删除后数据依然存活（.NET 10 **没有** CreateHardLink，
 // 只有 CreateSymbolicLink，而符号链接在旧快照被删后会指向空洞 = 静默丢数据）。
 CreateHardLink
+
+// ── 窗口外框（深色主题加固 2026-09-15）─────────────────────────────────────
+// 用途：让**非客户区**（标题栏 / 边框）跟随主题明暗。WPF 只管客户区，切到
+// Nvidia.Dark 后标题栏仍是系统浅色 —— 这是深色下可见度最高的不一致（ADR-005
+// 「两包各自独立达标」在宿主窗口上的缺口）。
+// 属性号：DWMWA_USE_IMMERSIVE_DARK_MODE = 20 —— 官方枚举（dwmapi.h 文档页 2026-09-15 实查）
+// 与 Win32 metadata **均只有这一个成员**。工程 TFM 为 net10.0-windows（未钉最低平台版本），
+// app.manifest 的 supportedOS 只声明 Windows 10/11；更早系统上社区常用的 19（1809–1903）
+// 未获官方文档佐证，按 AGENTS §二·五「禁止凭记忆写常量」不写——旧系统调用失败时静默降级
+// （标题栏保持系统配色 + 一条 Warn，见 WindowTitleBarTheme）。
+DwmSetWindowAttribute
+DWMWINDOWATTRIBUTE

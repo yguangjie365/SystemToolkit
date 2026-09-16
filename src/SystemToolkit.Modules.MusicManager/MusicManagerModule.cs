@@ -79,7 +79,12 @@ public sealed class MusicManagerModule : ModuleBase
             credentials: sp.GetService<IOnlineCredentialStore>(),
             searchHistory: sp.GetService<ISearchHistoryStore>(),
             navigationModule: this));
-        services.AddSingleton<MusicManagerView>();
+        // 🔴 视图必须 Transient：宿主在主题切换后经 CreateView 重建当前页，
+        //    以重新解析 {StaticResource} 派生样式（Style.BasedOn 不支持 DynamicResource）。
+        //    View 注册为单例时 CreateView 恒返回同一实例 → PageHost.Content 赋同一对象是 WPF 空操作
+        //    → 视图停留在旧主题包的颜色上（2026-09-15 实机“浅色下白字压白底”事故）。
+        //    视图是无状态壳（DataContext 由 VM 提供），重建只重置 UI 局部状态。
+        services.AddTransient<MusicManagerView>();
 
         // MUSIC-7：Shell 底部迷你播放条数据源——同一 VM 单例的桥接注册。
         // 模块禁用（V1-008 落地后）时本注册随 RegisterServices 一并不存在，

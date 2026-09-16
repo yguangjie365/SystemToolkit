@@ -1,4 +1,4 @@
-<UserControl x:Class="SystemToolkit.Modules.FileBackup.FileBackupView"
+﻿<UserControl x:Class="SystemToolkit.Modules.FileBackup.FileBackupView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SystemToolkit.Modules.FileBackup"
@@ -10,7 +10,6 @@
          新增「备份全部」（串行备份所有启用规则）。 -->
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <local:EnabledToBrushConverter x:Key="EnabledBrush"/>
         <local:InverseBoolConverter x:Key="Inverse"/>
         <!-- 快照表头（对齐 AppManagerView.AppListHeader 口径；页面级局部资源） -->
         <Style x:Key="SnapHeader" TargetType="GridViewColumnHeader">
@@ -41,7 +40,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsFailedStatus}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -70,7 +69,7 @@
                     <Setter Property="Foreground" Value="{DynamicResource Brush_Success}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsChecksumFailed}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -155,8 +154,22 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding RuleName}" FontSize="{DynamicResource Font_SizeBodySm}" FontWeight="Bold" Foreground="{DynamicResource Brush_TextPrimary}"/>
-                                            <TextBlock Text="{Binding EnabledText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="8,0,0,0"
-                                                       Foreground="{Binding Enabled, Converter={StaticResource EnabledBrush}}"/>
+                                            <!-- 🟠 v18-🟠-1（2026-09-16）：原先 `Foreground="{Binding Enabled, Converter=EnabledBrush}"`。
+                                                 RuleRowVm.Enabled 是 getter-only 派生属性、不实现 INPC ⇒ 主题切换时**绑定源不变化**
+                                                 ⇒ Convert 不会重跑 ⇒ 徽标颜色停在旧主题画刷（深色主题下浅色成功色压近黑底几乎不可见），
+                                                 直到 ReloadRules() 重建行 VM 才跟上。改 DataTrigger + DynamicResource 后由主题字典直接驱动刷新。 -->
+                                            <TextBlock Text="{Binding EnabledText}" FontSize="{DynamicResource Font_SizeMicro}" Margin="8,0,0,0" Foreground="{DynamicResource Brush_TextMuted}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush_TextMuted}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Enabled}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush_SuccessText}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                         </StackPanel>
                                         <TextBlock Text="{Binding Description}" FontSize="{DynamicResource Font_SizeMicro}"
                                                    Margin="0,2,0,0"

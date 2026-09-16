@@ -8,7 +8,11 @@
         MaxWidth="1920" MaxHeight="1200"
         WindowStartupLocation="CenterScreen"
         WindowState="Normal"
-        FontFamily="{DynamicResource Font_Body}">
+        FontFamily="{DynamicResource Font_Body}"
+        Background="{DynamicResource Brush_Background}">
+    <!-- 根 Window 也要设 Background（2026-09-15）：此前只有内层 Grid 设了令牌，
+         深色主题下窗口自身仍是系统白底——布局未完成的一帧与 Grid 未覆盖的边缘会闪白。
+         其余 15 个视图/对话框根元素均已设此令牌，此处补齐口径。 -->
     <Grid Background="{DynamicResource Brush_Background}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220"/>

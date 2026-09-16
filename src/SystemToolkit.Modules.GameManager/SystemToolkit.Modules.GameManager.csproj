@@ -14,6 +14,10 @@
   <ItemGroup>
     <ProjectReference Include="..\SystemToolkit.Core\SystemToolkit.Core.csproj" />
     <ProjectReference Include="..\SystemToolkit.Abstractions\SystemToolkit.Abstractions.csproj" />
+    <!-- 2026-09-15 深色主题加固：SteamApiKeyWindow 接入共享接线器 TitleBarThemeWiring
+         （标题栏跟随主题明暗）。「模块 → UI.Common」是 DependencyGuard 白名单内的合法方向
+         （共享控件与令牌），其余 8 个模块早已如此。 -->
+    <ProjectReference Include="..\SystemToolkit.UI.Common\SystemToolkit.UI.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -92,6 +92,13 @@
     <SolidColorBrush x:Key="Brush_OnAccent" Color="{StaticResource Color_Background}"/>
     <SolidColorBrush x:Key="Brush_SuccessText" Color="#7ED63F"/>
     <SolidColorBrush x:Key="Brush_DangerText" Color="#FF5C5C"/>
+    <!-- 实色危险填充上的前景（2026-09-15 深色主题加固，与浅色包同键对称接线）：
+         深包 Color_Danger = #E52020，其上取纯白 → **4.61:1** 达正文阈值；
+         旧接线的 Brush_OnDark(#F5F5F5) 只有 **4.22:1**（< 4.5）——而 OnDark 的语义是
+         「深色内容容器主文字」（日志/命令输出底），本就不是「危险填充上的前景」，
+         故该语境必须独立语义键，而不是把 OnDark 往白里调（那会连带改动深色容器的文字观感）。
+         浅色包同名键取 Color_OnDark（与其旧值同值，零视觉变化）。 -->
+    <SolidColorBrush x:Key="Brush_OnDanger" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Brush_OnDarkMuted" Color="{StaticResource Color_Disabled}"/>
     <LinearGradientBrush x:Key="Brush_CoverFade" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#00000000" Offset="0"/>
@@ -414,11 +421,15 @@
     <Style x:Key="RowDangerButton" TargetType="Button" BasedOn="{StaticResource RowActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 2026-09-15：文字改走语义键 Brush_DangerText（深包 #FF5C5C：卡片底 5.75:1、Soft 底 5.28:1，均 ≥4.5）；
+             基色 #E52020 作小号文字仅 3.78 未达标——基色留给边框/填充（非文字 3:1 档），
+             浅色包同处已对称处理（改变的是接线，不是色值）。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource Brush_Danger}"/>
-                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                <!-- hover 切实色危险底：前景走 Brush_OnDanger（#FFFFFF on #E52020 = 4.61:1；旧接线 Brush_OnDark 仅 4.22） -->
+                <Setter Property="Foreground" Value="{StaticResource Brush_OnDanger}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -456,10 +467,11 @@
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
-    <!-- 表单错误提示 -->
+    <!-- 表单错误提示（2026-09-15：文字走语义键 Brush_DangerText——深包 #FF5C5C on Surface 5.75:1；
+         基色 #E52020 仅 3.78，不足以作小号文字。浅色包同处已对称处理） -->
     <Style x:Key="FieldError" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
@@ -691,11 +703,13 @@
     <Style x:Key="CompactDangerButton" TargetType="Button" BasedOn="{StaticResource CompactActionButton}">
         <Setter Property="Background" Value="{StaticResource Brush_DangerSoft}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 同 RowDangerButton（2026-09-15）：文字走 DangerText、hover 前景走 OnDanger；
+             边框仍取基色 Brush_Danger（非文字用途）。浅色包同处已对称处理。 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource Brush_Danger}"/>
-                <Setter Property="Foreground" Value="{StaticResource Brush_OnDark}"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush_OnDanger}"/>
                 <Setter Property="BorderBrush" Value="{StaticResource Brush_Danger}"/>
             </Trigger>
         </Style.Triggers>
@@ -921,10 +935,12 @@
         </Setter>
     </Style>
     <Style x:Key="ToolkitMenuItemDanger" TargetType="MenuItem" BasedOn="{StaticResource ToolkitMenuItem}">
-        <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+        <!-- 2026-09-15：文字走语义键 Brush_DangerText（深包 #FF5C5C）；hover 底为 Brush_SurfaceAlt(#141414)，
+             DangerText 在其上 6.09:1 达标（常态卡片底 5.75:1）。浅色包同处已对称处理 -->
+        <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
         <Style.Triggers>
             <Trigger Property="IsHighlighted" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource Brush_Danger}"/>
+                <Setter Property="Foreground" Value="{StaticResource Brush_DangerText}"/>
             </Trigger>
         </Style.Triggers>
     </Style>

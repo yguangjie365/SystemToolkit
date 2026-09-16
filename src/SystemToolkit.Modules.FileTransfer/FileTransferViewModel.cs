@@ -40,7 +40,7 @@ public partial class FileTransferViewModel : ObservableObject
         ILogger effectiveLogger = logger ?? NullLogger.Instance;
         // webServer 一并交给桌面 VM（W2c）：手机发来的文本要走它落到剪贴板，「发到手机」也靠它推送
         Desktop = new FileTransferDesktopViewModel(discovery, transfer, history, Log, effectiveLogger, dispatcher, webServer);
-        Mobile = new FileTransferMobileViewModel(webServer, pairing, Log, dispatcher);
+        Mobile = new FileTransferMobileViewModel(webServer, pairing, Log, dispatcher, effectiveLogger);
     }
 
     public void AddLog(string message) => LogFeed.Append(LogLines, message, LogFeed.DefaultMaxLines);

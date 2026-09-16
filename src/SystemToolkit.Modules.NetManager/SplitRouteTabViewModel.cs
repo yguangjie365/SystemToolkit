@@ -110,6 +110,15 @@ public partial class SplitRouteTabViewModel : ObservableObject
     // ══════════════ 状态区 ══════════════
 
     [ObservableProperty]
+    // 🟠 v19 N-1（2026-09-16）：补齐入口侧通知——`CanApply = !IsBusy && SelectedWan is not null
+    // && SelectedLan is not null && 两网卡不同名`，三个依赖项里 `SelectedWan`/`SelectedLan`
+    // 已挂本特性（见上方选择区），**唯 `IsBusy` 漏挂** —— 上轮 v11~v14 统一整改在其余
+    // 5 个 Tab（LanScan/NetDiagnostics/NetOptimize/NetRepair/NetSettings）都补了，
+    // 本 VM 是漏网的第 6 个。
+    // 后果同 G-🟠-1：`ApplyAsync` 置 `IsBusy = true` 时按钮保持可点，而命令体没有
+    // `if (IsBusy)` 守卫（`RelayCommand.Execute` 不查 `CanExecute`）⇒ 双击必然并发执行。
+    // 命令结束时的手工通知（`RefreshApplyCanExecute`）保留（双通知无害）。
+    [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     private bool _isBusy;
 
     [ObservableProperty]

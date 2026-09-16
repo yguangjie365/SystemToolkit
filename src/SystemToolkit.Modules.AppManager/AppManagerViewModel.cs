@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -393,17 +393,24 @@ public partial class AppManagerViewModel : ObservableObject
     /// <summary>右键菜单：忽略单个软件。</summary>
     private void IgnoreSingle(WingetPackageVm vm)
     {
-        SetIgnore(vm, ignored: true);
+        // 🟡 v18-🟡-1（2026-09-16）：消费 SetIgnore 返回值区分文案——与 IgnoreSelected 对齐。
+        // 原先丢弃返回值，落盘失败时仍显示"已忽略：X"，用户易读成"已持久化"（实际仅本次运行有效）。
+        bool saved = SetIgnore(vm, ignored: true);
         RefreshViews();
-        AddLog($"已忽略：{vm.Name}（不再提示其更新；批量安装/恢复环境时会跳过）");
+        AddLog(saved
+            ? $"已忽略：{vm.Name}（不再提示其更新；批量安装/恢复环境时会跳过）"
+            : $"已忽略：{vm.Name}（⚠ 未持久化，重启后失效）");
     }
 
     /// <summary>右键菜单：取消忽略。</summary>
     private void UnignoreSingle(WingetPackageVm vm)
     {
-        SetIgnore(vm, ignored: false);
+        // 🟡 v18-🟡-1：同 IgnoreSingle，消费 SetIgnore 返回值。
+        bool saved = SetIgnore(vm, ignored: false);
         RefreshViews();
-        AddLog($"已取消忽略：{vm.Name}");
+        AddLog(saved
+            ? $"已取消忽略：{vm.Name}"
+            : $"已取消忽略：{vm.Name}（⚠ 未持久化，重启后失效）");
     }
 
     /// <summary>批量栏：忽略所选（一次落盘，避免逐条写盘）。</summary>
@@ -491,14 +498,18 @@ public partial class AppManagerViewModel : ObservableObject
             return;
         }
 
-        string? path = PickReportPath?.Invoke();
-        if (string.IsNullOrEmpty(path))
-        {
-            return;
-        }
-
+        // 🟠 v18-🟠-1（2026-09-16）：`PickReportPath?.Invoke()` 移入 try —— 与 ExportList 的
+        // V11-A4 修复同款（回调内部抛异常会直冲 UI 线程、用户零反馈、日志页也不新增条目）。
+        // 同类只修一处：`ExportList`（AppManagerViewModel.Manual.cs）已修，本处此前未同步。
+        string? path = null;
         try
         {
+            path = PickReportPath?.Invoke();
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
             byte[] bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
                 .GetBytes(InstallHistoryCsv.Build(InstallHistory));
             AtomicFile.WriteAllBytes(path, bytes);
@@ -506,7 +517,7 @@ public partial class AppManagerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.Error("导出安装历史失败：" + path, ex);
+            _logger.Error("导出安装历史失败：" + (path ?? "(未取到路径)"), ex);
             AddLog("导出安装历史失败：" + ex.Message);
         }
     }

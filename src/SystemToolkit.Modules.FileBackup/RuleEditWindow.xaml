@@ -14,7 +14,8 @@
         <!-- 🟠 V12-F5：保留快照输入的就地校验提示（样式化以避免元素级裸间距；无错时整行收起）。
              输入改由字符串承载后，非法值不再被 WPF 的类型转换静默吞掉。 -->
         <Style x:Key="MaxSnapshotsError" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush_Danger}"/>
+            <!-- 2026-09-15 深色主题加固：小号危险文字走语义键 Brush_DangerText（基色深包压卡片底仅 3.78 < 4.5） -->
+            <Setter Property="Foreground" Value="{DynamicResource Brush_DangerText}"/>
             <Setter Property="FontSize" Value="{DynamicResource Font_SizeMicro}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,2,0,0"/>

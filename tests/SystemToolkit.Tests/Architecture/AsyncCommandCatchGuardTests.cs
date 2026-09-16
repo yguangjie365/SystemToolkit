@@ -85,40 +85,58 @@ public class AsyncCommandCatchGuardTests
                 }
                 if (bodyStart < 0)
                 {
-                    continue; // 表达式体成员（=>）：单表达式无法承载 try/catch，不在守卫范围
+                    // 🔴 v19 OL-1（2026-09-16）：表达式体（`=>`）命令**不再静默跳过**。
+                    // 旧实现直接 `continue`，使这类命令长期处于扫描盲区——表达式体自身无法承载
+                    // try/catch，但它转发的目标方法若也没有兜底，异常同样会被 AsyncRelayCommand 吞掉。
+                    // 实测全仓仅 1 处（NetDiagnosticsTabViewModel.RunDiagnosticsAsync，其转发的
+                    // RunDiagnosticsSafeAsync 有完整 try/catch/finally ⇒ 已加 guard-exempt 注释）。
+                    // 新判据：表达式体**一律入 current**，靠基线/豁免注释显式声明——
+                    // 「不在表里 = 红」，而非「不在扫描面 = 永远绿」。
+                    // （与 AppManagerOperationGateTests 白名单制、UiTokenRatchet 名单外静默同一病灶族。）
+                    if (!lines[sigLine].Contains("=>", StringComparison.Ordinal))
+                    {
+                        continue; // 既无 { 也无 =>：签名跨行等罕见形态，维持跳过
+                    }
                 }
 
                 int depth = 0;
                 int bodyEnd = lines.Length - 1;
                 bool bodyEndFound = false;
                 bool hasTopCatch = false; // v6 O-1c：只认**方法体顶层**（深度=1）的 catch
-                for (int j = cursor; j < lines.Length && !bodyEndFound; j++)
+                if (bodyStart >= 0)
                 {
-                    int from = j == cursor ? bodyStart : 0;
-                    for (int c = from; c < lines[j].Length; c++)
+                    for (int j = cursor; j < lines.Length && !bodyEndFound; j++)
                     {
-                        if (lines[j][c] == '{')
+                        int from = j == cursor ? bodyStart : 0;
+                        for (int c = from; c < lines[j].Length; c++)
                         {
-                            depth++;
-                        }
-                        else if (lines[j][c] == '}')
-                        {
-                            depth--;
-                            if (depth == 0)
+                            if (lines[j][c] == '{')
                             {
-                                bodyEnd = j;
-                                bodyEndFound = true;
-                                break;
+                                depth++;
+                            }
+                            else if (lines[j][c] == '}')
+                            {
+                                depth--;
+                                if (depth == 0)
+                                {
+                                    bodyEnd = j;
+                                    bodyEndFound = true;
+                                    break;
+                                }
+                            }
+                            else if (BodyHasTopLevelCatch(lines[j], c, depth))
+                            {
+                                // 嵌套 lambda / 局部函数内的 catch（深度>1）不算数——
+                                // v6 O-1c 实证：FTDVM.StopTransferAsync 的嵌套兜底曾骗过旧判据，
+                                // 让守卫把无兜底命令从基线自动摘除（棘轮假性收紧）
+                                hasTopCatch = true;
                             }
                         }
-                        else if (BodyHasTopLevelCatch(lines[j], c, depth))
-                        {
-                            // 嵌套 lambda / 局部函数内的 catch（深度>1）不算数——
-                            // v6 O-1c 实证：FTDVM.StopTransferAsync 的嵌套兜底曾骗过旧判据，
-                            // 让守卫把无兜底命令从基线自动摘除（棘轮假性收紧）
-                            hasTopCatch = true;
-                        }
                     }
+                }
+                else
+                {
+                    bodyEnd = sigLine; // 表达式体：方法体即签名行本身
                 }
 
                 string body = string.Join("\n", lines[cursor..(bodyEnd + 1)]);

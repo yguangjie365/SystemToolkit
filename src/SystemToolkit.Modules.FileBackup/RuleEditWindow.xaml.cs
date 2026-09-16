@@ -1,4 +1,5 @@
 using System.Windows;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.FileBackup;
 
@@ -14,6 +15,8 @@ public partial class RuleEditWindow : Window
     internal RuleEditWindow(FileBackupViewModel vm)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）
+        TitleBarThemeWiring.Attach(this);
         DataContext = vm;
     }
 

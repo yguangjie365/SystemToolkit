@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -7,6 +7,10 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- 弹窗/VM internal 构造对测试程序集开放（冒烟守卫直测），对齐 Core / FileBackup / DriverManager 先例。
+         🔴 v18（2026-09-16）：本模块此前**缺**此声明——同架构层的 5 个模块都有，导致 FileTransfer 的
+         internal 成员无法被测试直接构造（可测性口径不一致）。补上后回归测试才能直构 VM/Window。 -->
+    <InternalsVisibleTo Include="SystemToolkit.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1001,34 +1001,68 @@ public partial class MusicManagerViewModel : ObservableObject
             return;
         }
 
-        OnlineSongUrlResult result = await _urlResolver.ResolveAsync(song.Online!, PreferredQuality);
-        if (seq != _playSeq)
+        // 🔴 v19 M-2/M-3：解析与代理两段此前完全裸露——异常沿栈逃逸到命令壳
+        // （`NextAsync`/`PreviousAsync`/`SetQualityAsync`/`PlayFromSearchAsync` 均无 try），
+        // 被 `AsyncRelayCommand` 吞掉 = 静默失败。
+        // 修在根因层而非各命令壳：这是调用链上唯一的公共必经点，逐个包 try 会造成
+        // AutoSkipOrStopOnlineAsync → NextAsync 递归链上每层重复记一次日志。
+        // 下方 engine.PlayAsync 原有的 try/catch 保持不动（它另有 AutoSkip 语义）。
+        OnlineSongUrlResult result;
+        string playUrl;
+        try
         {
-            return; // 解析期间用户已切走：过期请求放弃（playSongSeq 竞态防护核心点）
-        }
-
-        if (!result.Playable)
-        {
-            HandleOnlineUnplayable(song, result);
-            return;
-        }
-
-        if (string.IsNullOrEmpty(result.Url))
-        {
-            // 结果标记可播但无 URL：按不可播处理（保守路径，跳过策略统一出口）
-            HandleOnlineUnplayable(song, new OnlineSongUrlResult
+            result = await _urlResolver.ResolveAsync(song.Online!, PreferredQuality);
+            if (seq != _playSeq)
             {
-                Playable = false,
-                Reason = "error",
-                Message = "播放地址为空",
-            });
+                return; // 解析期间用户已切走：过期请求放弃（playSongSeq 竞态防护核心点）
+            }
+
+            if (!result.Playable)
+            {
+                HandleOnlineUnplayable(song, result);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(result.Url))
+            {
+                // 结果标记可播但无 URL：按不可播处理（保守路径，跳过策略统一出口）
+                HandleOnlineUnplayable(song, new OnlineSongUrlResult
+                {
+                    Playable = false,
+                    Reason = "error",
+                    Message = "播放地址为空",
+                });
+                return;
+            }
+
+            playUrl = await _audioProxy.GetProxiedAudioUrlAsync(result.Url);
+            if (seq != _playSeq)
+            {
+                return; // 代理包装期间同样可能过期
+            }
+        }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            if (seq == _playSeq)
+            {
+                ScanStatusText = "操作已取消或网络超时。";
+            }
+
             return;
         }
-
-        string playUrl = await _audioProxy.GetProxiedAudioUrlAsync(result.Url);
-        if (seq != _playSeq)
+        catch (Exception ex)
         {
-            return; // 代理包装期间同样可能过期
+            // 解析/代理失败（平台接口变更、网络断流、版权受限接口报错）统一走跳过策略，
+            // 与下方「引擎打开失败」同出口——在线播放的失败语义只有一条路。
+            if (seq != _playSeq)
+            {
+                return; // 过期请求：不回写状态、不触发自动切曲（不得干扰当前代）
+            }
+
+            ScanStatusText = $"在线播放失败：{song.Name}（{ex.Message}）";
+            _log.Warn($"[Music] 在线播放解析失败：{song.Name}（{ex.Message}）");
+            await AutoSkipOrStopOnlineAsync(engine, $"解析失败：{ex.Message}");
+            return;
         }
 
         try

@@ -1,5 +1,6 @@
 using System.Windows;
 using SystemToolkit.Core.Software.Models;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.AppManager;
 
@@ -23,6 +24,9 @@ public partial class SoftwareEditWindow : Window
     private SoftwareEditWindow()
     {
         InitializeComponent();
+        // 标题栏（非客户区）跟随主题明暗：句柄就绪时套一次 + 主题切换跟随 + 关闭时退订，
+        // 三件事由共享接线器统一负责（2026-09-15 深色主题加固，弹窗此前全是系统浅色标题栏）。
+        TitleBarThemeWiring.Attach(this);
     }
 
     /// <summary>editItem：WingetPackage / ManualSoftware / null（新增手动软件）。返回 null = 取消。</summary>

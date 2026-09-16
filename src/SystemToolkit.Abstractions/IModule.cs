@@ -34,6 +34,15 @@ public interface IModule
     /// <summary>
     /// 创建本模块的主视图（宿主导航到该模块时调用一次，之后由宿主缓存）。
     /// <para>
+    /// 🔴 <b>实现契约（2026-09-15 补）</b>：每次调用都必须返回<b>新的视图实例</b>。
+    /// 宿主在主题切换时会作废缓存并重新调用本方法重建当前页——模块 XAML 里以 <c>{StaticResource}</c>
+    /// 引用的派生样式（<c>Style.BasedOn</c> 不支持 <c>DynamicResource</c>）只在<b>解析期</b>绑定主题包对象，
+    /// 只有重建视图才会按新主题包解析。返回缓存实例会让"重建"变成空操作，视图永久停在旧主题包
+    /// （2026-09-15 实机事故：切到浅色后行文字白字压白底不可见）。故模块的 View 在 DI 中必须注册为
+    /// <c>AddTransient</c>（VM 仍为 <c>AddSingleton</c>，业务状态由 VM 保留）。
+    /// 机器约束：<c>tests/SystemToolkit.Tests/Architecture/ThemeSwitchViewRebuildGuardTests.cs</c>。
+    /// </para>
+    /// <para>
     /// 🔴 <b>为什么返回 <see cref="object"/> 而不是 <c>FrameworkElement</c></b>：
     /// 本工程（Abstractions）目标框架是 <c>net10.0</c>、不引用 WPF，而 WPF 类型只在
     /// <c>net10.0-windows</c> 可用。把视图类型写在契约上会强迫 Core / Infrastructure

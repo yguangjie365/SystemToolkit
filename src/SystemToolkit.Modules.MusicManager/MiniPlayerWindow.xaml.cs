@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using SystemToolkit.Abstractions;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.MusicManager;
 
@@ -19,6 +20,11 @@ public partial class MiniPlayerWindow : Window
     internal MiniPlayerWindow(IPlaybackBarSource source, Window anchor)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）。
+        // 本窗是 WindowStyle=None + AllowsTransparency=True（无系统标题栏）——调用**不特判**：
+        // 无非客户区时 DWM 属性无处可画，自然成为空操作；而"无标题栏就跳过"这条策略写进代码后，
+        // 哪天窗口改回有边框形态，接线不会自动跟上（静默退化）。本窗可反复开关，退订由接线器负责。
+        TitleBarThemeWiring.Attach(this);
         DataContext = source;
         _anchor = anchor;
         Closed += (_, _) =>

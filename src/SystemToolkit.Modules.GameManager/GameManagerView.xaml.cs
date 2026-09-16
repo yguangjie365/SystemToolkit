@@ -10,6 +10,24 @@ public partial class GameManagerView : UserControl
 {
     private readonly GameManagerViewModel _vm;
 
+    /// <summary>🟠 v19 G-1（2026-09-16）：Loaded 幂等闸。
+    /// <para>
+    /// 批② 把 View 改 <c>AddTransient</c>（VM 仍为 Singleton）后，主题切换经
+    /// <c>ThemeManager</c> 重建视图 ⇒ 新实例的 <c>Loaded</c> 会再次触发本处理器。
+    /// 原先的唯一防线是 <c>_vm.IsLoading</c>，而它挂在**单例 VM** 上、只在
+    /// <c>LoadAsync</c> 执行期间为 true（加载完成后恒 false）⇒ **第二次 Loaded 必然
+    /// 重新执行整轮 Steam 库扫描**（磁盘遍历 + 封面加载），与
+    /// <c>NetManagerView</c>/<c>FileTransferView</c>/<c>AppManagerView</c> 等的
+    /// <c>_loaded</c> 口径不一致。
+    /// </para>
+    /// <para>
+    /// 🔴 实测口径（同 <c>NetManagerView.OnLoaded</c> 的 v16/v17 注释）：
+    /// <c>ContentControl.Content</c> 替换的顺序是 <c>OLD-Unloaded → NEW-Loaded</c>，
+    /// 且新视图是**新实例**（本字段随之复位）⇒ 重建后仍会正常执行一次首屏加载。
+    /// </para>
+    /// </summary>
+    private bool _loaded;
+
     public GameManagerView(GameManagerViewModel vm, ILogger? logger = null)
     {
         InitializeComponent();
@@ -25,10 +43,12 @@ public partial class GameManagerView : UserControl
 
     private void OnViewLoaded(object sender, RoutedEventArgs e)
     {
-        if (_vm.IsLoading)
+        if (_vm.IsLoading || _loaded)
         {
-            return; // 加载中重复触发（页面重入）直接跳过
+            return; // 加载中重复触发（页面重入）/ 同一视图实例二次 Loaded 直接跳过
         }
+
+        _loaded = true;
 
         // 🟠 V13-G4（2026-09-14 审查）：同步事件处理器原无任何兜底——`LoadCommand.Execute` 一旦抛
         // （AsyncRelayCommand 之外的加载期分支、绑定激活失败等），异常直冲 DispatcherUnhandledException，

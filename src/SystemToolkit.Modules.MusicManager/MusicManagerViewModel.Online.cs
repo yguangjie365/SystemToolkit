@@ -577,6 +577,26 @@ public partial class MusicManagerViewModel
             // QQ 无此能力等场景：错误说明透传（🔴 不静默）
             OnlineStatusText = _catalog.CatalogError;
         }
+        catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
+        {
+            // 🔴 v19 M-1：补 catch——此前只有 finally，异常直接逃逸到 AsyncRelayCommand
+            // （其吞异常理路见 MusicManagerViewModel.Player 的「AsyncRelayCommand 吞异常」注记），
+            // 命令壳既不落状态行也无日志 = 静默失败。
+            // 代际口径与下方 finally 一致：过期批次不得覆盖当前批次的状态行。
+            if (seq == _playlistSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (seq == _playlistSeq)
+            {
+                OnlineStatusText = $"加载歌单失败：{ex.Message}";
+            }
+
+            _log.Error($"[Music] 加载歌单失败（平台 {SelectedPlatform}）", ex);
+        }
         finally
         {
             if (seq == _playlistSeq)
@@ -756,11 +776,21 @@ public partial class MusicManagerViewModel
         }
         catch (OperationCanceledException) // v5 B1：取消/超时不伪装为业务失败
         {
-            OnlineStatusText = "操作已取消或网络超时。";
+            // 🔴 v19 M-4：补代际判断——此前 try 内逐页校验 seq、catch 却不校验（半修）。
+            // 场景：点歌单 A（seq=1）→ 改点歌单 B（seq=2）⇒ A 被取消抛 OCE，
+            // 其过期 catch 会把 B 正在加载的状态行覆盖成「已取消」。
+            if (seq == _playlistTracksSeq)
+            {
+                OnlineStatusText = "操作已取消或网络超时。";
+            }
         }
         catch (Exception ex)
         {
-            OnlineStatusText = $"加载歌单失败：{ex.Message}";
+            if (seq == _playlistTracksSeq)
+            {
+                OnlineStatusText = $"加载歌单失败：{ex.Message}";
+            }
+
             _log.Error($"[Music] 加载歌单失败（{row.Playlist.Name}）", ex);
         }
     }

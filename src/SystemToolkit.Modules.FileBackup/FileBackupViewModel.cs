@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -397,111 +397,130 @@ public partial class FileBackupViewModel : ObservableObject
 
     /// <summary>编辑选中规则：表单已由 OnSelectedRuleChanged 载入，直接打开弹窗。</summary>
     [RelayCommand(CanExecute = nameof(CanOperateSelected))]
-    private void EditRule() => EditRuleRequest?.Invoke();
+    private void EditRule()
+    {
+        // 🟠 v18-🟡-2（2026-09-16）：`EditRuleRequest` 是 View 注入的弹窗回调，壳层异常会抛。
+        // 本命令是同步 `void`（不在 AsyncCommandCatchGuardTests 扫描面），异常冒泡到 UI 线程
+        // 会由全局兜底吞成"点了没反应 + 一条日志"；就地兜底后可给出明确文案。
+        try
+        {
+            EditRuleRequest?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            FormError = "打开编辑窗口失败：" + ex.Message;
+            _logger.Error("打开编辑规则窗口失败", ex);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void SaveRule()
     {
-        FormError = "";
-        string name = RuleNameInput.Trim();
-        // 清洗：资源管理器「复制文件地址」带引号、首尾常有空白（用户实测 Bug1 的静默拒绝源）
-        static string CleanPath(string p) => p.Trim().Trim('"').Trim();
-        var sources = SourcePathsInput
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(CleanPath)
-            .Where(s => s.Length > 0 && (Directory.Exists(s) || File.Exists(s)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var invalid = SourcePathsInput
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(CleanPath)
-            .Where(s => s.Length > 0 && !Directory.Exists(s) && !File.Exists(s))
-            .ToList();
-
-        if (name.Length == 0)
-        {
-            FormError = "规则名不能为空";
-            return;
-        }
-
-        if (sources.Count == 0)
-        {
-            // 2026-09-07 补齐旧版「保存草稿」：源路径暂不存在（外置硬盘未接、目录待建）时，
-            // 经用户确认仍可保存规则——否则用户只能先建目录才能录入规则。
-            // 草稿规则执行备份时会因源不存在而失败并留痕（不静默）。
-            bool hasAnyInput = SourcePathItems.Count > 0 || !string.IsNullOrWhiteSpace(SourcePathsInput);
-            if (!hasAnyInput)
-            {
-                FormError = "至少需要一个源路径";
-                return;
-            }
-
-            if (ConfirmRequest?.Invoke("保存为草稿",
-                    "以下源路径当前都不存在：\n" + string.Join("\n", invalid.Take(5)) +
-                    "\n\n仍要保存这条规则吗？（保存后源路径就绪即可正常备份，未就绪时执行会失败并提示）") != true)
-            {
-                FormError = "至少需要一个存在的源路径" + (invalid.Count > 0 ? $"（无效：{string.Join("、", invalid.Take(3))}）" : "");
-                return;
-            }
-
-            sources = SourcePathItems
-                .Concat(SourcePathsInput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                .Select(CleanPath)
-                .Where(s => s.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            Log($"[备份] ⚠️ 规则「{name}」保存为草稿：{sources.Count} 个源路径当前不存在，就绪后需重新执行备份。");
-        }
-
-        if (!UseGlobalBackupRoot && string.IsNullOrWhiteSpace(BackupRootInput))
-        {
-            FormError = "自定义备份根不能为空（或改用全局备份根）";
-            return;
-        }
-
-        // 🟠 V12-F5：非法保留数就地拦住（不静默回落旧值——那正是"输 12a 静默不生效"的成因）
-        if (!TryParseMaxSnapshots(MaxSnapshotsInput, out int maxSnapshots))
-        {
-            FormError = InvalidMaxSnapshotsHint;
-            MaxSnapshotsError = InvalidMaxSnapshotsHint;
-            return;
-        }
-
-        var rule = new BackupRule
-        {
-            RuleId = string.IsNullOrEmpty(EditingRuleId) ? IdGenerator.NewId() : EditingRuleId,
-            RuleName = name,
-            SourceType = SourceTypeInput,
-            SourcePaths = sources,
-            UseGlobalBackupRoot = UseGlobalBackupRoot,
-            BackupRoot = BackupRootInput.Trim(),
-            MaxSnapshots = maxSnapshots,
-            Description = DescriptionInput.Trim(),
-            ExcludePatterns = ParseExcludePatterns(),
-            Enabled = EnabledInput,
-            EnableSchedule = EnableScheduleInput,
-            DailyTime = EnableScheduleInput ? DailyTimeInput.Trim() : "",
-            UseVss = UseVssInput,
-        };
-        // 审查 🟠-3 采纳（2026-09-09）：同步命令——_rules.Save() 的磁盘/权限/序列化异常
-        // 会直冲 UI 线程；就地捕获并以 FormError 呈现（不弹未处理异常对话框）
+        // 🟠 v18-🟡-2（2026-09-16）：try 起点上移到方法体第一条可抛语句之前。
+        // 本方法内有多处可抛点：`ConfirmRequest?.Invoke`（View 注入的 MessageBox 回调）、
+        // `Directory.Exists`/`File.Exists`（磁盘异常）、`SourcePathsInput.Split`。
+        // 原先 try 只包住 `_rules.Add/Save` ⇒ 前半段异常会直冲 UI 线程（本命令是同步 void，
+        // 不在 AsyncCommandCatchGuardTests 扫描面）⇒ 用户只见"点了没反应"。
         try
         {
+            FormError = "";
+            string name = RuleNameInput.Trim();
+            // 清洗：资源管理器「复制文件地址」带引号、首尾常有空白（用户实测 Bug1 的静默拒绝源）
+            static string CleanPath(string p) => p.Trim().Trim('"').Trim();
+            var sources = SourcePathsInput
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(CleanPath)
+                .Where(s => s.Length > 0 && (Directory.Exists(s) || File.Exists(s)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var invalid = SourcePathsInput
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(CleanPath)
+                .Where(s => s.Length > 0 && !Directory.Exists(s) && !File.Exists(s))
+                .ToList();
+
+            if (name.Length == 0)
+            {
+                FormError = "规则名不能为空";
+                return;
+            }
+
+            if (sources.Count == 0)
+            {
+                // 2026-09-07 补齐旧版「保存草稿」：源路径暂不存在（外置硬盘未接、目录待建）时，
+                // 经用户确认仍可保存规则——否则用户只能先建目录才能录入规则。
+                // 草稿规则执行备份时会因源不存在而失败并留痕（不静默）。
+                bool hasAnyInput = SourcePathItems.Count > 0 || !string.IsNullOrWhiteSpace(SourcePathsInput);
+                if (!hasAnyInput)
+                {
+                    FormError = "至少需要一个源路径";
+                    return;
+                }
+
+                if (ConfirmRequest?.Invoke("保存为草稿",
+                        "以下源路径当前都不存在：\n" + string.Join("\n", invalid.Take(5)) +
+                        "\n\n仍要保存这条规则吗？（保存后源路径就绪即可正常备份，未就绪时执行会失败并提示）") != true)
+                {
+                    FormError = "至少需要一个存在的源路径" + (invalid.Count > 0 ? $"（无效：{string.Join("、", invalid.Take(3))}）" : "");
+                    return;
+                }
+
+                sources = SourcePathItems
+                    .Concat(SourcePathsInput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    .Select(CleanPath)
+                    .Where(s => s.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                Log($"[备份] ⚠️ 规则「{name}」保存为草稿：{sources.Count} 个源路径当前不存在，就绪后需重新执行备份。");
+            }
+
+            if (!UseGlobalBackupRoot && string.IsNullOrWhiteSpace(BackupRootInput))
+            {
+                FormError = "自定义备份根不能为空（或改用全局备份根）";
+                return;
+            }
+
+            // 🟠 V12-F5：非法保留数就地拦住（不静默回落旧值——那正是"输 12a 静默不生效"的成因）
+            if (!TryParseMaxSnapshots(MaxSnapshotsInput, out int maxSnapshots))
+            {
+                FormError = InvalidMaxSnapshotsHint;
+                MaxSnapshotsError = InvalidMaxSnapshotsHint;
+                return;
+            }
+
+            var rule = new BackupRule
+            {
+                RuleId = string.IsNullOrEmpty(EditingRuleId) ? IdGenerator.NewId() : EditingRuleId,
+                RuleName = name,
+                SourceType = SourceTypeInput,
+                SourcePaths = sources,
+                UseGlobalBackupRoot = UseGlobalBackupRoot,
+                BackupRoot = BackupRootInput.Trim(),
+                MaxSnapshots = maxSnapshots,
+                Description = DescriptionInput.Trim(),
+                ExcludePatterns = ParseExcludePatterns(),
+                Enabled = EnabledInput,
+                EnableSchedule = EnableScheduleInput,
+                DailyTime = EnableScheduleInput ? DailyTimeInput.Trim() : "",
+                UseVss = UseVssInput,
+            };
+
+            // 审查 🟠-3 采纳（2026-09-09）：同步命令——_rules.Save() 的磁盘/权限/序列化异常
+            // 会直冲 UI 线程；就地捕获并以 FormError 呈现（不弹未处理异常对话框）
             _rules.Add(rule);
             _rules.Save();
+
+            Log($"[备份] ✅ 规则已保存：{name}（{sources.Count} 个源）");
+            _logger.Info($"备份规则已保存：{name}({rule.RuleId})");
+            ReloadRules();
+            SelectedRule = Rules.FirstOrDefault(r => r.RuleId == rule.RuleId);
         }
         catch (Exception ex)
         {
             FormError = $"保存失败：{ex.Message}";
             Log($"[备份] ❌ 规则保存失败：{ex.Message}");
-            _logger.Error($"备份规则保存失败：{name}", ex);
-            return;
+            _logger.Error("备份规则保存失败", ex);
         }
-
-        Log($"[备份] ✅ 规则已保存：{name}（{sources.Count} 个源）");
-        _logger.Info($"备份规则已保存：{name}({rule.RuleId})");
-        ReloadRules();
-        SelectedRule = Rules.FirstOrDefault(r => r.RuleId == rule.RuleId);
     }
 
     private bool CanSave => !IsBusy;
@@ -558,51 +577,52 @@ public partial class FileBackupViewModel : ObservableObject
         }
 
         RuleRowVm target = SelectedRule;
-        if (ConfirmRequest?.Invoke("删除规则",
-                $"确定删除规则「{target.RuleName}」吗？\n\n这一步只删除规则本身，快照数据是否清理在下一步选择。") != true)
-        {
-            Log("[备份] 已取消删除规则。");
-            return;
-        }
-
-        // 第二步（补齐旧版能力）：是否连带清理该规则的快照数据
-        bool alsoDeleteSnapshots = ConfirmRequest?.Invoke("删除规则",
-            $"是否同时删除「{target.RuleName}」已产生的快照数据？\n\n" +
-            "· 确定 = 连带删除该规则全部快照（不可恢复）\n" +
-            "· 取消 = 仅删除规则，快照文件保留在备份根下") == true;
-
-        if (alsoDeleteSnapshots)
-        {
-            try
-            {
-                var manager = SnapshotManager.FromRule(target.Model, GlobalRoot, _logger);
-                int removed = manager.DeleteAllSnapshots();
-                Log($"[备份] 已删除 {removed} 份快照数据。");
-                _logger.Info($"删除规则连带清理快照：{target.RuleName} removed={removed}");
-            }
-            catch (Exception ex)
-            {
-                Log("[备份] ❌ 快照数据清理失败（规则仍会删除）：" + ex.Message);
-                _logger.Error("删除规则时清理快照失败", ex);
-            }
-        }
-
-        // 审查 🟠-3 同类带修（2026-09-09）：与 SaveRule 同族——同步命令里的持久化异常必须就地捕获
+        // 🟠 v18-🟡-2（2026-09-16）：两次 `ConfirmRequest?.Invoke` 纳入 try —— View 注入的
+        // MessageBox 回调可抛，原先裸在方法体顶层（同步 void 命令，无守卫扫描）⇒ 异常直冲 UI 线程。
         try
         {
+            if (ConfirmRequest?.Invoke("删除规则",
+                    $"确定删除规则「{target.RuleName}」吗？\n\n这一步只删除规则本身，快照数据是否清理在下一步选择。") != true)
+            {
+                Log("[备份] 已取消删除规则。");
+                return;
+            }
+
+            // 第二步（补齐旧版能力）：是否连带清理该规则的快照数据
+            bool alsoDeleteSnapshots = ConfirmRequest?.Invoke("删除规则",
+                $"是否同时删除「{target.RuleName}」已产生的快照数据？\n\n" +
+                "· 确定 = 连带删除该规则全部快照（不可恢复）\n" +
+                "· 取消 = 仅删除规则，快照文件保留在备份根下") == true;
+
+            if (alsoDeleteSnapshots)
+            {
+                try
+                {
+                    var manager = SnapshotManager.FromRule(target.Model, GlobalRoot, _logger);
+                    int removed = manager.DeleteAllSnapshots();
+                    Log($"[备份] 已删除 {removed} 份快照数据。");
+                    _logger.Info($"删除规则连带清理快照：{target.RuleName} removed={removed}");
+                }
+                catch (Exception ex)
+                {
+                    Log("[备份] ❌ 快照数据清理失败（规则仍会删除）：" + ex.Message);
+                    _logger.Error("删除规则时清理快照失败", ex);
+                }
+            }
+
+            // 审查 🟠-3 同类带修（2026-09-09）：与 SaveRule 同族——同步命令里的持久化异常必须就地捕获
             _rules.Remove(target.RuleId);
             _rules.Save();
+
+            Log($"[备份] 规则已删除：{target.RuleName}" + (alsoDeleteSnapshots ? "（含快照数据）" : "（快照数据保留）"));
+            SelectedRule = null;
+            ReloadRules();
         }
         catch (Exception ex)
         {
             Log($"[备份] ❌ 规则删除失败：{ex.Message}");
             _logger.Error($"备份规则删除失败：{target.RuleName}", ex);
-            return;
         }
-
-        Log($"[备份] 规则已删除：{target.RuleName}" + (alsoDeleteSnapshots ? "（含快照数据）" : "（快照数据保留）"));
-        SelectedRule = null;
-        ReloadRules();
     }
 
     /// <summary>
@@ -711,27 +731,30 @@ public partial class FileBackupViewModel : ObservableObject
     [RelayCommand]
     private void ImportRules()
     {
-        string? path = PickOpenPath?.Invoke();
-        if (string.IsNullOrEmpty(path))
-        {
-            return;
-        }
-
-        // 🟡 C-🟡-4（两批审查）：原文案「同 ID 覆盖更新，同 ID 冲突会重新生成 ID」读起来自相矛盾。
-        // 回源 `RuleManager.Import` 后确认**两句都成立，只是针对不同分支**（见 :370 与 :384）：
-        //   ① 与既有规则同 ID 且本次**首次**命中 ⇒ 原地覆盖更新；
-        //   ② 同一批次内重复 ID、或重复命中同一 ID ⇒ 重新分配新 ID 追加（避免互相覆盖）。
-        // ⇒ 不删任何一句（删了就丢信息），改为把「首次 / 重复」的区分写清楚。
-        if (ConfirmRequest?.Invoke("导入规则",
-                "导入的规则将合并进当前列表：与既有规则同 ID 的，首次命中原地覆盖更新；\n"
-                + "同一批次内重复 ID、或重复命中同一 ID 的，重新分配新 ID 追加（不互相覆盖）。\n\n确定继续吗？") != true)
-        {
-            Log("[备份] 已取消导入。");
-            return;
-        }
-
+        // 🟠 v18-🟡-2（2026-09-16）：`PickOpenPath?.Invoke()` 与 `ConfirmRequest?.Invoke()`
+        // 都是 View 注入回调，纳入 try（原先裸在方法体顶层）。
+        string? path = null;
         try
         {
+            path = PickOpenPath?.Invoke();
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
+            // 🟡 C-🟡-4（两批审查）：原文案「同 ID 覆盖更新，同 ID 冲突会重新生成 ID」读起来自相矛盾。
+            // 回源 `RuleManager.Import` 后确认**两句都成立，只是针对不同分支**（见 :370 与 :384）：
+            //   ① 与既有规则同 ID 且本次**首次**命中 ⇒ 原地覆盖更新；
+            //   ② 同一批次内重复 ID、或重复命中同一 ID ⇒ 重新分配新 ID 追加（避免互相覆盖）。
+            // ⇒ 不删任何一句（删了就丢信息），改为把「首次 / 重复」的区分写清楚。
+            if (ConfirmRequest?.Invoke("导入规则",
+                    "导入的规则将合并进当前列表：与既有规则同 ID 的，首次命中原地覆盖更新；\n"
+                    + "同一批次内重复 ID、或重复命中同一 ID 的，重新分配新 ID 追加（不互相覆盖）。\n\n确定继续吗？") != true)
+            {
+                Log("[备份] 已取消导入。");
+                return;
+            }
+
             (int ok, List<string> errors) = _rules.Import(path);
             foreach (string error in errors)
             {
@@ -744,7 +767,7 @@ public partial class FileBackupViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log("[备份] ❌ 导入规则失败：" + ex.Message);
+            Log("[备份] ❌ 导入规则失败：" + (ex.Message + (path is null ? "" : $"（文件：{path}）")));
             _logger.Error("导入备份规则失败", ex);
         }
     }

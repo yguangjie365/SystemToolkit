@@ -1,6 +1,7 @@
 using System.Windows;
 using Microsoft.Win32;
 using SystemToolkit.Core.Backup.Contracts;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.FileBackup;
 
@@ -21,6 +22,8 @@ public partial class RestoreDialog : Window
     internal RestoreDialog(string summary, string originalPath)
     {
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）
+        TitleBarThemeWiring.Attach(this);
         SummaryText.Text = summary;
         _originalPathRun = OriginalPathRun;
         _originalPathRun.Text = string.IsNullOrWhiteSpace(originalPath) ? "（该规则无可用源路径）" : originalPath;

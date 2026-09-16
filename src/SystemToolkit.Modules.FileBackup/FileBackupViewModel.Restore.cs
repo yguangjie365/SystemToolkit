@@ -387,15 +387,17 @@ public partial class FileBackupViewModel
 
         SnapshotRowVm target = SelectedSnapshot;
         // 审查 🟠-3 采纳：只展示该快照自身信息，不展示 SnapRoot（易被误解为要删整棵规则快照树）
-        if (ConfirmRequest?.Invoke("删除快照",
-                $"确定删除 {target.DisplayTime} 的快照吗？\n" +
-                $"（{target.FileCount} 个文件，{target.SizeText}）\n\n此操作不可撤销。") != true)
-        {
-            return;
-        }
-
+        // 🟠 v18-🟡-2（2026-09-16）：`ConfirmRequest?.Invoke` 是 View 注入回调，纳入 try
+        // （同步 void 命令；原先裸在 try 外 ⇒ 异常直冲 UI 线程）。
         try
         {
+            if (ConfirmRequest?.Invoke("删除快照",
+                    $"确定删除 {target.DisplayTime} 的快照吗？\n" +
+                    $"（{target.FileCount} 个文件，{target.SizeText}）\n\n此操作不可撤销。") != true)
+            {
+                return;
+            }
+
             // 审查 O1（2026-09-10）：DeleteSnapshot 收的是目录路径——误传 SnapshotId 会让
             // Directory.Exists 恒 false → 静默空操作 + 假成功（已修 ReadSnapshot 的姊妹路径漏网此处）
             string? snapDir = SnapshotDirOf(manager, target.SnapshotId);

@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using SystemToolkit.Core.FileTransfer.Models;
 using SystemToolkit.Core.FileTransfer.Services;
 using SystemToolkit.Core.Utilities;
+using SystemToolkit.UI.Common;
 
 namespace SystemToolkit.Modules.FileTransfer;
 
@@ -31,6 +32,8 @@ public partial class ReceiveConfirmWindow : Window
     {
         _request = request;
         InitializeComponent();
+        // 标题栏跟随主题明暗（共享接线器：句柄就绪套一次 + 主题切换跟随 + 关闭退订）
+        TitleBarThemeWiring.Attach(this);
         Render(request, timeoutSeconds);
 
         // 🟠 审查 v8-🟠-2：文案一直承诺「约 N 秒后自动拒绝」，但窗口此前**没有任何计时器或

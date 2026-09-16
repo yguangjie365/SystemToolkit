@@ -127,6 +127,11 @@ public sealed class NetManagerModule : ModuleBase
             // 🟡 V14-N5：分流「守护」回调在 Task.Run（无同步上下文）里触发，
             // 需在组合根把 UI Dispatcher 显式喂进去（Music/FileTransfer 同款范式）
             dispatcher: System.Windows.Application.Current?.Dispatcher));
-        services.AddSingleton<NetManagerView>();
+        // 🔴 视图必须 Transient：宿主在主题切换后经 CreateView 重建当前页，
+        //    以重新解析 {StaticResource} 派生样式（Style.BasedOn 不支持 DynamicResource）。
+        //    View 注册为单例时 CreateView 恒返回同一实例 → PageHost.Content 赋同一对象是 WPF 空操作
+        //    → 视图停留在旧主题包的颜色上（2026-09-15 实机“浅色下白字压白底”事故）。
+        //    视图是无状态壳（DataContext 由 VM 提供），重建只重置 UI 局部状态。
+        services.AddTransient<NetManagerView>();
     }
 }

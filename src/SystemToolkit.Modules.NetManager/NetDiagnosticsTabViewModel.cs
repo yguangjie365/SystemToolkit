@@ -105,6 +105,10 @@ public partial class NetDiagnosticsTabViewModel : ObservableObject
 
     // ── 一键诊断 ──
 
+    // guard-exempt: catch —— 表达式体壳，本方法自身无异常面（仅一次委托调用 + ConfigureAwait）；
+    // 被转发的 RunDiagnosticsSafeAsync 有完整 try/catch(Exception)/finally，catch 内落
+    // Conclusion + _log 用户可见反馈。见 v19 OL-1：该形态此前是守卫扫描盲区，现已入表，
+    // 故必须显式声明豁免（「不在表里 = 红」）。
     [RelayCommand(CanExecute = nameof(CanRun))]
     private async Task RunDiagnosticsAsync() => await RunDiagnosticsSafeAsync().ConfigureAwait(true);
 

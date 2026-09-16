@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -18,12 +18,24 @@ public partial class FileBackupViewModel
     [RelayCommand(CanExecute = nameof(CanBackupNow))]
     private async Task BackupNowAsync()
     {
-        if (SelectedRule is null)
+        // 🟠 v18-🟠-2（2026-09-16）：补命令体顶层 catch。
+        // 此前本命令体无 try —— `RunBackupPipelineAsync` 的 finally 里含 `ReloadSnapshots()`
+        // （读磁盘 + 重建行 VM）等可抛动作，异常冒泡到 `AsyncRelayCommand` 会被吞：
+        // 用户零反馈、日志零记录。同时收缩 `AsyncCommandCatchBaseline.json` 对应条目。
+        try
         {
-            return;
-        }
+            if (SelectedRule is null)
+            {
+                return;
+            }
 
-        await RunBackupPipelineAsync(new[] { SelectedRule.Model }).ConfigureAwait(true);
+            await RunBackupPipelineAsync(new[] { SelectedRule.Model }).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Log("[备份] ❌ 备份命令异常：" + ex.Message);
+            _logger.Error("备份命令异常", ex);
+        }
     }
 
     private bool CanBackupNow => SelectedRule is not null && !IsBusy;
@@ -32,22 +44,34 @@ public partial class FileBackupViewModel
     [RelayCommand(CanExecute = nameof(CanBackupAll))]
     private async Task BackupAllAsync()
     {
-        var targets = Rules.Where(r => r.Enabled).Select(r => r.Model).ToList();
-        if (targets.Count == 0)
+        // 🟠 v18-🟠-2（2026-09-16）：补命令体顶层 catch —— `ConfirmRequest?.Invoke` 是 View 注入的
+        // `MessageBox.Show` 回调，壳层异常（owner 已关闭 / 对话框初始化失败）会抛；此前裸在 try 外
+        // ⇒ 绕过命令体 catch 直冲 `AsyncRelayCommand` 吞异常路径（用户零反馈、日志零记录）。
+        // 与 DriverManagerViewModel.DeleteSelectedAsync 的 V12-D2 修复同款。同时收缩基线条目。
+        try
         {
-            Log("[备份] 没有已启用的规则可备份。");
-            return;
-        }
+            var targets = Rules.Where(r => r.Enabled).Select(r => r.Model).ToList();
+            if (targets.Count == 0)
+            {
+                Log("[备份] 没有已启用的规则可备份。");
+                return;
+            }
 
-        string names = string.Join("\n", targets.Select(r => $"  · {r.RuleName}"));
-        if (ConfirmRequest?.Invoke("备份全部",
-                $"将按顺序备份以下 {targets.Count} 个已启用规则：\n{names}\n\n逐项执行、可随时取消（关闭窗口即停），失败项会标注原因。确定继续吗？") != true)
+            string names = string.Join("\n", targets.Select(r => $"  · {r.RuleName}"));
+            if (ConfirmRequest?.Invoke("备份全部",
+                    $"将按顺序备份以下 {targets.Count} 个已启用规则：\n{names}\n\n逐项执行、可随时取消（关闭窗口即停），失败项会标注原因。确定继续吗？") != true)
+            {
+                Log("[备份] 已取消备份全部。");
+                return;
+            }
+
+            await RunBackupPipelineAsync(targets).ConfigureAwait(true);
+        }
+        catch (Exception ex)
         {
-            Log("[备份] 已取消备份全部。");
-            return;
+            Log("[备份] ❌ 备份全部命令异常：" + ex.Message);
+            _logger.Error("备份全部命令异常", ex);
         }
-
-        await RunBackupPipelineAsync(targets).ConfigureAwait(true);
     }
 
     private bool CanBackupAll => !IsBusy && Rules.Any(r => r.Enabled);

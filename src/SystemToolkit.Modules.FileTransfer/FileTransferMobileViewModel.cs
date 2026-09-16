@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,6 +19,10 @@ public partial class FileTransferMobileViewModel : ObservableObject
     private readonly PairingService _pairing;
     private readonly Action<string> _log;
     private readonly System.Windows.Threading.Dispatcher? _dispatcher;
+    // 🟡 v18-🟡-3（2026-09-16）：补文件日志通道——RunGuarded 原先只写 UI 面板（`_log`），
+    // 异常堆栈不入文件日志，与桌面侧「AddLog + _logger 双通道」纪律不一致。
+    // 可选参数（构造签名兼容既有调用点与测试）。
+    private readonly SystemToolkit.Core.Contracts.ILogger? _logger;
 
     /// <remarks>
     /// 🟡 审查 2026-09-10（🟡-13）曾记录：本 VM 只有 <c>DispatcherTimer</c>（Tick 本就在 UI 线程），
@@ -34,12 +38,14 @@ public partial class FileTransferMobileViewModel : ObservableObject
         IFileWebServer web,
         PairingService pairing,
         Action<string> log,
-        System.Windows.Threading.Dispatcher? dispatcher = null)
+        System.Windows.Threading.Dispatcher? dispatcher = null,
+        SystemToolkit.Core.Contracts.ILogger? logger = null)
     {
         _web = web;
         _pairing = pairing;
         _log = log;
         _dispatcher = dispatcher;
+        _logger = logger;
 
         // 会话的签发/撤销/过期都发生在服务端 → 订阅事件刷新列表（可能在任意线程，故走 RunOnUi）
         _web.SessionsChanged += (_, _) => RefreshSessions();
@@ -78,7 +84,9 @@ public partial class FileTransferMobileViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            // 🟡 v18-🟡-3（2026-09-16）：与桌面侧同款「双通道」——UI 面板 + 文件日志。
             _log($"[手机] ⚠️ 界面更新异常：{ex.Message}");
+            _logger?.Error("[手机] UI 事件处理器异常", ex);
         }
     }
 
@@ -400,9 +408,17 @@ public partial class FileTransferMobileViewModel : ObservableObject
             _log($"[手机] ✅ Web 服务已启动：{_web.LanUrl}（{(_web.IsHttps ? "HTTPS 加密" : "⚠️ HTTP 未加密")}），配对码 10 分钟轮换");
             RefreshSessions(); // 取当前证书指纹（会话列表此刻还是空的，配对后才会有）
         }
+        catch (OperationCanceledException)
+        {
+            // 🟡 v18-🟡-2（2026-09-16）：取消/超时不当成"业务失败"报——与同模块 StopWebAsync、
+            // 以及桌面侧 StartTransferAsync（v5 B1 确立）同口径。原先统一落进下面的
+            // catch(Exception) 打"启动失败"，措辞误导。
+            _log("[手机] ⚠ 启动操作已取消或超时。");
+        }
         catch (Exception ex)
         {
             _log("[手机] ❌ Web 服务启动失败：" + ex.Message);
+            _logger?.Error("[手机] Web 服务启动失败", ex);
         }
         finally
         {

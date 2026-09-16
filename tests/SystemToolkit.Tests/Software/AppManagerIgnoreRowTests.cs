@@ -208,45 +208,8 @@ public sealed class AppManagerIgnoreRowTests : IDisposable
     }
 
     // ════════ 测试替身 ════════
-
-    /// <summary>
-    /// winget 客户端假件：本文件只验证**建行与忽略链路**，不碰 winget 进程。
-    /// 查询类返回"未知"（不臆造安装态），执行类返回退出码 1（失败），避免用例隐式依赖真实 winget。
-    /// </summary>
-    private sealed class StubWingetClient : IWingetClient
-    {
-        public Action<string> OutputSink { get; set; } = _ => { };
-
-        public Task<bool> IsAvailableAsync(CancellationToken ct = default) => Task.FromResult(false);
-
-        public Task<string> ListInstalledAsync(CancellationToken ct = default) => Task.FromResult("");
-
-        public Task<string> ListUpgradesAsync(CancellationToken ct = default) => Task.FromResult("");
-
-        public Task<WingetQueryResult> QueryAsync(string id, string? source = null, CancellationToken ct = default)
-            => Task.FromResult(new WingetQueryResult(Installed: false, Version: null, AvailableVersion: null, Unknown: true));
-
-        public Task<WingetRunResult> InstallAsync(string id, string? source = null, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<WingetRunResult> UpgradeAsync(string id, string? source = null, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<WingetRunResult> UninstallAsync(string id, string? source = null, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<WingetRunResult> UpdateSourceAsync(CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<WingetRunResult> SetSourceAsync(string name, string url, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<WingetRunResult> ResetSourceAsync(string name, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-
-        public Task<string> SearchAsync(string query, CancellationToken ct = default) => Task.FromResult("");
-
-        public Task<WingetRunResult> ExportAsync(string path, CancellationToken ct = default)
-            => Task.FromResult(new WingetRunResult(1, false));
-    }
+    //
+    // winget 客户端假件（本文件只验证「建行与忽略链路」，不碰 winget 进程）：
+    // 2026-09-15 起改用全测试工程共享的 StubWingetClient（行为口径不变：查询返回"未知"、
+    // 执行返回退出码 1），避免同一假件在本工程出现两份。
 }
