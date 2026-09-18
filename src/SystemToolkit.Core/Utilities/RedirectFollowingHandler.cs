@@ -12,8 +12,9 @@ namespace SystemToolkit.Core.Utilities;
 /// </para>
 /// <para>
 /// 本处理器在内层 handler 关闭自动跟随的基础上手工跟随，并**逐跳复验**：
-/// ① scheme 必须为 HTTPS（拒绝降级）；② host 必须命中白名单后缀；③ 跳数上限熔断。
-/// 违反任一条即抛 <see cref="HttpRequestException"/>，由调用方既有的异常路径处理。
+/// ① scheme 必须为 HTTPS（拒绝降级）；② host 必须命中白名单后缀（违反即抛 <see cref="HttpRequestException"/>）；
+/// ③ 跳数上限：超出后**停止跟随并原样返回最后一跳响应**（不抛），由调用方按非 2xx 处理 —— 与下方
+/// <c>maxRedirects</c> 参数说明一致，勿写成"违反即抛"。
 /// </para>
 /// <para>
 /// 白名单按「域后缀」匹配（<c>h == d || h.EndsWith("." + d)</c>），故 <c>qq.com</c> 已覆盖

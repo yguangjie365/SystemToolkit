@@ -93,8 +93,10 @@ public sealed class OverviewSnapshotCache
     // ============================================================
     // 序列化：生产读写与单元测试共用同一份配置，避免两份逻辑漂移。
     //
-    // 【重要】OverviewItem / OverviewRow / InstalledProgram 的属性全部是
-    // 只读的 { get; }，且只有一个带默认参数的公共构造函数。System.Text.Json
+    // 【重要】OverviewItem 有 6 个**可写**属性（Value / Sub / Percent / PercentLabel /
+    // BadgeText / SparkPoints，均为 backing field + SetField 形式），其余属性与
+    // OverviewRow / InstalledProgram 才是只读的 { get; }。
+    // 三者都只有一个带默认参数的公共构造函数。System.Text.Json
     // 走「参数化构造」反序列化：按 camelCase 匹配构造函数参数名，JSON 中
     // 缺失的参数取默认值。两个必须知道的结论（均已实测确认）：
     //   1. 参数名必须能匹配到同名属性（大小写不敏感），否则直接抛异常——

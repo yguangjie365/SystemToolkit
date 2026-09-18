@@ -361,6 +361,7 @@
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
+                             Foreground="{DynamicResource Brush_TextPrimary}"
                              Background="Transparent" BorderThickness="0"/>
                     <TextBlock Text="搜索游戏名称…" FontSize="{DynamicResource Font_SizeBodySm}"
                                Foreground="{DynamicResource Brush_TextMuted}" Margin="9,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">

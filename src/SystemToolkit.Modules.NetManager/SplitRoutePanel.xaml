@@ -9,7 +9,6 @@
          DataContext = SplitRouteTabViewModel（父视图 {Binding Split} 注入）。
          示意图的「彻底模式（注册表根治）」降级 V1.1——此处以「守护巡检」开关承载同等效果。 -->
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <Style x:Key="NicListHeader" TargetType="GridViewColumnHeader">
             <Setter Property="Background" Value="{DynamicResource Brush_SurfaceAlt}"/>
@@ -179,9 +178,12 @@
                     <TextBlock HorizontalAlignment="Right" FontSize="{DynamicResource Font_SizeMicro}"
                                Foreground="{DynamicResource Brush_TextMuted}"><Run Text="{Binding LedgerRows.Count, Mode=OneWay}"/><Run Text=" 条"/></TextBlock>
                 </Grid>
-                <ListView Grid.Row="1" ItemsSource="{Binding LedgerRows}" BorderThickness="0" Margin="0,8,0,0"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListView.View>
+            <ListView Grid.Row="1" ItemsSource="{Binding LedgerRows}" BorderThickness="0" Margin="0,8,0,0"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource ListItemRowStyle}"/>
+                </ListView.ItemContainerStyle>
+                <ListView.View>
                         <GridView ColumnHeaderContainerStyle="{StaticResource NicListHeader}">
                             <GridViewColumn Header="类别" Width="150">
                                 <GridViewColumn.CellTemplate>

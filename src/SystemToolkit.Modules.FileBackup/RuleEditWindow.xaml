@@ -7,6 +7,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush_Background}"
+        TextElement.Foreground="{DynamicResource Brush_TextPrimary}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <Window.Resources>
         <!-- Inverse 转换器在主页面是页面级资源，弹窗需自备（跨 Window 不共享 StaticResource） -->
@@ -182,6 +183,7 @@
         <!-- 底部按钮 -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
+                    Style="{DynamicResource SecondaryButton}"
                     Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"

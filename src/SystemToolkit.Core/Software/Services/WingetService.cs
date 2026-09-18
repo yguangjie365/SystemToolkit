@@ -231,7 +231,12 @@ public sealed partial class WingetService : IWingetClient
         return new List<string> { "source", "reset", name, "--force", "--disable-interactivity" };
     }
 
-    /// <summary>切换为自定义源（先移除同名旧源再添加；镜像添加失败时自动恢复原源）。</summary>
+    /// <summary>
+    /// 切换为自定义源（先移除同名旧源再添加）。
+    /// ⚠️ 添加失败时的回滚走 <c>source reset &lt;name&gt; --force</c> —— 恢复的是**官方默认源**，
+    /// **不是**切换前的自定义源；且仅当"移除成功 + 添加失败"时才回滚。
+    /// 对外文案不得写成"已自动恢复原源"（会误导用户）。
+    /// </summary>
     public async Task<WingetRunResult> SetSourceAsync(string name, string url, CancellationToken ct = default(CancellationToken))
     {
         // 先移除同名源。源原本不存在时 winget 返回非零码，属预期，不能据此判定切换失败——
@@ -246,11 +251,12 @@ public sealed partial class WingetService : IWingetClient
         if (!add.Success && remove.Success)
         {
             // 审查 2026-09-04（P2）：镜像不可达时自动恢复被移除的原源，不让用户停留在"无源"状态
-            _output($"（警告）添加源 {name} 失败（退出码 {add.ExitCode}），自动恢复原源…");
+            _output($"（警告）添加源 {name} 失败（退出码 {add.ExitCode}），正在回退…");
             WingetRunResult rollback = await RunAsync(BuildSourceResetArgs(name), ct, DefaultReadTimeout);
+            // 文案须与实现一致：reset 恢复的是官方默认源，不是切换前的自定义源。
             _output(rollback.Success
-                ? $"已自动恢复原源 {name}。"
-                : $"自动恢复原源失败（退出码 {rollback.ExitCode}），请手动执行「恢复官方源」。");
+                ? $"已把源 {name} 重置为官方默认源（注意：不是切换前的自定义源）。"
+                : $"回退失败（退出码 {rollback.ExitCode}），请手动执行「恢复官方源」。");
         }
         return add;
     }

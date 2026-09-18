@@ -170,6 +170,7 @@ Background="{DynamicResource Brush_Background}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBody}"
+                             Foreground="{DynamicResource Brush_TextPrimary}"
                              Background="Transparent" BorderThickness="0">
                         <TextBox.InputBindings>
                             <KeyBinding Key="Enter" Command="{Binding RunSearchCommand}"/>
@@ -470,9 +471,10 @@ Background="{DynamicResource Brush_Background}">
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
-                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding Description}"/>
+                <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeBody}" FontWeight="Bold"
+                           Foreground="{DynamicResource Brush_TextPrimary}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Description}"/>
                                                     <Button Grid.Column="1" Style="{DynamicResource RowActionButton}" Content="下载"
                                                             Margin="0,0,8,0" Command="{Binding DataContext.DownloadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
@@ -690,7 +692,8 @@ Background="{DynamicResource Brush_Background}">
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Font_SizeTiny}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush_TextPrimary}"/>
                                             <TextBlock FontSize="{DynamicResource Font_SizeNano}" Style="{DynamicResource MonoText}">
                                                 <Run Text="{Binding Id, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding Version, Mode=OneWay}"/>
                                             </TextBlock>

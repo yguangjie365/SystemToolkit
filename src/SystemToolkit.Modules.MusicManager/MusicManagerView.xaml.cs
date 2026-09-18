@@ -571,7 +571,7 @@ public partial class MusicManagerView : UserControl
         }
     }
 
-    /// <summary>accent 变化：重建光晕径向刷（accent 0.30→0.13→透明）+ 同步彩胶歌词高亮刷。</summary>
+    /// <summary>accent 变化：重建光晕径向刷（accent 0.30→0.13→透明）。</summary>
     private void SyncVinylAccentVisuals()
     {
         if (_vm.VinylAccentBrush is not null && DiscGlow is not null)
@@ -579,10 +579,9 @@ public partial class MusicManagerView : UserControl
             DiscGlow.Fill = CoverColorFactory.VinylGlow(_vm.VinylAccentBrush);
         }
 
-        if (TryFindResource("VinylAccentHighlight") is SolidColorBrush highlight && _vm.VinylAccentBrush is not null)
-        {
-            highlight.Color = _vm.VinylAccentBrush.Color; // 可变实例：彩胶歌词高亮跟随胶片色
-        }
+        // 原此处还有一段 TryFindResource("VinylAccentHighlight") 同步歌词高亮刷的代码（2016-09-19 移除）：
+        // 该资源键全仓无定义（仅本调用点），TryFindResource 恒返回 null ⇒ 分支永不执行。
+        // 真实歌词高亮走 PlayerAccentBrush，功能无缺口。
     }
 
     /// <summary>歌词高亮行变化 → 自动滚动到当前行（右栏跟随播放）。</summary>

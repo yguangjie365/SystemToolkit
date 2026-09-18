@@ -378,7 +378,12 @@ public partial class App : Application
 
     private static IReadOnlyList<IModule>? _knownModules;
 
-    /// <summary>模块清单：按导航顺序排列。新增模块须同步 DependencyGuard 白名单。
+    /// <summary>
+    /// 模块清单（DI 注册与 DependencyGuard 白名单的依据）。新增模块须同步 DependencyGuard 白名单。
+    /// ⚠️ 本表顺序**不驱动导航顺序** —— 导航顺序的唯一真源是 <c>MainWindow.NavGroups</c>
+    /// （<c>IModule.Order</c> 同样不驱动导航，只被 <c>ModuleContractTests</c> 用于断言唯一性）。
+    /// 2026-09-10 事故即源于"以为改这里能调导航顺序"，详见 MainWindow.xaml.cs 的 NavGroups 注释。
+    /// </summary>
     /// 🔴 REVIEW-3 A-2：静态单例缓存——旧实现每次调用 new 一批，OnStartup 至少调两次，
     /// DI 注册的单例与补做路径的新实例并存（影子实例），模块持有状态时必有一链拿不到注入。</summary>
     public static IReadOnlyList<IModule> KnownModules() => _knownModules ??=

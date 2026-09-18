@@ -15,7 +15,10 @@ internal static class CrashLog
     /// <summary>单文件滚动上限：超限归档为 .old（审查 2026-09-04 P2：run-*/firstchance-* 此前无上限）。</summary>
     private const long MaxBytes = 5 * 1024 * 1024;
 
-    /// <summary>带 5MB 滚动的追加写（write 内部自行 lock(Gate) 外层已持锁）。</summary>
+    /// <summary>
+    /// 带 5MB 滚动的追加写。本方法**内部**自行 <c>lock (Gate)</c> —— 三个调用点（本文件另两处
+    /// Append 与对外方法）均未在外层持锁，故"外层已持锁"的说法不成立（lock 可重入，无实害，仅勿据此推断）。
+    /// </summary>
     private static void AppendWithRoll(string file, string contents)
     {
         lock (Gate)

@@ -469,7 +469,8 @@
                     <ColumnDefinition Width="280"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBox Height="30" VerticalContentAlignment="Center" Padding="6,0" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" FontSize="{DynamicResource Font_SizeTiny}"/>
+                <TextBox Height="30" VerticalContentAlignment="Center" Padding="6,0" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" FontSize="{DynamicResource Font_SizeTiny}"
+                         Foreground="{DynamicResource Brush_TextPrimary}"/>
                 <TextBlock Grid.Column="1" Text="{Binding AppCountText}" FontSize="{DynamicResource Font_SizeBodySm}" Style="{DynamicResource MonoText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
 

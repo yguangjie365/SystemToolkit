@@ -6,6 +6,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush_Background}"
+        TextElement.Foreground="{DynamicResource Brush_TextPrimary}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <Grid Margin="18,16">
         <Grid.RowDefinitions>
@@ -24,27 +25,33 @@
 
         <TextBlock Text="名称" VerticalAlignment="Center" Margin="0,0,10,10" FontWeight="SemiBold"/>
         <TextBox Grid.Column="1" x:Name="NameBox" Text="" Height="32"
+                 Style="{DynamicResource FieldInput}"
                  VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
 
         <TextBlock Grid.Row="1" x:Name="IdLabel" Text="包 ID (winget)" VerticalAlignment="Center" Margin="0,0,10,10"/>
         <TextBox Grid.Row="1" Grid.Column="1" x:Name="IdBox" Text=""
+                 Style="{DynamicResource FieldInput}"
                  Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
 
         <TextBlock Grid.Row="2" Text="分类" VerticalAlignment="Center" Margin="0,0,10,10"/>
         <TextBox Grid.Row="2" Grid.Column="1" x:Name="CategoryBox" Text=""
+                 Style="{DynamicResource FieldInput}"
                  Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
 
         <TextBlock Grid.Row="3" Text="描述" VerticalAlignment="Top" Margin="0,6,10,10"/>
         <TextBox Grid.Row="3" Grid.Column="1" x:Name="DescriptionBox" Text=""
                  Height="52" TextWrapping="Wrap" AcceptsReturn="False" Padding="6,4" Margin="0,0,0,10"
+                 Style="{DynamicResource FieldInput}"
                  VerticalScrollBarVisibility="Auto"/>
 
         <TextBlock Grid.Row="4" x:Name="UrlLabel" Text="下载链接" VerticalAlignment="Center" Margin="0,0,10,10"/>
         <TextBox Grid.Row="4" Grid.Column="1" x:Name="UrlBox" Text=""
+                 Style="{DynamicResource FieldInput}"
                  Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
 
         <TextBlock Grid.Row="5" x:Name="PathLabel" Text="本地安装包" VerticalAlignment="Center" Margin="0,0,10,10"/>
         <TextBox Grid.Row="5" Grid.Column="1" x:Name="PathBox" Text=""
+                 Style="{DynamicResource FieldInput}"
                  Height="32" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,0,10"/>
 
         <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
@@ -52,6 +59,7 @@
                     Background="{DynamicResource Brush_DangerSoft}" Foreground="{DynamicResource Brush_DangerText}"
                     BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1" Cursor="Hand"/>
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
+                    Style="{DynamicResource SecondaryButton}"
                     Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"

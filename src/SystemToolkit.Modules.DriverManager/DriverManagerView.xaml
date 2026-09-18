@@ -6,7 +6,6 @@
 xmlns:ui="clr-namespace:SystemToolkit.UI.Common.Converters;assembly=SystemToolkit.UI.Common"
 Background="{DynamicResource Brush_Background}">
     <UserControl.Resources>
-        <ui:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 抽屉详情的键值对行：统一 4px 下间距（布局细节，不提升到全局主题） -->
         <Style x:Key="DrawerRow" TargetType="Grid">
@@ -54,6 +53,7 @@ Background="{DynamicResource Brush_Background}">
                 <Grid>
                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="8,0" FontSize="{DynamicResource Font_SizeBodySm}"
+                             Foreground="{DynamicResource Brush_TextPrimary}"
                              Background="Transparent" BorderThickness="0"/>
                     <TextBlock Text="筛选 INF / 提供商 / 类别…"
                                Foreground="{DynamicResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeCaption}"

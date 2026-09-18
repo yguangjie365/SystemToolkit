@@ -9,7 +9,6 @@
          顶部搜索+扫描 / 左栏曲库 / 右栏歌词 / 底部常驻播放条 / 点播放条进完整播放器覆盖层。 -->
     <UserControl.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolToVis"/>
-        <local:InverseBoolConverter x:Key="Inverse"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseToVis"/>
         <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
         <local:EmptyCollectionToVisibilityConverter x:Key="EmptyToVis"/>
@@ -51,8 +50,6 @@
         <Geometry x:Key="IconRefresh">M21,12 A9,9 0 1 1 18.36,5.64 M21,3 V9 H15</Geometry>
         <Geometry x:Key="IconNote">M9,3 V13.55 A4,4 0 1 0 11,17 V7 H17 V3 Z</Geometry>
         <Geometry x:Key="IconExpandUp">M7,14 L12,9 L17,14</Geometry>
-        <Geometry x:Key="IconFolderScan">M3,7 V19 A2,2 0 0 0 5,21 H19 A2,2 0 0 0 21,19 V9 A2,2 0 0 0 19,7 H12 L10,5 H5 A2,2 0 0 0 3,7 Z</Geometry>
-        <Geometry x:Key="IconEqSliders">M5,8 H19 M5,16 H19 M9,5.5 A2.5,2.5 0 1 1 9,10.5 A2.5,2.5 0 1 1 9,5.5 M15,13.5 A2.5,2.5 0 1 1 15,18.5 A2.5,2.5 0 1 1 15,13.5</Geometry>
         <!-- 2026-09-09 修复"进度条被底色吞掉"：默认 Slider 轨道为主题底色，压在播放器染色背景上隐形（只剩滑块）。
              自绘模板：剩余轨道半透明灰 + 已播段强调色 + 白色圆形滑块——浅底/彩胶/沉浸/现代四背景通用 -->
                 <!-- 顶栏平台切换芯片公共样式（差异只在选中 DataTrigger，留在各按钮上） -->
@@ -313,8 +310,9 @@
                                                                        FontSize="{DynamicResource Font_SizeCaption}"
                                                                        Foreground="{DynamicResource Brush_TextSecondary}"/>
                                                         </Grid>
-                                                        <TextBlock VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeBodySm}">
-                                                            <TextBlock.Text>
+                                <TextBlock VerticalAlignment="Center" FontSize="{DynamicResource Font_SizeBodySm}"
+                                           Foreground="{DynamicResource Brush_TextPrimary}">
+                                    <TextBlock.Text>
                                                                 <MultiBinding StringFormat="{}{0} · {1}">
                                                                     <Binding Path="PlatformName" Mode="OneWay"/>
                                                                     <Binding Path="DisplayName" Mode="OneWay"/>
@@ -356,6 +354,7 @@
                     <TextBox x:Name="OnlineSearchBox" Text="{Binding OnlineSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                              Width="220" Padding="8,5" VerticalContentAlignment="Center"
                              KeyDown="OnOnlineSearchKeyDown"
+                             Style="{DynamicResource FieldInput}"
                              GotFocus="OnOnlineSearchGotFocus"/>
                     <Popup x:Name="SearchHistoryPopup"
                            PlacementTarget="{Binding ElementName=OnlineSearchBox}"
@@ -634,6 +633,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                 Foreground="{DynamicResource Brush_TextPrimary}"
                                  Padding="8,5" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
                         <Button Grid.Column="1" Height="30" Content="扫描曲库" Margin="0,0,6,0" Command="{Binding ScanCommand}">
                             <Button.Style>
@@ -784,6 +784,7 @@
                     <Grid DockPanel.Dock="Top" Margin="2,0,2,6">
                         <TextBox Height="30" Padding="8,5,8,5" VerticalContentAlignment="Center"
                                  Text="{Binding PlaylistFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Foreground="{DynamicResource Brush_TextPrimary}"
                                  AutomationProperties.Name="搜索本歌单"/>
                         <TextBlock Text="搜索本歌单" FontSize="{DynamicResource Font_SizeCaption}"
                                    Foreground="{DynamicResource Brush_TextMuted}" VerticalAlignment="Center"

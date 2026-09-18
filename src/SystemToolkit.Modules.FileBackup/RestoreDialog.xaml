@@ -6,6 +6,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush_Background}"
+        TextElement.Foreground="{DynamicResource Brush_TextPrimary}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <!-- 2026-09-07 补齐旧版 RestoreDialog 能力：恢复目标二选一（原位置 / 指定目录）
          + 冲突策略三选一。只负责收集用户选择，预演与执行由 VM 负责。 -->
@@ -16,6 +17,7 @@
         <!-- 恢复目标 -->
         <TextBlock Text="恢复目标" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="OriginalRadio" GroupName="Target" IsChecked="True" Margin="0,0,0,4"
+                     Style="{DynamicResource ThemedRadioButton}"
                      Checked="OnTargetModeChanged">
             <TextBlock TextWrapping="Wrap">
                 <Run Text="恢复到原始位置："/>
@@ -23,6 +25,7 @@
             </TextBlock>
         </RadioButton>
         <RadioButton x:Name="CustomRadio" GroupName="Target" Margin="0,0,0,6" Checked="OnTargetModeChanged"
+                     Style="{DynamicResource ThemedRadioButton}"
                      Content="恢复到指定目录"/>
         <Grid Margin="18,0,0,12" IsEnabled="{Binding IsChecked, ElementName=CustomRadio}">
             <Grid.ColumnDefinitions>
@@ -38,10 +41,13 @@
         <!-- 冲突策略 -->
         <TextBlock Text="同名文件冲突时" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="RenameRadio" GroupName="Policy" IsChecked="True" Margin="0,0,0,4"
+                     Style="{DynamicResource ThemedRadioButton}"
                      Content="重命名保留两者（推荐：不覆盖现有文件）"/>
         <RadioButton x:Name="OverwriteRadio" GroupName="Policy" Margin="0,0,0,4"
+                     Style="{DynamicResource ThemedRadioButton}"
                      Content="直接覆盖现有文件"/>
         <RadioButton x:Name="SkipRadio" GroupName="Policy" Margin="0,0,0,4"
+                     Style="{DynamicResource ThemedRadioButton}"
                      Content="跳过冲突文件，保持现有"/>
 
 
@@ -51,6 +57,7 @@
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
+                    Style="{DynamicResource SecondaryButton}"
                     Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="开始恢复" Width="96" Height="32" IsDefault="True" Click="OnOkClick"

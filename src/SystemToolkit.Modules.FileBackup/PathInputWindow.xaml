@@ -6,14 +6,17 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush_Background}"
+        TextElement.Foreground="{DynamicResource Brush_TextPrimary}"
         FontSize="{DynamicResource Font_SizeBody}" FontFamily="{DynamicResource Font_Body}">
     <!-- 规则编辑弹窗「手动输入」路径的小输入窗（2026-09-07 用户裁定对齐旧版四按钮） -->
     <StackPanel Margin="18,16">
         <TextBlock Text="输入要备份的文件或文件夹路径（可粘贴，自动去引号）：" TextWrapping="Wrap"/>
         <TextBox x:Name="InputBox" Height="30" Margin="0,8,0,0"
+                 Style="{DynamicResource FieldInput}"
                  VerticalContentAlignment="Center" Padding="6,0"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="取消" Width="76" Height="30" Margin="0,0,8,0" IsCancel="True"
+                    Style="{DynamicResource SecondaryButton}"
                     Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
                     BorderThickness="1" Cursor="Hand"/>
             <Button Content="添加" Width="76" Height="30" IsDefault="True" Click="OnAddClick"
