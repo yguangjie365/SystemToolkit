@@ -18,12 +18,46 @@ public static class VinylTextureFactory
     private const int Size = 700;
     private static BitmapSource? _groove;
     private static BitmapSource? _highlight;
+    private static BitmapSource? _noise;
 
     /// <summary>随盘旋转的盘体纹理（细纹 + 湍流弧带 + 斑驳高光/阴影）。</summary>
     public static ImageSource GrooveSource => _groove ??= RenderGroove();
 
     /// <summary>固定不转的 conic 反光层（环境光高光）。</summary>
     public static ImageSource HighlightSource => _highlight ??= RenderHighlight();
+
+    /// <summary>
+    /// 可平铺 dither 噪声（2026-09-19 新增）：消除大面积低对比渐变的 **8-bit 量化色阶带**。
+    /// <para>
+    /// <c>VinylBackgroundGradient</c> 三段总跨度仅 10 级、却横跨 1900×1280 ⇒ 每级跨约 120px，
+    /// 人眼 Mach band 会把量化边界强化成可见的斜向条纹（用户拉高饱和度后尤其明显；同屏的
+    /// 侧栏用纯色 <c>Brush_Background</c> 实测无条纹，可作对照）。叠加极低不透明度的随机噪声后，
+    /// 硬边被打散成高频微噪，视觉上复归平滑。
+    /// </para>
+    /// <para>固定随机种子 ⇒ 每次生成一致（便于截图比对）。</para>
+    /// </summary>
+    public static ImageSource NoiseSource => _noise ??= RenderNoise();
+
+    private const int NoiseEdge = 512;
+
+    private static BitmapSource RenderNoise()
+    {
+        const int n = NoiseEdge;
+        byte[] bytes = new byte[n * n * 4];
+        var rnd = new Random(20260919);
+        for (int i = 0; i < bytes.Length; i += 4)
+        {
+            byte v = (byte)rnd.Next(256);
+            bytes[i] = v;      // B
+            bytes[i + 1] = v;  // G
+            bytes[i + 2] = v;  // R
+            bytes[i + 3] = 255;
+        }
+
+        var bmp = BitmapSource.Create(n, n, 96, 96, PixelFormats.Bgra32, null, bytes, n * 4);
+        bmp.Freeze();
+        return bmp;
+    }
 
     private static BitmapSource RenderGroove()
     {

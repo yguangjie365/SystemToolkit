@@ -1381,6 +1381,19 @@
                         Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}"/>
                 <Border x:Name="ModernBgHost" Background="{Binding ModernBackgroundBrush, Mode=OneWay}"
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
+                <!-- 🔴 dither 噪声层（2026-09-19）：三段渐变总跨度仅 10 级却横跨全屏 ⇒ 每级约 120px
+                     的量化台阶被人眼 Mach band 强化成可见的**斜向条纹**（用户拉高饱和度后尤其明显；
+                     同屏侧栏用纯色 Brush_Background，实测无条纹可作对照）。
+                     叠一层 512×512 可平铺随机噪声（1:1 像素、不缩放）打断硬边 ⇒ 视觉复归平滑。
+                     Opacity 是这套方案的唯一观感旋钮：调大 ⇒ 噪点可感；调小 ⇒ 条纹回潮。
+                     ⚠️ 纯装饰层，必须 IsHitTestVisible=False（不得遮挡下层交互）。 -->
+                <Rectangle IsHitTestVisible="False" Opacity="0.02">
+                    <Rectangle.Fill>
+                        <ImageBrush ImageSource="{x:Static local:VinylTextureFactory.NoiseSource}"
+                                    TileMode="Tile" Stretch="None"
+                                    ViewportUnits="Absolute" Viewport="0,0,512,512"/>
+                    </Rectangle.Fill>
+                </Rectangle>
             </Grid>
 
             <!-- ① 顶栏：收起钮（左）；现代态显示"歌词"pill（右，对照 NexBox，不做评论） -->
