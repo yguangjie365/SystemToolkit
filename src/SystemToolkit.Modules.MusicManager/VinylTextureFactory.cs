@@ -117,11 +117,19 @@ public static class VinylTextureFactory
 
                 double midRad = (startDeg + sweepDeg / 2) * Math.PI / 180;
                 // 扇形渐变方向：沿角度中点的法线由透明到白
+                // 🔴 2026-09-19 修复：这里的坐标是**绝对像素**（cx = Size/2），必须显式 Absolute。
+                // 默认 RelativeToBoundingBox 会把 (cx,cy)→(cx+rr·cos, cy+rr·sin) 当成 0..1 的相对值，
+                // 渐变轴落到几何体外 ⇒ 投影 t=−(cosφ+sinφ) 被 clamp ⇒ **每段扇形退化为硬边平涂块**
+                // （圆周采样实测：220°–250° 出现 +21 亮度、边界 d=+21.3/−17.7 的硬边平台，
+                //  正是 wedge1「215°–249°、15% 白」的预期位置）。
                 var brush = new LinearGradientBrush(
                     Color.FromArgb(0, 255, 255, 255),
                     Color.FromArgb((byte)(opacity * 255), 255, 255, 255),
                     new Point(cx, cy),
-                    new Point(cx + rr * Math.Cos(midRad), cy + rr * Math.Sin(midRad)));
+                    new Point(cx + rr * Math.Cos(midRad), cy + rr * Math.Sin(midRad)))
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                };
                 brush.Freeze();
 
                 StreamGeometry geo = new();

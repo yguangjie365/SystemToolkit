@@ -1105,18 +1105,17 @@ public partial class MusicManagerView : UserControl
             return;
         }
 
-        double p = Math.Clamp(progress, 0, 1);
-        var fill = new LinearGradientBrush
+        // 🔴 2026-09-19 修复「同一行两处高亮」：渐变必须 Absolute，且宽度取**文本实际宽度**。
+        // 详见 CoverColorFactory.KaraokeFill 的注释（含 STA 探针实测：Relative 只填到 11% 且分段）。
+        // 本模板的 TextBlock 已设 HorizontalAlignment（非 Stretch）⇒ ActualWidth 即文本宽；
+        // 若尚未布局（0/NaN）则跳过本帧，由布局完成后的下一次进度刷新接管。
+        double width = text.ActualWidth;
+        if (double.IsNaN(width) || width <= 0)
         {
-            StartPoint = new System.Windows.Point(0, 0.5),
-            EndPoint = new System.Windows.Point(1, 0.5),
-        };
-        fill.GradientStops.Add(new GradientStop(accent.Color, 0.0));
-        fill.GradientStops.Add(new GradientStop(accent.Color, p));
-        fill.GradientStops.Add(new GradientStop(muted.Color, Math.Min(1.0, p + 0.001)));
-        fill.GradientStops.Add(new GradientStop(muted.Color, 1.0));
-        fill.Freeze();
-        text.Foreground = fill;
+            return;
+        }
+
+        text.Foreground = CoverColorFactory.KaraokeFill(accent, muted, width, progress);
         tracked = text;
     }
 

@@ -213,6 +213,38 @@ public static class CoverColorFactory
         return new Point(0.5 + Math.Sin(rad) / 2, 0.5 - Math.Cos(rad) / 2);
     }
 
+    /// <summary>
+    /// 逐字卡拉OK填充刷（2026-09-19 修复「同一行两处高亮」）。
+    /// <para>
+    /// 🔴 **必须用 <see cref="BrushMappingMode.Absolute"/>**：TextBlock 的 Foreground 若用
+    /// <see cref="BrushMappingMode.RelativeToBoundingBox"/>（默认值），WPF 会**按 glyph run 映射**——
+    /// 含空格的整句被切成多个 run 后，填充在**每个 run 上各自从 0 重启**。
+    /// STA 探针实测（文本「剩下嘴巴逞强 眼睛无力支撑」、width=600、p=0.33）：
+    /// Relative 的填充末点只有 x=68（≈11%），Absolute 为 x=195（= width×p，正确）。
+    /// </para>
+    /// <para>
+    /// ⚠️ <paramref name="width"/> 必须是**文本实际宽度**，不是列表宽度：调用方的 TextBlock
+    /// 必须设 <c>HorizontalAlignment</c> 为非 Stretch（彩胶 Left / 现代 Center），否则
+    /// <c>ActualWidth</c> 等于列表宽，填充会提前填满整行。
+    /// </para>
+    /// </summary>
+    public static Brush KaraokeFill(SolidColorBrush accent, SolidColorBrush muted, double width, double progress)
+    {
+        double p = Math.Clamp(progress, 0, 1);
+        var fill = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(Math.Max(1.0, width), 0),
+        };
+        fill.GradientStops.Add(new GradientStop(accent.Color, 0.0));
+        fill.GradientStops.Add(new GradientStop(accent.Color, p));
+        fill.GradientStops.Add(new GradientStop(muted.Color, Math.Min(1.0, p + 0.001)));
+        fill.GradientStops.Add(new GradientStop(muted.Color, 1.0));
+        fill.Freeze();
+        return fill;
+    }
+
     /// <summary>RGB 直构冻结刷（NexBox 复刻的文字色出口；字面色只允许出现在本文件）。</summary>
     public static SolidColorBrush FromRgb(byte r, byte g, byte b) => Create(r, g, b);
 

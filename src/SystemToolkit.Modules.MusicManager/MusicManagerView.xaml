@@ -1432,6 +1432,7 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Hidden"
                              ScrollViewer.CanContentScroll="False"
                              VirtualizingPanel.IsVirtualizing="False"
                              VirtualizingPanel.ScrollUnit="Pixel"
@@ -1463,6 +1464,7 @@
                             <DataTemplate>
                                 <TextBlock Text="{Binding Text, Mode=OneWay}"
                                            TextWrapping="Wrap"
+                                           HorizontalAlignment="Left"
                                            FontSize="{Binding DataContext.LyricFontSize, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
@@ -1654,6 +1656,7 @@
                              ItemsSource="{Binding LyricRows}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Hidden"
                              ScrollViewer.CanContentScroll="False"
                              VirtualizingPanel.IsVirtualizing="False"
                              VirtualizingPanel.ScrollUnit="Pixel"
@@ -1681,6 +1684,7 @@
                                 <TextBlock Text="{Binding Text, Mode=OneWay}"
                                            TextWrapping="Wrap"
                                            TextAlignment="Center"
+                                           HorizontalAlignment="Center"
                                            FontSize="{Binding DataContext.LyricFontSize, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
