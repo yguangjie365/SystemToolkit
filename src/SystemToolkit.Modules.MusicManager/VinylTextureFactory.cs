@@ -8,7 +8,7 @@ namespace SystemToolkit.Modules.MusicManager;
 /// 彩胶盘纹理工厂（NexBox VinylDisc 复刻，2026-09-09）。
 /// Web 版用 SVG feTurbulence 湍流位移 + CSS repeating-radial/conic-gradient；
 /// WPF 无对应能力，故运行时 <see cref="RenderTargetBitmap"/> 预渲染两张 700×700 纹理：
-/// ① GrooveSource：唱片细纹（1px/6px 同心环）+ 7 道宽弧带（噪声径向抖动近似湍流）
+/// ① GrooveSource：7 道宽弧带（噪声径向抖动近似湍流）+ 明暗斑驳（**细纹层已于 2026-09-19 移除**）
 ///    + 双 radial 明暗斑驳——随盘旋转；
 /// ② HighlightSource：conic 反光近似（分扇形白色渐变，215° 起三段）——固定不随盘转。
 /// 模块生命周期内只生成一次（线程安全：由 View 构造（STA）触发）。
@@ -20,7 +20,7 @@ public static class VinylTextureFactory
     private static BitmapSource? _highlight;
     private static BitmapSource? _noise;
 
-    /// <summary>随盘旋转的盘体纹理（细纹 + 湍流弧带 + 斑驳高光/阴影）。</summary>
+    /// <summary>随盘旋转的盘体纹理（湍流弧带 + 斑驳高光/阴影）。</summary>
     public static ImageSource GrooveSource => _groove ??= RenderGroove();
 
     /// <summary>固定不转的 conic 反光层（环境光高光）。</summary>
@@ -75,13 +75,13 @@ public static class VinylTextureFactory
         {
             double cx = Size / 2.0, cy = Size / 2.0;
 
-            // 1) 唱片细纹：1px 白 0.09 每 6px 一道（对照 repeating-radial-gradient）
-            double r = 0;
-            while (r < Size / 2.0)
-            {
-                dc.DrawEllipse(null, Fin(1.0, 0.09), new Point(cx, cy), r, r);
-                r += 6;
-            }
+            // 1) 唱片细纹：**2026-09-19 已移除**（用户实机反馈"唱片周围还有一些条纹"）。
+            //    本轮为 1px 白 0.09、每 6px 一道（对照 repeating-radial-gradient）。
+            //    成因：纹理按 700x700 @96DPI 生成 ⇒ 逻辑 700 DIP；实机盘径 720 DIP @150% DPI
+            //    ⇒ 物理 1080px、纹理放大 1.54x ⇒ 细纹周期由 6 变 9.4px、对比约 9 luma
+            //    ⇒ 人眼（Mach band）读作**条纹**而非"质感"；且封面圆（占盘径 70%）内被照片
+            //    遮盖，只有外圈（半径 70%~100%）显露 —— 恰是最显眼处。
+            //    守卫：VinylGrooveGuardTests（沿径向读 alpha，断言无 6px 周期的细纹跳变）。
 
             // 2) 七道宽弧带（对照 bands 表）：宽度 16–30，透明度 0.08–0.11；
             //    feTurbulence 位移用"分段圆弧 + 伪随机径向抖动"近似——每 6° 一段，
@@ -213,14 +213,6 @@ public static class VinylTextureFactory
         dc.DrawRectangle(brush, null, new Rect(0, 0, Size, Size));
     }
 
-    private static Pen Fin(double thickness, double opacity)
-    {
-        var brush = new SolidColorBrush(Color.FromArgb((byte)(opacity * 255), 255, 255, 255));
-        brush.Freeze();
-        var pen = new Pen(brush, thickness);
-        pen.Freeze();
-        return pen;
-    }
 
     private static BitmapSource Freeze(DrawingVisual visual)
     {
