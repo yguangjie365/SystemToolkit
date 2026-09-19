@@ -185,13 +185,15 @@ public class MusicPlayerStyleTests
         Assert.True(c.R > 180, $"实际主色 {c}");
         Assert.True(c.R > c.G + 80, $"实际主色 {c}");
 
-        // OM-6 截图对齐（2026-09-09 NexBox 复刻）：三风格背景升级为渐变刷
-        // 彩胶=固定浅灰三段渐变（近白）；沉浸=色板深色的深-本色-浅横向渐变（中段深）；
+        // OM-6 截图对齐（2026-09-09 NexBox 复刻）：三风格背景的定色
+        // 彩胶=**纯色**近白（2026-09-19 由三段渐变改为纯色：三段总跨度仅约 10 级却横跨全屏 ⇒
+        //      每级约 120px 的 8-bit 量化台阶被 Mach band 强化成可见斜向条纹，dither 不足以消除）；
+        // 沉浸=色板深色的深-本色-浅横向渐变（中段深）；
         // 现代=封面原色 0-40% 平铺 + 右缘压暗（首段色 == 封面主色）
         // 亮度用感知加权（WPF Color 无 GetBrightness）
         static double Luma(System.Windows.Media.Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
-        System.Windows.Media.LinearGradientBrush vinylBg = Assert.IsType<System.Windows.Media.LinearGradientBrush>(vm.VinylBackgroundBrush);
-        Assert.True(Luma(vinylBg.GradientStops[0].Color) > 0.8, "彩胶底应近白（固定浅灰渐变）");
+        System.Windows.Media.SolidColorBrush vinylBg = Assert.IsType<System.Windows.Media.SolidColorBrush>(vm.VinylBackgroundBrush);
+        Assert.True(Luma(vinylBg.Color) > 0.8, "彩胶底应近白（固定近白纯色）");
         System.Windows.Media.LinearGradientBrush immersionBg = Assert.IsType<System.Windows.Media.LinearGradientBrush>(vm.ImmersionBackgroundBrush);
         Assert.True(Luma(immersionBg.GradientStops[1].Color) < 0.45, "沉浸底应深（色板匹配）");
         System.Windows.Media.LinearGradientBrush modernBg = Assert.IsType<System.Windows.Media.LinearGradientBrush>(vm.ModernBackgroundBrush);

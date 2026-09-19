@@ -10,17 +10,49 @@ using Xunit;
 namespace SystemToolkit.Tests.Architecture;
 
 /// <summary>
-/// 播放器背景 dither 守卫（2026-09-19 建立）。
+/// 播放器背景守卫（2026-09-19 建立）。
 /// <para>
-/// 背景三段渐变（<see cref="CoverColorFactory.VinylBackgroundGradient"/> 等）总跨度仅约 10 级、
-/// 却横跨全屏 ⇒ 每级跨约 120px 的量化台阶会被人眼 Mach band 强化成可见的**斜向条纹**。
-/// 正解是叠一层极低不透明度的噪声打断硬边。
+/// 背景：大跨度低对比的渐变在 8-bit 下每级要跨上百像素，量化台阶会被人眼 Mach band 强化成
+/// **可见的斜向条纹**（用户实测：最长平坦区段 446px；同屏纯色侧栏则无条纹）。
+/// 结论分两步：① **彩胶背景直接改纯色**（确定性消除，与 DPI/GPU/合成路径无关）；
+/// ② 沉浸/现代两风格仍是渐变 ⇒ 由 dither 噪声层负责打断硬边。
 /// </para>
-/// <para>本守卫锁两件事：① 背景层确实挂了噪声层且配置正确；② 噪声源确实是随机分布（没被换成纯色）。</para>
+/// <para>本守卫锁三件事：① 彩胶背景必须是纯色（不得改回渐变）；② dither 噪声层配置正确且**仅对非彩胶生效**；
+/// ③ 噪声源确实是随机分布（没被换成低对比纹理）。</para>
 /// </summary>
 public sealed class BackgroundDitherGuardTests
 {
     private const string XamlRel = @"src\SystemToolkit.Modules.MusicManager\MusicManagerView.xaml";
+
+    [Fact]
+    public void VinylBackground_MustBeFlatColor()
+    {
+        Exception? err = null;
+        bool darkFlat = false;
+        bool lightFlat = false;
+        var t = new Thread(() =>
+        {
+            try
+            {
+                ViewLoadSmokeGuardTests.EnsureApplication();
+                darkFlat = CoverColorFactory.VinylBackground(true) is SolidColorBrush;
+                lightFlat = CoverColorFactory.VinylBackground(false) is SolidColorBrush;
+            }
+            catch (Exception e)
+            {
+                err = e;
+            }
+        });
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+        t.Join();
+        Assert.Null(err);
+
+        // 渐变正是本缺陷的根源：三段总跨度约 10 级、横跨约 1900×1280 ⇒ 每级约 120px 的量化台阶
+        // 被 Mach band 强化成可见斜向条纹。dither 只能部分压制（实测 446px → 67px），故改纯色。
+        Assert.True(darkFlat, "深色档彩胶背景必须是纯色（SolidColorBrush）—— 改回渐变会让斜向条纹复发。");
+        Assert.True(lightFlat, "浅色档彩胶背景必须是纯色（SolidColorBrush）—— 改回渐变会让斜向条纹复发。");
+    }
 
     [Fact]
     public void BackgroundGrid_MustCarryDitherNoiseLayer()
@@ -37,9 +69,14 @@ public sealed class BackgroundDitherGuardTests
         Assert.Contains("TileMode=\"Tile\"", block, StringComparison.Ordinal);
         Assert.Contains("IsHitTestVisible=\"False\"", block, StringComparison.Ordinal);
 
+        // dither 只对**仍是渐变**的沉浸/现代两风格有意义；彩胶已改纯色，必须对它隐藏，
+        // 否则纯色背景上会平白多出一层噪点。
+        Assert.Contains("IsVinylStyle", block, StringComparison.Ordinal);
+        Assert.Contains("InverseToVis", block, StringComparison.Ordinal);
+
         // 🔴 低透明度必须写在噪声位图的 alpha 通道里，**不能**用 Rectangle.Opacity：
         // Opacity<1 会让 WPF 走 8-bit 中间渲染表面，把 2% 的噪声在中间层就量化掉
-        // （实测：用 Opacity=0.02 时最长平坦区段只从 446px 降到 67px；改 alpha 后应接近探针的 5-6px）。
+        // （实测：用 Opacity=0.02 时最长平坦区段只从 446px 降到 67px）。
         Match m = Regex.Match(block, "<Rectangle[^>]*Opacity=");
         Assert.False(m.Success,
             "dither 噪声层不得使用 Rectangle.Opacity —— 请把低透明度写进位图 alpha（VinylTextureFactory.NoiseAlpha）。");

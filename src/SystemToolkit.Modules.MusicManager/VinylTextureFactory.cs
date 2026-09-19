@@ -29,7 +29,7 @@ public static class VinylTextureFactory
     /// <summary>
     /// 可平铺 dither 噪声（2026-09-19 新增）：消除大面积低对比渐变的 **8-bit 量化色阶带**。
     /// <para>
-    /// <c>VinylBackgroundGradient</c> 三段总跨度仅 10 级、却横跨 1900×1280 ⇒ 每级跨约 120px，
+    /// <c>CoverColorFactory.VinylBackground</c> 原为三段渐变、总跨度仅 10 级却横跨 1900×1280 ⇒ 每级跨约 120px，
     /// 人眼 Mach band 会把量化边界强化成可见的斜向条纹（用户拉高饱和度后尤其明显；同屏的
     /// 侧栏用纯色 <c>Brush_Background</c> 实测无条纹，可作对照）。
     /// </para>

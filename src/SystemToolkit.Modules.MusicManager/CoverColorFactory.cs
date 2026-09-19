@@ -73,37 +73,22 @@ public static class CoverColorFactory
     // ════════ NexBox 复刻补充（2026-09-09，对照 MusicPage.tsx / VinylDisc.tsx） ════════
 
     /// <summary>
-    /// 彩胶页背景（对照 NexBox）：固定浅灰三段渐变 160°（#dfdfe2/#d8d8dc/#d1d1d6）——
-    /// 不随封面变化，彩色只在盘体。
+    /// 彩胶页背景（2026-09-19 由三段渐变改为**纯色**；方法名同步去掉 Gradient）。
+    /// <para>
+    /// 原为固定三段渐变 160°（浅色 #F7F6F3/#F2F0EC/#ECE9E4；深色 #1E2024/#23262B/#191B1F）。
+    /// 🔴 缺陷：三段总跨度仅约 10 级，却横跨约 1900×1280 ⇒ **每级跨约 120px**，8-bit 量化台阶
+    /// 被人眼 Mach band 强化成**肉眼可见的斜向条纹**（用户拉高饱和度截图实测：最长平坦区段 446px；
+    /// 同屏侧栏用纯色则无条纹，可作对照）。
+    /// 叠加 dither 只能把它压到 67px（真实合成路径下，见 <c>VinylTextureFactory.NoiseAlpha</c> 注释），
+    /// **不足以消除**。而该渐变在正常饱和度下的视觉贡献仅约 4% 亮度，远低于条纹的代价
+    /// ⇒ 直接改纯色：确定性消除，与 DPI / GPU / 合成路径全无关。
+    /// </para>
+    /// <para>取原 0.55 停靠点色值，观感与渐变中段一致。深色档保留 2026-09-11 的裁定（不随封面、用深灰）。</para>
     /// </summary>
-    public static Brush VinylBackgroundGradient(bool dark = false)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = GradientPoint(160),
-            EndPoint = GradientEnd(160),
-        };
-        if (dark)
-        {
-            // 深色主题档：同结构的三段深灰（对照浅色档 #F7F6F3/#F2F0EC/#ECE9E4 的暗色镜像）。
-            // 🔴 2026-09-11：原来彩胶背景是**固定浅灰**（不随封面），深色主题下与宿主的深色
-            // 按钮底/深侧栏直接冲突——深背景上压深灰按钮即「黑块」。深色档由此而来。
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x1E, 0x20, 0x24), 0.0));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x23, 0x26, 0x2B), 0.55));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0x19, 0x1B, 0x1F), 1.0));
-        }
-        else
-        {
-            // 2026-09-12 QQ 彩胶化（用户拍板"近白暖调"）：原 #DFDFE2/#D8D8DC/#D1D1D6 偏灰，
-            // 收敛为暖调近白三段——突出胶盘与柔光（对照 QQMusic 截图的近白底）。
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xF7, 0xF6, 0xF3), 0.0));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xF2, 0xF0, 0xEC), 0.55));
-            brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xEC, 0xE9, 0xE4), 1.0));
-        }
-
-        brush.Freeze();
-        return brush;
-    }
+    public static SolidColorBrush VinylBackground(bool dark = false)
+        => dark
+            ? FromRgb(0x23, 0x26, 0x2B)
+            : FromRgb(0xF2, 0xF0, 0xEC);
 
     /// <summary>沉浸页背景（对照 immersiveBgGradient）：色板匹配色 90° 三段（深 0% → 本色 50% → 浅 100%）。</summary>
     public static (Color Base, Brush Gradient) ImmersionBackgroundGradient(SolidColorBrush accent)
@@ -197,20 +182,6 @@ public static class CoverColorFactory
 
         brush.Freeze();
         return brush;
-    }
-
-    /// <summary>CSS 渐变角 → WPF StartPoint（0°=向上，顺时针）。</summary>
-    private static Point GradientPoint(double angleDeg)
-    {
-        double rad = angleDeg * Math.PI / 180;
-        return new Point(0.5 - Math.Sin(rad) / 2, 0.5 + Math.Cos(rad) / 2);
-    }
-
-    /// <summary>CSS 渐变角 → WPF EndPoint。</summary>
-    private static Point GradientEnd(double angleDeg)
-    {
-        double rad = angleDeg * Math.PI / 180;
-        return new Point(0.5 + Math.Sin(rad) / 2, 0.5 - Math.Cos(rad) / 2);
     }
 
     /// <summary>

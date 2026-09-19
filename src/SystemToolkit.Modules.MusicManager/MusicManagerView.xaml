@@ -1381,15 +1381,16 @@
                         Visibility="{Binding IsImmersionStyle, Converter={StaticResource BoolToVis}}"/>
                 <Border x:Name="ModernBgHost" Background="{Binding ModernBackgroundBrush, Mode=OneWay}"
                         Visibility="{Binding IsModernStyle, Converter={StaticResource BoolToVis}}"/>
-                <!-- 🔴 dither 噪声层（2026-09-19）：三段渐变总跨度仅 10 级却横跨全屏 ⇒ 每级约 120px
-                     的量化台阶被人眼 Mach band 强化成可见的**斜向条纹**（用户拉高饱和度后尤其明显；
-                     同屏侧栏用纯色 Brush_Background，实测无条纹可作对照）。
-                     叠一层 512×512 可平铺随机噪声（1:1 像素、不缩放）打断硬边 ⇒ 视觉复归平滑。
+                <!-- 🔴 dither 噪声层（2026-09-19）：**仅对沉浸/现代两风格生效**（彩胶已改纯色，不再需要，
+                     见 CoverColorFactory.VinylBackground 的类型摘要）。
+                     原理：大跨度低对比的渐变在 8-bit 下每级要跨上百像素，量化台阶被人眼 Mach band
+                     强化成可见的斜向条纹。叠一层 512×512 可平铺随机噪声（1:1 像素、不缩放）打断硬边。
                      ⚠️ 低透明度写在噪声位图自身的 alpha 通道里（VinylTextureFactory.NoiseAlpha），
                      **这里绝不能加 Opacity**——WPF 对 Opacity<1 走 8-bit 中间表面，
                      会把 2% 的噪声在中间层就量化掉（实测最长平坦区段只能从 446px 降到 67px）。
                      ⚠️ 纯装饰层，必须 IsHitTestVisible=False（不得遮挡下层交互）。 -->
-                <Rectangle IsHitTestVisible="False">
+                <Rectangle IsHitTestVisible="False"
+                           Visibility="{Binding IsVinylStyle, Converter={StaticResource InverseToVis}}">
                     <Rectangle.Fill>
                         <ImageBrush ImageSource="{x:Static local:VinylTextureFactory.NoiseSource}"
                                     TileMode="Tile" Stretch="None"

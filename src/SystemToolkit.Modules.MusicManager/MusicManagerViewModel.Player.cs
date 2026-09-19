@@ -140,7 +140,7 @@ public partial class MusicManagerViewModel
     // 渐变构造全部收敛在 CoverColorFactory（配色字面量唯一收敛点，CsBrushLiteralGuard 实测拦截）
     //   彩胶   = 固定浅灰三段渐变（不随封面）；沉浸 = 色板匹配三段横向；现代 = 封面原色 40% 平铺 + 右缘压暗
 
-    private Brush _vinylBackgroundBrush = CoverColorFactory.VinylBackgroundGradient();
+    private Brush _vinylBackgroundBrush = CoverColorFactory.VinylBackground();
 
     /// <summary>彩胶背景：固定浅灰三段渐变（对照 NexBox，不随封面变化——彩色只在盘体）。</summary>
     public Brush VinylBackgroundBrush
@@ -278,7 +278,7 @@ public partial class MusicManagerViewModel
         (_immersionVividColor, ImmersionBackgroundBrush) =
             CoverColorFactory.ImmersionBackgroundGradient(accent);
         ModernBackgroundBrush = CoverColorFactory.ModernBackgroundGradient(accent, darkTheme);
-        VinylBackgroundBrush = CoverColorFactory.VinylBackgroundGradient(darkTheme);
+        VinylBackgroundBrush = CoverColorFactory.VinylBackground(darkTheme);
         VinylAccentBrush = CoverColorFactory.VinylAccent(accent);
     }
 
