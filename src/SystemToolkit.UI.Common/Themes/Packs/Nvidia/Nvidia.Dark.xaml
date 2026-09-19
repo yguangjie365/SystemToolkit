@@ -128,16 +128,16 @@
 
     <!-- ===== 字体族（五款打包字体按 NOTICE.md §五加载；西文在前中文在后按字符回退） ===== -->
     <!-- 正文：Inter（西文）→ HarmonyOS Sans SC（中文）→ 系统兜底 -->
-    <FontFamily x:Key="Font_Body">pack://application:,,,/Resources/Fonts/Inter/#Inter, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Font_Body">pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/Inter/#Inter, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
     <!-- 等宽：JetBrains Mono → Cascadia/Consolas（西文）→ HarmonyOS Sans SC（中文，修复同串汉字粗细不一致） -->
-    <FontFamily x:Key="Font_Mono">pack://application:,,,/Resources/Fonts/JetBrainsMono/#JetBrains Mono, Cascadia Mono, Consolas, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Font_Mono">pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/JetBrainsMono/#JetBrains Mono, Cascadia Mono, Consolas, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
     <!-- 中文品牌字（霞鹜文楷）：仅限关于页/空态标语等"说话"场合，禁止界面正文 -->
-    <FontFamily x:Key="Font_TitleZh">pack://application:,,,/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Font_TitleZh">pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
     <!-- 西文字标（Cormorant Garamond）：仅限大字号品牌场合（≥20px，小字号笔画发虚） -->
-    <FontFamily x:Key="Font_TitleEn">pack://application:,,,/Resources/Fonts/CormorantGaramond/#Cormorant Garamond, pack://application:,,,/Resources/Fonts/Inter/#Inter</FontFamily>
+    <FontFamily x:Key="Font_TitleEn">pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/CormorantGaramond/#Cormorant Garamond, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/Inter/#Inter</FontFamily>
     <!-- 沉浸歌词大字（Noto Serif SC Black，对齐 NexBox 思源宋体）；WPF 按 name ID1 匹配 → 首选 "Noto Serif SC Black"，
          次选 TypoFamily "Noto Serif SC"；回退霞鹜文楷（衬线）→ 雅黑兜底 -->
-    <FontFamily x:Key="Font_ImmersiveLyric">pack://application:,,,/Resources/Fonts/NotoSerifCJKsc/#Noto Serif SC Black, pack://application:,,,/Resources/Fonts/NotoSerifCJKsc/#Noto Serif SC, pack://application:,,,/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Font_ImmersiveLyric">pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/NotoSerifCJKsc/#Noto Serif SC Black, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/NotoSerifCJKsc/#Noto Serif SC, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/LXGWWenKai/#LXGW WenKai, pack://application:,,,/SystemToolkit.UI.Common;component/Resources/Fonts/HarmonyOS/#HarmonyOS Sans SC, Microsoft YaHei UI</FontFamily>
 
     <!-- ===== 字号（07 分册定档；展示名即令牌，禁字面量；棘轮只减不增。
          M-UI-2（2026-09-06）：12.5/12/11.5 三档 0.5px 间距肉眼不可辨（审查核验属实）——

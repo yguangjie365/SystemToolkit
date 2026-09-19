@@ -440,10 +440,23 @@ Background="{DynamicResource Brush_Background}">
                             </ListView>
                             
                             <!-- 空态提示 -->
-                            <TextBlock Grid.Row="0" Text="暂无软件 · 点击'+添加软件'或从商店导入" 
+                            <TextBlock Grid.Row="0"
                                        Visibility="{Binding ThirdPartyView.Count, Converter={StaticResource ZeroToVis}}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}"/>
+                                       Foreground="{DynamicResource Brush_TextMuted}" FontSize="{DynamicResource Font_SizeBodySm}">
+                                <TextBlock.Style>
+                                    <!-- 🟠-7⑤（UI-v2）：本页本地过滤源是**状态 chip**（StatusFilter）而非文本框 ——
+                                         选中某状态且 0 条时，原文案把用户引向「添加软件」这个错误动作。 -->
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="当前筛选下没有软件 · 切到「全部」查看"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding StatusFilter}" Value="0">
+                                                <Setter Property="Text" Value="暂无软件 · 点击'+添加软件'或从商店导入"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             
                             <!-- 手动软件区 -->
                             <StackPanel Grid.Row="1" Margin="12,8,12,10">
@@ -636,7 +649,9 @@ Background="{DynamicResource Brush_Background}">
                 <Button Grid.Column="5" Height="32" MinWidth="72" Padding="10,0" FontSize="{DynamicResource Font_SizeCaption}" Content="批量安装"
                         Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnDark}"
                         BorderThickness="0" Cursor="Hand" Margin="8,0,0,0"
-                        Command="{Binding BatchInstallCommand}"/>
+                        Command="{Binding BatchInstallCommand}"
+                        ToolTipService.ShowOnDisabled="True"
+                        ToolTip="需先勾选要安装的软件；批量操作进行中时不可用"/>
                 <Button Grid.Column="7" Style="{DynamicResource RowActionButton}" Content="忽略所选"
                         Margin="{DynamicResource Space_XS}" Command="{Binding IgnoreSelectedCommand}"/>
                 <Button Grid.Column="8" Style="{DynamicResource RowActionButton}" Content="恢复所选"

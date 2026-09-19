@@ -171,7 +171,7 @@ public partial class DriverManagerViewModel : ObservableObject
 
     /// <summary>底部状态栏文案（找到 N 个驱动包 / 扫描失败原因）。</summary>
     [ObservableProperty]
-    private string _statusText = "尚未扫描——点击「扫描(R)」枚举 Driver Store";
+    private string _statusText = string.Empty;
 
     partial void OnStatusFilterChanged(int value) => PackagesView.Refresh();
     partial void OnSearchQueryChanged(string value) => PackagesView.Refresh();
@@ -320,6 +320,13 @@ public partial class DriverManagerViewModel : ObservableObject
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(CancelOverlayText));
 
+    partial void OnIsOperatingChanged(bool value) => OnPropertyChanged(nameof(OperatingToolTip));
+
+    /// <summary>🟠-18②（UI-v2）：操作进行中的禁用原因提示。
+    /// 只在真正禁用时给文案 —— 原实现把静态 ToolTip 常挂，按钮可用时悬停也说「操作进行中」，
+    /// 属对可用态撒谎。</summary>
+    public string? OperatingToolTip => IsOperating ? "pnputil 操作进行中，请等待完成" : null;
+
     /// <summary>是否已有提权操作进行中（删除/导出互斥；扫描可并行，互不影响）。</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DeleteSelectedCommand))] // 审查 M1：四个操作命令此前永不刷新可用性
@@ -354,6 +361,12 @@ public partial class DriverManagerViewModel : ObservableObject
     /// <summary>按当前勾选状态回算底栏计数（与 AppManagerViewModel.RecountSelection 同款）。
     /// 🔴 单一判据：勾选回调与集合重建都走这里，避免同一口径两处各写。</summary>
     private void RecountSelection() => SelectedCount = Packages.Count(p => p.IsSelected);
+
+    /// <summary>可备份的第三方驱动包数（🟠-12：与 View 向导回调、RunBackupAsync 前置判定共用同一判据）。</summary>
+    public int ThirdPartyPackageCount => Packages.Count(p => p.IsThirdParty);
+
+    /// <summary>已勾选且属第三方的驱动包数（同上）。</summary>
+    public int SelectedThirdPartyCount => Packages.Count(p => p.IsSelected && p.IsThirdParty);
 
     private void AddLog(string message)
     {

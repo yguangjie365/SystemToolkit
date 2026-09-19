@@ -113,7 +113,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                     <RadioButton Style="{DynamicResource ThemedRadioButton}" GroupName="IpMode" Content="手动（静态）" FontSize="{DynamicResource Font_SizeBodySm}"
                                                  IsChecked="{Binding Settings.IpModeStatic}"/>
                                 </StackPanel>
-                                <Grid IsEnabled="{Binding Settings.IpModeStatic}">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="14"/>
@@ -125,21 +125,21 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
                                     </Grid.ColumnDefinitions>
 
                                     <!-- IPv4 地址 -->
-                                    <StackPanel Grid.Column="0">
+                                    <StackPanel Grid.Column="0" IsEnabled="{Binding Settings.IpModeStatic}">
                                         <TextBlock Text="IPv4 地址" Style="{DynamicResource KvLabel}" Margin="0,0,0,4"/>
                                         <TextBox Style="{DynamicResource FieldInput}"
                                                  Text="{Binding Settings.IpInput, UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <!-- 子网掩码 -->
-                                    <StackPanel Grid.Column="2">
+                                    <StackPanel Grid.Column="2" IsEnabled="{Binding Settings.IpModeStatic}">
                                         <TextBlock Text="子网掩码" Style="{DynamicResource KvLabel}" Margin="0,0,0,4"/>
                                         <TextBox Style="{DynamicResource FieldInput}"
                                                  Text="{Binding Settings.MaskInput, UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <!-- 网关 -->
-                                    <StackPanel Grid.Column="4">
+                                    <StackPanel Grid.Column="4" IsEnabled="{Binding Settings.IpModeStatic}">
                                         <TextBlock Text="网关" Style="{DynamicResource KvLabel}" Margin="0,0,0,4"/>
                                         <TextBox Style="{DynamicResource FieldInput}"
                                                  Text="{Binding Settings.GatewayInput, UpdateSourceTrigger=PropertyChanged}"/>

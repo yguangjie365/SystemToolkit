@@ -93,6 +93,15 @@ public partial class DriverManagerViewModel
     private async Task RunBackupAsync()
     {
         LogTiming timing = _logger.Time("DriverBackup");
+        // 🟠-12（UI-v2）：向导在「无可用范围」时直接 return null，与「用户取消」不可分 ⇒ 用户点了没反应。
+        // 前置判定（与 View 回调同口径，计数改由 VM 暴露）并给出可见反馈。
+        if (ThirdPartyPackageCount == 0 && SelectedThirdPartyCount == 0)
+        {
+            AddLog("⚠ 驱动备份向导未打开：Driver Store 中无可备份的第三方驱动包（仅系统自带驱动）。");
+            timing.Complete(LogResult.Cancelled, LogLevel.Warn, "驱动备份向导未启动：无可用备份范围");
+            return;
+        }
+
         // 🔴 V12-D1：向导回调原先裸露在 try 之外 —— 回调内部要做 Directory.CreateDirectory（View 注入），
         // 选到不可写目录/只读盘/磁盘满时抛出的异常会直冲 AsyncRelayCommand 的吞异常路径：
         // 用户零反馈、日志零记录、timing 永不 Complete。此处就地捕获并如实汇报（闸门尚未获取，直接 return）。

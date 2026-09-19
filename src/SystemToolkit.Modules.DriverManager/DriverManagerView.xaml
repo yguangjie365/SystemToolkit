@@ -93,12 +93,12 @@ Background="{DynamicResource Brush_Background}">
                         <ListView.Style>
                             <Style TargetType="ListView">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Packages.Count}" Value="0">
+                                    <DataTrigger Binding="{Binding PackagesView.Count}" Value="0">
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="ListView">
                                                     <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                                                        <TextBlock Text="暂无驱动包 · 点击「刷新(R)」开始扫描" 
+                                                        <TextBlock Text="暂无驱动包 · 点击「刷新(R)」重新扫描" 
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource Brush_TextMuted}"/>
                                                     </Border>
@@ -377,10 +377,16 @@ Background="{DynamicResource Brush_Background}">
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Visible"/>
                     <Style.Triggers>
-                        <!-- 未勾选任何包时底栏无信息可呈，折叠让位给列表 -->
-                        <DataTrigger Binding="{Binding SelectedCount}" Value="0">
+                        <!-- 未勾选任何包**且状态栏无最新信息**时折叠，让位给列表。
+                             🟠-6（UI-v2）：原判据只看 SelectedCount —— 而「扫描失败：xxx」只写 StatusText，
+                             未勾选时底栏整体折叠 ⇒ 失败文案永远无处显示。 -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding SelectedCount}" Value="0"/>
+                                <Condition Binding="{Binding StatusText}" Value=""/>
+                            </MultiDataTrigger.Conditions>
                             <Setter Property="Visibility" Value="Collapsed"/>
-                        </DataTrigger>
+                        </MultiDataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
@@ -402,7 +408,7 @@ Background="{DynamicResource Brush_Background}">
                          补 ToolTip + ShowOnDisabled，让用户知道“为什么现在不能点”，而不是对着灰按钮干瞪眼。 -->
                     <Button Content="删除驱动" Command="{Binding DeleteSelectedCommand}"
                             Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0" Margin="0,0,6,0"
-                            ToolTipService.ShowOnDisabled="True" ToolTip="pnputil 操作进行中，请等待完成"/>
+                            ToolTipService.ShowOnDisabled="True" ToolTip="{Binding OperatingToolTip}"/>
                     <Button Content="强制删除" Command="{Binding ForceDeleteSelectedCommand}"
                             Style="{DynamicResource RowDangerButton}" Height="24" MinWidth="64" Padding="10,0"
                             ToolTipService.ShowOnDisabled="True" ToolTip="pnputil 操作进行中，请等待完成"/>

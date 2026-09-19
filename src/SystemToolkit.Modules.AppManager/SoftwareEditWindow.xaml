@@ -59,9 +59,7 @@
                     Background="{DynamicResource Brush_DangerSoft}" Foreground="{DynamicResource Brush_DangerText}"
                     BorderBrush="{DynamicResource Brush_Danger}" BorderThickness="1" Cursor="Hand"/>
             <Button Content="取消" Width="76" Height="32" Margin="0,0,8,0" IsCancel="True"
-                    Style="{DynamicResource SecondaryButton}"
-                    Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
-                    BorderThickness="1" Cursor="Hand"/>
+                    Style="{DynamicResource SecondaryButton}" Cursor="Hand"/>
             <Button Content="保存" Width="76" Height="32" IsDefault="True" Click="OnSaveClick"
                     Background="{DynamicResource Brush_Accent}" Foreground="{DynamicResource Brush_OnAccent}"
                     BorderThickness="0" Cursor="Hand"/>

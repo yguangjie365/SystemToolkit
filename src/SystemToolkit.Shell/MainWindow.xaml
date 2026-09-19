@@ -39,12 +39,12 @@
                                Style="{DynamicResource MonoText}" Margin="0,6,0,0"/>
                 </StackPanel>
 
-                <Line DockPanel.Dock="Top" X1="0" X2="1" Y1="0" Y2="0"
+                <Line DockPanel.Dock="Top" X1="0" X2="1" Y1="0" Y2="0" Stretch="Fill"
                       Stroke="{DynamicResource Brush_Border}" Margin="14,0"/>
 
                 <!-- 版本脚注 -->
                 <StackPanel DockPanel.Dock="Bottom" Margin="14,0,14,12">
-                    <Line X1="0" X2="1" Y1="0" Y2="0"
+                    <Line X1="0" X2="1" Y1="0" Y2="0" Stretch="Fill"
                           Stroke="{DynamicResource Brush_Border}" Margin="0,0,0,10"/>
                     <TextBlock Text="非商业开源 · GPL-3.0" FontSize="{DynamicResource Font_SizeMicro}" Style="{DynamicResource MonoText}"/>
                 </StackPanel>
@@ -136,7 +136,7 @@
                                             <Trigger Property="IsSelected" Value="True">
                                                 <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Brush_Accent}"/>
                                                 <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush_OnDark}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush_OnAccent}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

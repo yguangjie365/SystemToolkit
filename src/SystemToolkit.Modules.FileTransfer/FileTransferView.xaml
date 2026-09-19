@@ -1060,7 +1060,7 @@
                                     <ListBox.Style>
                                         <Style TargetType="ListBox" BasedOn="{StaticResource ListLog}">
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Desktop.HistoryEntries.Count}" Value="0">
+                                                <DataTrigger Binding="{Binding Desktop.HistoryView.Count}" Value="0">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="ListBox">

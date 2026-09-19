@@ -185,6 +185,27 @@
                       controls:GridViewColumnSizing.AutoFillLastColumn="True"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       d:ItemsSource="{d:SampleData ItemCount=3}">
+                    <ListView.Style>
+                        <!-- 🟠-7②（UI-v2）：TableVis=HasData ⇒ 扫描成功但 0 设备时表格仍可见却全空，
+                             与「扫描没跑」不可分；补一条表内空态。 -->
+                        <Style TargetType="ListView">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Rows.Count}" Value="0">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListView">
+                                                <Border Background="{TemplateBinding Background}">
+                                                    <TextBlock Text="未发现设备 · 确认手机与本机处于同一局域网"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               Style="{DynamicResource ListEmptyHint}"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.Style>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem" BasedOn="{StaticResource ListItemRowTallStyle}">
                         <Style.Triggers>

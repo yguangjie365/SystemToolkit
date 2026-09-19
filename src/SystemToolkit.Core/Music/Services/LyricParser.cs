@@ -48,6 +48,10 @@ public static partial class LyricParser
     public static LyricDocument Parse(string? lyric, string? translation = null,
         LyricSource source = LyricSource.Embedded)
     {
+        // 🟠-17（UI-v2）：入口即剥零宽 —— 行级清理（FinalizeLineDurations）只覆盖有时间的行，
+        // 本方法的 PlainText 兜底分支与 translation 原先都不过滤。
+        lyric = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(lyric);
+        translation = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(translation);
         if (string.IsNullOrWhiteSpace(lyric))
         {
             return LyricDocument.None();
@@ -66,6 +70,8 @@ public static partial class LyricParser
     /// <summary>解析带时间标签的歌词行（无标签时返回空列表）。</summary>
     public static List<LyricLine> ParseTimedLines(string lyric, string? translation = null)
     {
+        lyric = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(lyric) ?? string.Empty; // 🟠-17：入口收口
+        translation = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(translation);
         if (string.IsNullOrWhiteSpace(lyric))
         {
             return [];
@@ -110,6 +116,8 @@ public static partial class LyricParser
     /// </summary>
     public static LyricDocument ParseYrc(string? yrc, string? translation = null)
     {
+        yrc = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(yrc);          // 🟠-17：入口收口
+        translation = SystemToolkit.Core.Utilities.TextSanitizer.StripInvisible(translation);
         List<LyricLine> lines = [];
         if (!string.IsNullOrWhiteSpace(yrc))
         {

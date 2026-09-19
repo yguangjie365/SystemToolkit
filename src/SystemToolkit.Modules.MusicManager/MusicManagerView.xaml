@@ -230,7 +230,8 @@
 
                         <!-- 未登录：widget 退化为登录按钮（点开同一个平台选择器） -->
                         <Button Height="30" Padding="12,0" Content="登录" Click="OnAccountButtonClick"
-                                AutomationProperties.Name="登录音乐平台">
+                                AutomationProperties.Name="登录音乐平台"
+                                ToolTipService.ShowOnDisabled="True">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource RowPrimaryButton}">
                                     <Style.Triggers>
@@ -893,7 +894,8 @@
                                HorizontalAlignment="Right" Margin="0,0,8,0"
                                Visibility="{Binding IsLoadingRecommendations, Converter={StaticResource BoolToVis}}"/>
                     <Button Grid.Column="1" Width="22" Height="22" Padding="0"
-                            Command="{Binding LoadRecommendationsCommand}" AutomationProperties.Name="刷新推荐" ToolTip="刷新推荐">
+                            Command="{Binding LoadRecommendationsCommand}" AutomationProperties.Name="刷新推荐" ToolTip="刷新推荐"
+                            ToolTipService.ShowOnDisabled="True">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
                                 <Style.Triggers>
@@ -1636,11 +1638,11 @@
                                        TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="{Binding CurrentArtistText, Mode=OneWay}" Margin="0,6,0,0"
                                        FontSize="{DynamicResource Font_SizeBodySm}"
-                                       Foreground="{Binding PlayerForegroundBrush, Mode=OneWay}"
+                                       Foreground="{DynamicResource Brush_TextPrimary}"
                                        TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="{Binding CurrentAlbumText, Mode=OneWay}" Margin="0,2,0,0"
                                        FontSize="{DynamicResource Font_SizeCaption}"
-                                       Foreground="{Binding PlayerMutedBrush, Mode=OneWay}"
+                                       Foreground="{DynamicResource Brush_TextMuted}"
                                        TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Border>

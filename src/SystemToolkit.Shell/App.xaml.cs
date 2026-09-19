@@ -150,11 +150,25 @@ public partial class App : Application
         // fire-and-forget + 自身兜底异常：启动路径上不能因为某个模块失败而卡住或崩掉。
         _ = RunModuleStartupHooksSafeAsync(_services);
 
-        CrashLog.Info("服务容器构建完成，正在解析 MainWindow...");
-        MainWindow window = _services.GetRequiredService<MainWindow>();
-        MainWindow = window;
-        window.Show();
-        CrashLog.Info("window.Show() 已执行，启动完成");
+        // 🟠-14（UI-v2）：启动路径原先无 try/catch —— MainWindow 构造/Show 抛出的
+        // XamlParseException（本仓高发族）会被 DispatcherUnhandledException 吞掉，而
+        // ShutdownMode=OnMainWindowClose 永不触发 ⇒ 进程活着、桌面无窗口、用户零反馈。
+        try
+        {
+            CrashLog.Info("服务容器构建完成，正在解析 MainWindow...");
+            MainWindow window = _services.GetRequiredService<MainWindow>();
+            MainWindow = window;
+            window.Show();
+            CrashLog.Info("window.Show() 已执行，启动完成");
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("启动失败：MainWindow 构造或 Show 抛出，进程将退出", ex);
+            _ = MessageBox.Show(
+                "SystemToolkit 启动失败：\n" + ex.Message + "\n\n详细堆栈已写入 CrashLog。",
+                "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

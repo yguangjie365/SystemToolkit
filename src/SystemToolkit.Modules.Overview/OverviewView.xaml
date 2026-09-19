@@ -481,13 +481,19 @@
                     <!-- 🟡 审查 2026-09-10（🟡-17）：搜索过滤无结果时的空态——原先列表变空即一片空白，
                          用户无法区分「机器上没装软件」与「过滤词没匹配到」。
                          用 DataTrigger 判 Count：不需要转换器，也不需要 VM 新增属性。 -->
-                    <TextBlock Text="没有匹配的软件" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
                                FontSize="{DynamicResource Font_SizeBodySm}"
                                Foreground="{DynamicResource Brush_TextMuted}">
                         <TextBlock.Style>
+                            <!-- 🟠-7④（UI-v2）：原固定文案「没有匹配的软件」在**真·零安装**时同样出现且无下一步。
+                                 按 FilterText 分二态。 -->
                             <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="没有匹配的软件 · 清空搜索框可看全部"/>
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FilterText}" Value="">
+                                        <Setter Property="Text" Value="暂无应用数据"/>
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding InstalledAppsView.Count}" Value="0">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>

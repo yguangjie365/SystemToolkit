@@ -244,6 +244,7 @@
                                     Command="{Binding CancelBackupCommand}"/>
                             <Button Style="{DynamicResource CardButton}" Content="打开目录" Margin="6,0,0,0" Command="{Binding OpenSnapshotDirCommand}"/>
                             <Button Style="{DynamicResource CardButton}" Content="校验" Margin="6,0,0,0"
+                                    ToolTipService.ShowOnDisabled="True"
                                     ToolTip="重算快照文件哈希并与清单比对，校验结果更新到「校验」列徽章"
                                     Command="{Binding VerifySnapshotCommand}"/>
                             <Button Style="{DynamicResource CardButton}" Content="刷新" Margin="6,0,0,0" Command="{Binding ReloadSnapshotsCommand}"/>

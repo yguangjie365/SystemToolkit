@@ -28,8 +28,9 @@ public partial class DriverManagerView : UserControl
         // 备份向导：View 弹窗收集范围/目录，包名按范围在此处圈定
         _vm.BackupWizardRequest = () =>
         {
-            int thirdParty = _vm.Packages.Count(p => p.IsThirdParty);
-            int selected = _vm.Packages.Count(p => p.IsSelected && p.IsThirdParty);
+            // 🟠-12（UI-v2）：计数改由 VM 暴露（与 RunBackupAsync 的前置判定同一判据，避免两处各写）。
+            int thirdParty = _vm.ThirdPartyPackageCount;
+            int selected = _vm.SelectedThirdPartyCount;
             (IReadOnlyList<string> Names, string DestDir, bool AllThirdParty)? result =
                 DriverBackupWindow.Show(Window.GetWindow(this), thirdParty, selected,
                 (all, destDir) =>
