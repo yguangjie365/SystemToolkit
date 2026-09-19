@@ -37,10 +37,12 @@ public sealed class BackgroundDitherGuardTests
         Assert.Contains("TileMode=\"Tile\"", block, StringComparison.Ordinal);
         Assert.Contains("IsHitTestVisible=\"False\"", block, StringComparison.Ordinal);
 
-        Match m = Regex.Match(block, "Opacity=\"([0-9.]+)\"");
-        Assert.True(m.Success, "dither 噪声层缺少 Opacity（观感旋钮）。");
-        double opacity = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
-        Assert.InRange(opacity, 0.005, 0.10);
+        // 🔴 低透明度必须写在噪声位图的 alpha 通道里，**不能**用 Rectangle.Opacity：
+        // Opacity<1 会让 WPF 走 8-bit 中间渲染表面，把 2% 的噪声在中间层就量化掉
+        // （实测：用 Opacity=0.02 时最长平坦区段只从 446px 降到 67px；改 alpha 后应接近探针的 5-6px）。
+        Match m = Regex.Match(block, "<Rectangle[^>]*Opacity=");
+        Assert.False(m.Success,
+            "dither 噪声层不得使用 Rectangle.Opacity —— 请把低透明度写进位图 alpha（VinylTextureFactory.NoiseAlpha）。");
     }
 
     [Fact]
@@ -48,6 +50,7 @@ public sealed class BackgroundDitherGuardTests
     {
         Exception? err = null;
         double sd = 0;
+        double alphaMean = 0;
         int edge = 0;
         var t = new Thread(() =>
         {
@@ -67,12 +70,15 @@ public sealed class BackgroundDitherGuardTests
                 bmp.CopyPixels(px, w * 4, 0);
 
                 double sum = 0;
+                double sumA = 0;
                 int n = w * h;
                 for (int i = 0; i < px.Length; i += 4)
                 {
                     sum += px[i];
+                    sumA += px[i + 3];
                 }
 
+                alphaMean = sumA / n;
                 double mean = sum / n;
                 double acc = 0;
                 for (int i = 0; i < px.Length; i += 4)
@@ -96,5 +102,7 @@ public sealed class BackgroundDitherGuardTests
         Assert.True(edge >= 64, $"噪声源尺寸过小（{edge}），平铺周期会肉眼可见。");
         // 均匀白噪声的理论标准差 ≈ 73.6；明显低于此值说明被换成了偏纯色/低对比纹理
         Assert.True(sd >= 40, $"噪声源标准差只有 {sd:F1}（理论 ≈73.6）—— 疑似退化为低对比纹理，打散色阶带的能力不足。");
+        // 低透明度必须体现在 alpha 通道（约 2-3%）；若接近 255 说明又回退到 Rectangle.Opacity 方案
+        Assert.InRange(alphaMean, 3, 40);
     }
 }

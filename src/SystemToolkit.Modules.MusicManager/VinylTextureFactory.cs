@@ -31,14 +31,23 @@ public static class VinylTextureFactory
     /// <para>
     /// <c>VinylBackgroundGradient</c> 三段总跨度仅 10 级、却横跨 1900×1280 ⇒ 每级跨约 120px，
     /// 人眼 Mach band 会把量化边界强化成可见的斜向条纹（用户拉高饱和度后尤其明显；同屏的
-    /// 侧栏用纯色 <c>Brush_Background</c> 实测无条纹，可作对照）。叠加极低不透明度的随机噪声后，
-    /// 硬边被打散成高频微噪，视觉上复归平滑。
+    /// 侧栏用纯色 <c>Brush_Background</c> 实测无条纹，可作对照）。
+    /// </para>
+    /// <para>
+    /// 🔴 **低透明度必须写在位图自身的 alpha 通道里，不能用 <c>Rectangle.Opacity</c>**：
+    /// WPF 对 <c>Opacity &lt; 1</c> 的元素走**中间渲染表面**，而中间表面是 8-bit ⇒ 2% 的噪声
+    /// 在中间层就被量化掉。实测对照（同为 512×512 平铺噪声）：用 <c>Opacity=0.02</c> 时
+    /// 用户截图的最长平坦区段只从 446px 降到 67px；而 STA 探针直接渲染同参数可达 5-6px。
+    /// 写进 alpha 直接混合，不产生中间层。
     /// </para>
     /// <para>固定随机种子 ⇒ 每次生成一致（便于截图比对）。</para>
     /// </summary>
     public static ImageSource NoiseSource => _noise ??= RenderNoise();
 
     private const int NoiseEdge = 512;
+
+    /// <summary>噪声 alpha（0-255）。约 2.4% ⇒ 扰动幅度约 ±5 级，足以打断 1 级量化台阶，又低于肉眼可辨阈值。</summary>
+    private const byte NoiseAlpha = 6;
 
     private static BitmapSource RenderNoise()
     {
@@ -48,10 +57,10 @@ public static class VinylTextureFactory
         for (int i = 0; i < bytes.Length; i += 4)
         {
             byte v = (byte)rnd.Next(256);
-            bytes[i] = v;      // B
-            bytes[i + 1] = v;  // G
-            bytes[i + 2] = v;  // R
-            bytes[i + 3] = 255;
+            bytes[i] = v;             // B
+            bytes[i + 1] = v;         // G
+            bytes[i + 2] = v;         // R
+            bytes[i + 3] = NoiseAlpha; // A：低透明度写在这里（见类型摘要）
         }
 
         var bmp = BitmapSource.Create(n, n, 96, 96, PixelFormats.Bgra32, null, bytes, n * 4);
