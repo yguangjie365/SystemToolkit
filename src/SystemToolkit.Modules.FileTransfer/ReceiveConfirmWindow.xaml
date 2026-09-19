@@ -113,7 +113,7 @@
 
         <Border x:Name="ConflictSection" Style="{StaticResource ConfirmSection}" Visibility="Collapsed">
             <StackPanel>
-                <TextBlock x:Name="ConflictTitle" Text="目标目录已有同名文件" FontWeight="SemiBold"
+                <TextBlock Text="目标目录已有同名文件" FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush_TextPrimary}"/>
                 <TextBlock x:Name="ConflictAutoText" Style="{DynamicResource ConfirmMono}"
                            Margin="{DynamicResource Space_XS}"/>
@@ -135,7 +135,7 @@
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="HintText" Style="{DynamicResource ConfirmMono}" VerticalAlignment="Center"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="RejectButton" Content="拒绝" IsCancel="True" Margin="{DynamicResource Space_XS}"
+                <Button Content="拒绝" IsCancel="True" Margin="{DynamicResource Space_XS}"
                         Style="{StaticResource ConfirmSecondaryButton}" Click="OnRejectClick"/>
                 <Button x:Name="AcceptButton" Content="接收" IsDefault="True"
                         Style="{StaticResource ConfirmPrimaryButton}" Click="OnAcceptClick"/>

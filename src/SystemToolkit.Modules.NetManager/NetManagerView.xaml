@@ -56,7 +56,7 @@ xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://sc
         </StackPanel>
 
         <!-- ============ Tab 内容 ============ -->
-        <Grid Grid.Row="2" x:Name="TabContent">
+        <Grid Grid.Row="2">
             <!-- ============ ① 网络设置 ============ -->
             <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto">
                 <Grid>

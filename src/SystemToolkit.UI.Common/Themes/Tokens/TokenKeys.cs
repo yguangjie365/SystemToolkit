@@ -267,4 +267,22 @@ public static class TokenKeys
 
         return keys;
     }
+
+    // ============================================================
+    // 孤儿令牌分级（2026-09-19 实扫：两主题包均定义、全仓零引用者 21 个）
+    //
+    // 这些 key **保留在契约内**，不视为缺陷。分级如下（勿凭名单删除）：
+    //   ① 字体规范  Font_WeightRegular / Font_LineHeight{Compact,Normal,Relaxed}
+    //               / Font_TitleZh / Font_TitleEn        —— 排版规范的依据，保留
+    //   ② 图标尺寸  Icon_Size{Sm,Md,Lg}                   —— 与 Icons.xaml 图标库同族预留
+    //   ③ 焦点态    Brush_Focus / Color_Focus             —— 建议**补消费**（键盘无障碍焦点态）
+    //   ④ 播放器弃用 Brush_CoverOverlay / Brush_DiscGroove / Brush_PlayerLabel
+    //               / Brush_PlayerVinyl / Color_PlayerBgFrom / Color_PlayerBgTo
+    //   ⑤ 早期遗留  SectionLabel / ToolkitMenuItemDanger / ToolkitMenuSeparator
+    //               / Slider_Vertical{Height,Width}
+    //
+    // 删除任一项 = **契约收缩**，必须同步改三处：本文件的 const + Claude.Light.xaml + Nvidia.Dark.xaml，
+    // 并复跑 TokenKeysCoverageTests + ThemeContrastGuardTests。
+    // 详细登记见 Docs/40-开发规范/06-治理登记-预留挂点与图标键与令牌.md §三。
+    // ============================================================
 }

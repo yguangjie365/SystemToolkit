@@ -169,7 +169,7 @@
                 <Grid x:Name="AccountArea" Margin="8,0,0,0" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <!-- 已登录：头像（无图用首字）+ 昵称 + VIP 徽章 + ▾ -->
-                        <Button x:Name="AccountButton" Height="30" Padding="4,0,8,0" Click="OnAccountButtonClick"
+                        <Button Height="30" Padding="4,0,8,0" Click="OnAccountButtonClick"
                                 AutomationProperties.Name="账号与平台切换" ToolTip="切换平台 / 管理登录">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource RowActionButton}">
@@ -585,7 +585,7 @@
                         </Grid>
 
                         <!-- 我的歌单垂直列表（在线歌单，封面+标题+N首） -->
-                        <ListBox Grid.Row="3" x:Name="PlaylistList" ItemsSource="{Binding UserPlaylists}"
+                        <ListBox Grid.Row="3" ItemsSource="{Binding UserPlaylists}"
                                  SelectionChanged="OnPlaylistListSelection"
                                  Background="Transparent" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -712,7 +712,7 @@
                     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource ListEmptyHint}"
                                Text="暂无搜索结果 — 换个关键词，或检查登录态"
                                Visibility="{Binding SearchResults.Count, Converter={StaticResource EmptyToVis}}"/>
-                    <ListBox x:Name="SearchResultList" ItemsSource="{Binding SearchResults}"
+                    <ListBox ItemsSource="{Binding SearchResults}"
                              MouseDoubleClick="OnSearchListDoubleClick"
                              Background="Transparent" BorderThickness="0"
                              HorizontalContentAlignment="Stretch"
@@ -799,7 +799,7 @@
                     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource ListEmptyHint}"
                                Text="没有匹配的曲目 — 换个关键字试试"
                                Visibility="{Binding PlaylistFilterNoMatch, Converter={StaticResource BoolToVis}}"/>
-                    <ListBox x:Name="PlaylistTrackList" ItemsSource="{Binding PlaylistTracksView}"
+                    <ListBox ItemsSource="{Binding PlaylistTracksView}"
                              MouseDoubleClick="OnPlaylistTrackDoubleClick"
                              Background="Transparent" BorderThickness="0"
                              HorizontalContentAlignment="Stretch"
@@ -1058,7 +1058,7 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <ListBox Grid.Row="3" x:Name="DailyRecommendList" ItemsSource="{Binding DailyRecommend}"
+                <ListBox Grid.Row="3" ItemsSource="{Binding DailyRecommend}"
                          MouseDoubleClick="OnDailyRecommendDoubleClick"
                          Visibility="{Binding HasDailyRecommend, Converter={StaticResource BoolToVis}}"
                          Background="Transparent" BorderThickness="0"
@@ -1233,7 +1233,7 @@
                                        Foreground="{DynamicResource Brush_TextSecondary}"/>
                         </Button>
                         <!-- 音量（图3 对齐改为常驻横向滑块）：喇叭点击=静音切换，滑块直接调节 -->
-                        <Button x:Name="VolumeButton" Width="28" Height="28" Padding="0"
+                        <Button Width="28" Height="28" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 Command="{Binding ToggleMuteCommand}"
                                 AutomationProperties.Name="静音切换"
@@ -1280,7 +1280,7 @@
                                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource ListEmptyHint}"
                                                Text="播放队列为空 — 双击曲目即可加入"
                                                Visibility="{Binding UpNext.Count, Converter={StaticResource EmptyToVis}}"/>
-                                    <ListBox x:Name="QueuePopupList" ItemsSource="{Binding UpNext}"
+                                    <ListBox ItemsSource="{Binding UpNext}"
                                          SelectionChanged="OnQueuePopupSelection"
                                          Background="Transparent" BorderThickness="0"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -1512,7 +1512,7 @@
                     <!-- 旋转层（24s，播放转/暂停停） -->
                     <Grid x:Name="DiscSpinHost" RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
-                            <RotateTransform x:Name="DiscRotation"/>
+                            <RotateTransform/>
                         </Grid.RenderTransform>
                         <!-- 半透明盘体：accent 0.56，透出浅灰渐变底 -->
                         <Ellipse Fill="{Binding VinylAccentBrush, Mode=OneWay}" Opacity="0.56"/>
@@ -1720,7 +1720,7 @@
                     </Grid.ColumnDefinitions>
                     <!-- 左：风格切换芯片（v8 用户反馈：左下角要的是切换按钮而非风格名；从顶栏移回，动态开关仅现代态显示） -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="StyleVinylButton" Height="26" Padding="9,0" Content="彩胶" Margin="0,0,6,0"
+                        <Button Height="26" Padding="9,0" Content="彩胶" Margin="0,0,6,0"
                                 Command="{Binding SwitchPlayerStyleCommand}" CommandParameter="Vinyl"
                                 FontSize="{DynamicResource Font_SizeCaption}">
                             <Button.Style>
@@ -1900,7 +1900,7 @@
 
                     <!-- 右：音质 / 歌词字号 / 队列 -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Button x:Name="PlayerQualityButton" Height="26" Padding="9,0" Margin="0,0,10,0"
+                        <Button Height="26" Padding="9,0" Margin="0,0,10,0"
                                 Click="OnQualityButtonClick" MouseRightButtonUp="OnQualityButtonRightClick"
                                 AutomationProperties.Name="音质" Cursor="Hand"
                                 ToolTip="音质（左键/右键弹出菜单）">
@@ -1930,7 +1930,7 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-                        <Button x:Name="PlayerQueueButton" Height="26" Width="30" Padding="0" Margin="10,0,0,0"
+                        <Button Height="26" Width="30" Padding="0" Margin="10,0,0,0"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand"
                                 PreviewMouseLeftButtonDown="OnQueueButtonPreviewMouseDown"
                                 Click="OnQueueButtonClick" AutomationProperties.Name="播放队列"

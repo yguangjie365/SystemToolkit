@@ -252,7 +252,7 @@
                  下拉用 ContextMenu 而非自绘 Popup —— 复用主题词汇 ToolkitContextMenu/ToolkitMenuItem
                  （与卡片 ⋯ 菜单同一套），且 DataContext 桥接方式在本文件已实证。
                  禁用时用 ToolTip 说明原因（🟠 禁用按钮必须有因可查）。 -->
-            <Button x:Name="AccountButton" Grid.Column="2" Style="{StaticResource AccountChipButton}"
+            <Button Grid.Column="2" Style="{StaticResource AccountChipButton}"
                     Margin="{StaticResource HeaderGap}"
                     Click="OnAccountMenuClick"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"

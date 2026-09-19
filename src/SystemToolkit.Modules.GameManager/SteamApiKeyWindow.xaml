@@ -77,7 +77,7 @@
                          两者都无 Command ⇒ 直接给 IsCancel="True" 即可：WPF Button.OnClick 在
                          Command 为空时会执行 Window.DialogCancelCommand，语义与原来的处理器逐字相同
                          （无边框窗必须自绘 ✕，故不能只留「取消」那一处）。 -->
-                    <Button x:Name="CloseButton" Style="{StaticResource TitleBarCloseButton}"
+                    <Button Style="{StaticResource TitleBarCloseButton}"
                             Content="✕" HorizontalAlignment="Right"
                             AutomationProperties.Name="关闭" IsCancel="True"/>
                 </Grid>

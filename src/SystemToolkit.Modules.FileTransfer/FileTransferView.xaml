@@ -622,7 +622,7 @@
                          Content="电脑互传" Tag="0" Checked="OnTabChecked"/>
         </StackPanel>
 
-        <Grid Grid.Row="2" x:Name="TabContent">
+        <Grid Grid.Row="2">
             <!-- ============ 电脑互传面板（默认折叠：Tab 默认停在手机通道） ============ -->
             <ScrollViewer x:Name="DesktopPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                 <StackPanel>

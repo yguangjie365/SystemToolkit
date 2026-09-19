@@ -17,7 +17,7 @@
         <!-- 恢复目标 -->
         <TextBlock Text="恢复目标" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="OriginalRadio" GroupName="Target" IsChecked="True" Margin="0,0,0,4"
-                     Style="{DynamicResource ThemedRadioButton}"
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"
                      Checked="OnTargetModeChanged">
             <TextBlock TextWrapping="Wrap">
                 <Run Text="恢复到原始位置："/>
@@ -25,7 +25,7 @@
             </TextBlock>
         </RadioButton>
         <RadioButton x:Name="CustomRadio" GroupName="Target" Margin="0,0,0,6" Checked="OnTargetModeChanged"
-                     Style="{DynamicResource ThemedRadioButton}"
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"
                      Content="恢复到指定目录"/>
         <Grid Margin="18,0,0,12" IsEnabled="{Binding IsChecked, ElementName=CustomRadio}">
             <Grid.ColumnDefinitions>
@@ -41,13 +41,13 @@
         <!-- 冲突策略 -->
         <TextBlock Text="同名文件冲突时" Style="{DynamicResource CardTitle}" Margin="0,0,0,6"/>
         <RadioButton x:Name="RenameRadio" GroupName="Policy" IsChecked="True" Margin="0,0,0,4"
-                     Style="{DynamicResource ThemedRadioButton}"
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"
                      Content="重命名保留两者（推荐：不覆盖现有文件）"/>
         <RadioButton x:Name="OverwriteRadio" GroupName="Policy" Margin="0,0,0,4"
-                     Style="{DynamicResource ThemedRadioButton}"
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"
                      Content="直接覆盖现有文件"/>
         <RadioButton x:Name="SkipRadio" GroupName="Policy" Margin="0,0,0,4"
-                     Style="{DynamicResource ThemedRadioButton}"
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"
                      Content="跳过冲突文件，保持现有"/>
 
 

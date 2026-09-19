@@ -12,9 +12,9 @@
     <StackPanel Margin="18">
         <TextBlock Text="备份范围" Margin="0,0,0,6"/>
         <RadioButton x:Name="ScopeAllRadio" GroupName="Scope" Margin="0,0,0,6"
-                     Style="{DynamicResource ThemedRadioButton}"/>
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"/>
         <RadioButton x:Name="ScopeSelectedRadio" GroupName="Scope" Margin="0,0,0,10"
-                     Style="{DynamicResource ThemedRadioButton}"/>
+                     Style="{DynamicResource ThemedRadioButton}" Background="Transparent"/>
         <TextBlock Text="目标目录（将自动创建时间戳子目录）" Margin="0,0,0,4"/>
         <TextBox x:Name="DestBox" Text="D:\DriverBackups" Margin="0,0,0,10"
                  Style="{DynamicResource FieldInput}"/>

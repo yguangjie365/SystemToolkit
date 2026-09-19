@@ -197,7 +197,7 @@ Background="{DynamicResource Brush_Background}">
         <!-- ============ 内容区 ============ -->
         <Grid Grid.Row="3">
             <!-- 视图 A：软件清单（微软商店 / 第三方共用结构，绑定不同集合） -->
-            <Grid x:Name="SoftwareListPanel">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
@@ -672,7 +672,7 @@ Background="{DynamicResource Brush_Background}">
         </Expander>
 
         <!-- winget 源内搜索浮层：锚定搜索框（右对齐），弹在其正下方 -->
-        <Popup x:Name="SearchPopup" IsOpen="{Binding IsSearchPopupOpen, Mode=TwoWay}"
+        <Popup IsOpen="{Binding IsSearchPopupOpen, Mode=TwoWay}"
                PlacementTarget="{Binding ElementName=SearchHost}" Placement="Bottom"
                HorizontalOffset="-100" StaysOpen="False" Width="420" MaxHeight="320" AllowsTransparency="True">
             <Border Background="{DynamicResource Brush_Surface}" BorderBrush="{DynamicResource Brush_Border}"
